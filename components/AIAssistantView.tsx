@@ -156,6 +156,7 @@ How can I assist you today?
   const [apiStatus, setApiStatus] = useState<'ready' | 'mock' | 'error'>('mock');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isListening, setIsListening] = useState<boolean>(false);
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   
@@ -166,16 +167,42 @@ How can I assist you today?
     if (typeof window !== 'undefined' && 'webkitSpeechRecognition' in window) {
       const SpeechRecognition = (window as any).webkitSpeechRecognition;
       recognition.current = new SpeechRecognition();
-      recognition.current.continuous = false;
+      recognition.current.continuous = true;
       recognition.current.interimResults = true;
       recognition.current.lang = 'en-US';
       
+      // Configure for better pause handling
+      recognition.current.maxAlternatives = 1;
+      
+      // Additional configuration for better pause handling
+      // These are browser-specific properties that may help with pause detection
+      if ('webkitSpeechGrammar' in window) {
+        // Try to set properties that might help with pause detection
+        try {
+          (recognition.current as any).interimResults = true;
+          (recognition.current as any).maxAlternatives = 1;
+        } catch (e) {
+          console.log('Speech recognition property configuration not supported');
+        }
+      }
+      
       recognition.current.onresult = (event: any) => {
         let transcript = '';
+        let isFinal = false;
+        
+        // Process all results, with special handling for final results
         for (let i = 0; i < event.results.length; i++) {
           transcript += event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            isFinal = true;
+          }
         }
-        setInputMessage(transcript);
+        
+        // Only update the input field with interim results
+        // Final results will be handled in onend
+        if (!isFinal) {
+          setInputMessage(transcript);
+        }
       };
       
       recognition.current.onerror = (event: any) => {
@@ -184,7 +211,20 @@ How can I assist you today?
       };
       
       recognition.current.onend = () => {
-        setIsListening(false);
+        // Set processing state while handling final transcript
+        setIsProcessing(true);
+        
+        // Get the final transcript when recognition ends
+        if (recognition.current && recognition.current.finalTranscript) {
+          const finalTranscript = recognition.current.finalTranscript;
+          setInputMessage(finalTranscript);
+        }
+        
+        // Small delay to show processing state
+        setTimeout(() => {
+          setIsListening(false);
+          setIsProcessing(false);
+        }, 300);
       };
     }
   }, []);
@@ -1405,16 +1445,20 @@ Ask Mode is for: Information queries, treatment suggestions, and general assista
                               recognition.current.stop();
                               setIsListening(false);
                             } else {
+                              // Clear previous transcript and start fresh
+                              setInputMessage('');
                               recognition.current.start();
                               setIsListening(true);
                             }
                           }
                         }}
-                        className={`p-3 rounded-xl font-medium transition-all duration-300 flex items-center justify-center gap-2 text-sm focus:outline-none focus:ring-2 focus:ring-offset-2 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:translate-y-0 ${isListening ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white'}`}
-                        title={isListening ? "Stop listening" : "Start voice input"}
+                        className={`p-3 rounded-xl font-medium transition-all duration-300 flex items-center justify-center gap-2 text-sm focus:outline-none focus:ring-2 focus:ring-offset-2 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:translate-y-0 ${isProcessing ? 'bg-yellow-500 text-white animate-pulse' : isListening ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white'}`}
+                        title={isProcessing ? "Processing speech..." : isListening ? "Stop listening" : "Start voice input"}
                         disabled={isLoading}
                       >
-                        {isListening ? (
+                        {isProcessing ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : isListening ? (
                           <div className="w-4 h-4 bg-white rounded-full animate-pulse" />
                         ) : (
                           <Mic className="w-4 h-4" />
@@ -1433,7 +1477,12 @@ Ask Mode is for: Information queries, treatment suggestions, and general assista
                   </div>
                 </div>
               </div>
-              <p className="text-xs text-indigo-500 mt-2 text-center font-medium">AI guidance is for reference. Always verify with clinical judgment.</p>
+              <div className="flex flex-col items-center gap-1">
+                <p className="text-xs text-indigo-500 text-center font-medium">AI guidance is for reference. Always verify with clinical judgment.</p>
+                {isProcessing && (
+                  <p className="text-xs text-yellow-600 text-center font-medium animate-pulse">Processing your speech...</p>
+                )}
+              </div>
             </div>
           </div>
         </div>
