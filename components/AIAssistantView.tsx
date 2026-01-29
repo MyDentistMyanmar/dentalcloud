@@ -198,10 +198,13 @@ How can I assist you today?
           }
         }
         
-        // Only update the input field with interim results
-        // Final results will be handled in onend
-        if (!isFinal) {
-          setInputMessage(transcript);
+        // Update the input field with all transcripts (interim and final)
+        setInputMessage(transcript);
+        
+        // If we have a final result, we should consider stopping the recognition
+        if (isFinal) {
+          // Optionally stop recognition after final result if desired
+          // recognition.current.stop();
         }
       };
       
@@ -215,10 +218,7 @@ How can I assist you today?
         setIsProcessing(true);
         
         // Get the final transcript when recognition ends
-        if (recognition.current && recognition.current.finalTranscript) {
-          const finalTranscript = recognition.current.finalTranscript;
-          setInputMessage(finalTranscript);
-        }
+        // We don't need to set it again as it should already be in the input field
         
         // Small delay to show processing state
         setTimeout(() => {
@@ -964,7 +964,7 @@ Thank you for using Loli! 🦷✨`,
           const { action, params } = actionObj;
               
           // Check if action is a CRUD operation that requires Agent Mode
-          const crudActions = ['apt_c', 'apt_u', 'apt_d', 'p_c', 'p_u', 'dr_c', 'dr_u', 'dr_d', 'm_c', 'm_u'];
+          const crudActions = ['apt_c', 'apt_u', 'apt_d', 'p_c', 'p_u', 'p_d', 'dr_c', 'dr_u', 'dr_d', 'm_c', 'm_u'];
           if (crudActions.includes(action) && mode !== 'agent') {
             actionResult = `⚠️ Agent Mode Required
 
@@ -1040,6 +1040,32 @@ Ask Mode is for: Information queries, treatment suggestions, and general assista
               } catch (err: any) {
                 console.error('Patient update error:', err);
                 throw new Error(`Failed to update patient: ${err.message}`);
+              }
+              break;
+            case 'p_d':
+              try {
+                // First check if params contains name instead of id
+                if (params.name || params.n) {
+                  // Look up patient by name
+                  const patientName = params.name || params.n;
+                  const patientToDelete = patients.find(p => 
+                    p.name.toLowerCase().includes(patientName.toLowerCase())
+                  );
+                  
+                  if (!patientToDelete) {
+                    throw new Error(`Patient with name '${patientName}' not found`);
+                  }
+                  
+                  await api.patients.delete(patientToDelete.id);
+                  actionResult = `✅ Patient ${patientToDelete.name} deleted successfully.`;
+                } else {
+                  // Traditional ID-based deletion
+                  await api.patients.delete(params.id);
+                  actionResult = `✅ Patient with ID ${params.id} deleted successfully.`;
+                }
+              } catch (err: any) {
+                console.error('Patient deletion error:', err);
+                throw new Error(`Failed to delete patient: ${err.message}`);
               }
               break;
             case 'dr_c':

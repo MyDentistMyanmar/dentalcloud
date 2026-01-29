@@ -156,6 +156,14 @@ export const api = {
 
       if (error) throw new Error(error.message);
       return mapPatient(result);
+    },
+    delete: async (id: string): Promise<void> => {
+      const { error } = await supabase
+        .from('patients')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw new Error(error.message);
     }
   },
 
