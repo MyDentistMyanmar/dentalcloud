@@ -2307,16 +2307,18 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                   </div>
                 </div>
               </div>
-              <div className="flex flex-col items-center gap-1">
-                <p className="text-xs text-indigo-500 text-center font-medium">AI guidance is for reference. Always verify with clinical judgment.</p>
+              
+              {/* Disclaimer and Status Messages - Positioned below input area */}
+              <div className="mt-3 flex flex-col items-center gap-2">
                 {isProcessing && (
                   <p className="text-xs text-yellow-600 text-center font-medium animate-pulse">Processing your speech...</p>
                 )}
                 {pendingAction && (
-                  <div className="mt-2 px-3 py-1 bg-amber-100 border border-amber-300 rounded-full text-amber-800 text-xs font-medium animate-pulse">
+                  <div className="px-3 py-1 bg-amber-100 border border-amber-300 rounded-full text-amber-800 text-xs font-medium animate-pulse">
                     ⚠️ Waiting for confirmation...
                   </div>
                 )}
+                <p className="text-xs text-indigo-500 text-center font-medium mt-1">AI guidance is for reference. Always verify with clinical judgment.</p>
               </div>
             </div>
           </div>
