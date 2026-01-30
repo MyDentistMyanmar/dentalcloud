@@ -720,7 +720,7 @@ Need more detailed help?
 
   const API_DOCS = `
 ACTIONS (Available in all modes):
-- apt_c(p_id, dr_id, dt, t, ty, n): Create appointment. p_id=patient id, dr_id=doctor id, dt=date(YYYY-MM-DD), t=time(HH:mm), ty=type, n=notes.
+- apt_c(p_id, dr_id, dt, t, ty, n): Create appointment. p_id=patient id (or use "name"), dr_id=doctor id, dt=date(YYYY-MM-DD), t=time(HH:mm), ty=type, n=notes.
 - apt_u(id, data): Update appointment. data can include {date, time, status, doctor_id, etc}.
 - apt_d(id): Delete appointment.
 - p_c(n, e, ph, m): Create patient. n=name, e=email, ph=phone, m=medicalHistory.
@@ -731,14 +731,14 @@ ACTIONS (Available in all modes):
 - m_c(n, d, u, p, s, ms, c): Create medicine. n=name, d=description, u=unit, p=price, s=stock, ms=min_stock, c=category.
 - m_u(id, data): Update medicine.
 - m_restock(id, qty): Restock medicine. id=medicine id, qty=quantity to add.
-- tr_create(pid, teeth[], desc, cost, meds[]): Record treatment. pid=patient id, teeth=array of tooth numbers, desc=description, cost=amount, meds=[{id, qty}].
+- tr_create(pid, teeth[], desc, cost, meds[]): Record treatment. pid=patient id (or use "name"), teeth=array of tooth numbers, desc=description, cost=amount, meds=[{id, qty}].
 - tr_undo(id, pid, cost): Undo treatment record.
-- fin_pay(pid, amt): Process payment. pid=patient id, amt=amount.
+- fin_pay(pid, amt): Process payment. pid=patient id (or use "name"), amt=amount.
 - inv_low(): Get low stock report.
 - inv_out(): Get out-of-stock items.
 - fin_report(period): Get financial report. period='daily'|'weekly'|'monthly'.
-- pat_bal(pid): Get patient balance.
-- pat_hist(pid): Get patient treatment history.
+- pat_bal(pid): Get patient balance. pid=patient id (or use "name").
+- pat_hist(pid): Get patient treatment history. pid=patient id (or use "name").
 - apt_reschedule(id, dt, t): Reschedule appointment.
 - apt_status(id, status): Update appointment status.
 - med_sales_report(): Get medicine sales summary.
@@ -752,26 +752,15 @@ ACTIONS (Available in all modes):
 - financial_analysis(start_date, end_date): Detailed financial insights.
 - inventory_audit(): Complete inventory status and recommendations.
 
-To perform an action, include a JSON block at the END of your message:
-{ "action": "ACTION_NAME", "params": { ... } }
+To perform an action, include a JSON block at the END of your message. 
+IMPORTANT: You can use "name" instead of "pid" or "p_id" for any patient-related action. The system will automatically look up the ID.
 
 Examples:
 { "action": "p_c", "params": { "n": "John Doe", "e": "john@example.com", "ph": "1234567890", "m": "No known allergies" } }
-{ "action": "apt_c", "params": { "p_id": "patient123", "dr_id": "doctor456", "dt": "2024-01-15", "t": "10:00", "ty": "Checkup", "n": "Routine checkup" } }
-{ "action": "tr_create", "params": { "pid": "patient123", "teeth": [18, 19], "desc": "Composite filling", "cost": 150, "meds": [{"id": "med789", "qty": 1}] } }
-{ "action": "treatment_plan", "params": { "patient_name": "John Doe", "chief_complaint": "severe toothache", "examination_findings": "caries on tooth #19, swollen gums" } }
-{ "action": "inventory_optimization", "params": {} }
-{ "action": "financial_analysis", "params": { "start_date": "2024-01-01", "end_date": "2024-01-31" } }
-
-ADVANCED WORKFLOWS:
-- treatment_planning(patient_name, chief_complaint, examination_findings): Comprehensive treatment planning with cost estimation
-- inventory_optimization(): Automated inventory management with reorder suggestions
-- patient_care_coordination(patient_name, treatments[], timeline): Multi-stage treatment coordination
-- revenue_forecasting(period): Predictive financial analysis
-- staff_scheduling_optimization(week_start): Optimize doctor schedules based on demand
-- quality_assurance_review(): Treatment outcome analysis and improvement suggestions
-
-Multi-step processes are supported - the AI will guide you through complex workflows and maintain context throughout the interaction. The AI can autonomously suggest optimal workflows based on practice patterns and patient needs.
+{ "action": "apt_c", "params": { "name": "Sarah Johnson", "dr_id": "doctor456", "dt": "2024-01-15", "t": "10:00", "ty": "Checkup", "n": "Routine checkup" } }
+{ "action": "tr_create", "params": { "name": "John Doe", "teeth": [18, 19], "desc": "Composite filling", "cost": 150 } }
+{ "action": "fin_pay", "params": { "name": "Sarah Johnson", "amt": 175 } }
+{ "action": "pat_hist", "params": { "name": "John Smith" } }
 `
 
   const callAICompletionAPI = async (userMessage: string): Promise<string> => {
@@ -1514,9 +1503,17 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
           switch (action) {
             case 'apt_c':
               try {
+                let patientId = params.p_id || params.pid;
+                if (!patientId && (params.name || params.n)) {
+                  const pName = params.name || params.n;
+                  const found = patients.find(p => p.name.toLowerCase().includes(pName.toLowerCase()));
+                  if (found) patientId = found.id;
+                }
+                if (!patientId) throw new Error("Patient ID or Name is required for appointment creation.");
+
                 result = await api.appointments.create({ 
                   location_id: locationId,
-                  patient_id: params.p_id,
+                  patient_id: patientId,
                   doctor_id: params.dr_id,
                   date: params.dt,
                   time: params.t,
@@ -1565,8 +1562,16 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
               break;
             case 'p_u':
               try {
-                result = await api.patients.update(params.id, params.data);
-                currentActionResult = `✅ Patient information updated.`;
+                let patientId = params.id;
+                if (!patientId && (params.name || params.n)) {
+                  const pName = params.name || params.n;
+                  const found = patients.find(p => p.name.toLowerCase().includes(pName.toLowerCase()));
+                  if (found) patientId = found.id;
+                }
+                if (!patientId) throw new Error("Patient ID or Name is required for update.");
+
+                result = await api.patients.update(patientId, params.data);
+                currentActionResult = `✅ Patient information updated for ${result.name}.`;
               } catch (err: any) {
                 console.error('Patient update error:', err);
                 currentActionResult = `❌ Failed to update patient: ${err.message}`;
@@ -1668,7 +1673,7 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
               break;
             case 'tr_create':
               try {
-                let patientId = params.pid;
+                let patientId = params.pid || params.p_id;
                 // Patient Name Lookup Enhancement
                 if (!patientId && (params.name || params.n)) {
                   const pName = params.name || params.n;
@@ -1694,7 +1699,8 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                     }
                   }
                 }
-                currentActionResult = `✅ Treatment recorded successfully for patient ID ${patientId}. Balance updated to ${result.new_balance} MMK.`;
+                const pName = patients.find(p => p.id === patientId)?.name || patientId;
+                currentActionResult = `✅ Treatment recorded successfully for patient ${pName}. Balance updated to ${result.new_balance} MMK.`;
               } catch (err: any) {
                 console.error('Treatment record error:', err);
                 currentActionResult = `❌ Failed to record treatment: ${err.message}`;
@@ -1702,8 +1708,17 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
               break;
             case 'tr_undo':
               try {
-                await api.treatments.undoRecord(params.id, params.pid, params.cost);
-                currentActionResult = `✅ Treatment record undone successfully.`;
+                let patientId = params.pid || params.p_id;
+                if (!patientId && (params.name || params.n)) {
+                  const pName = params.name || params.n;
+                  const found = patients.find(p => p.name.toLowerCase().includes(pName.toLowerCase()));
+                  if (found) patientId = found.id;
+                }
+                if (!patientId) throw new Error("Patient ID or Name is required for undoing treatment.");
+
+                await api.treatments.undoRecord(params.id, patientId, params.cost);
+                const pName = patients.find(p => p.id === patientId)?.name || patientId;
+                currentActionResult = `✅ Treatment record undone successfully for ${pName}.`;
               } catch (err: any) {
                 console.error('Treatment undo error:', err);
                 currentActionResult = `❌ Failed to undo treatment: ${err.message}`;
@@ -1711,11 +1726,63 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
               break;
             case 'fin_pay':
               try {
-                result = await api.finance.processPayment(params.pid, params.amt);
-                currentActionResult = `✅ Payment of ${params.amt} MMK processed. New balance: ${result.new_balance} MMK.`;
+                let patientId = params.pid || params.p_id;
+                if (!patientId && (params.name || params.n)) {
+                  const pName = params.name || params.n;
+                  const found = patients.find(p => p.name.toLowerCase().includes(pName.toLowerCase()));
+                  if (found) patientId = found.id;
+                }
+                if (!patientId) throw new Error("Patient ID or Name is required for payment processing.");
+
+                result = await api.finance.processPayment(patientId, params.amt);
+                const pName = patients.find(p => p.id === patientId)?.name || patientId;
+                currentActionResult = `✅ Payment of ${params.amt} MMK processed for ${pName}. New balance: ${result.new_balance} MMK.`;
               } catch (err: any) {
                 console.error('Payment processing error:', err);
                 currentActionResult = `❌ Failed to process payment: ${err.message}`;
+              }
+              break;
+            case 'pat_bal':
+              try {
+                let patientId = params.pid || params.p_id;
+                if (!patientId && (params.name || params.n)) {
+                  const pName = params.name || params.n;
+                  const found = patients.find(p => p.name.toLowerCase().includes(pName.toLowerCase()));
+                  if (found) patientId = found.id;
+                }
+                if (!patientId) throw new Error("Patient ID or Name is required to check balance.");
+
+                const patient = patients.find(p => p.id === patientId);
+                if (!patient) throw new Error("Patient not found.");
+                currentActionResult = `💰 Balance for ${patient.name}: ${patient.balance} MMK.`;
+              } catch (err: any) {
+                console.error('Patient balance error:', err);
+                currentActionResult = `❌ Failed to get balance: ${err.message}`;
+              }
+              break;
+            case 'pat_hist':
+              try {
+                let patientId = params.pid || params.p_id;
+                if (!patientId && (params.name || params.n)) {
+                  const pName = params.name || params.n;
+                  const found = patients.find(p => p.name.toLowerCase().includes(pName.toLowerCase()));
+                  if (found) patientId = found.id;
+                }
+                if (!patientId) throw new Error("Patient ID or Name is required to check history.");
+
+                const history = treatmentRecords.filter(tr => tr.patient_id === patientId);
+                const pName = patients.find(p => p.id === patientId)?.name || patientId;
+                
+                if (history.length === 0) {
+                  currentActionResult = `📜 No treatment history found for ${pName}.`;
+                } else {
+                  currentActionResult = `📜 Treatment History for ${pName}:\n\n${history.map(tr => 
+                    `• ${tr.date}: ${tr.description} (${tr.cost} MMK)${tr.teeth ? ` - Teeth: ${tr.teeth.join(', ')}` : ''}`
+                  ).join('\n')}`;
+                }
+              } catch (err: any) {
+                console.error('Patient history error:', err);
+                currentActionResult = `❌ Failed to get history: ${err.message}`;
               }
               break;
             case 'inv_low':
@@ -1774,6 +1841,30 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                 }
               } catch (err: any) {
                 currentActionResult = `❌ Failed to search patients: ${err.message}`;
+              }
+              break;
+            case 'apt_find_patient':
+              try {
+                const searchTerm = (params.name || '').toLowerCase();
+                const matchedPatients = patients.filter(p => p.name.toLowerCase().includes(searchTerm));
+                
+                if (matchedPatients.length === 0) {
+                  currentActionResult = `🔍 No patients found matching "${params.name}".`;
+                } else {
+                  const patientIds = matchedPatients.map(p => p.id);
+                  const patientAppointments = appointments.filter(a => patientIds.includes(a.patient_id));
+                  
+                  if (patientAppointments.length === 0) {
+                    currentActionResult = `📅 No appointments found for ${matchedPatients.length === 1 ? matchedPatients[0].name : 'matching patients'}.`;
+                  } else {
+                    currentActionResult = `📅 Found ${patientAppointments.length} appointments:\n\n${patientAppointments.slice(0, 10).map(a => 
+                      `• ${a.date} at ${a.time}: ${a.patient_name} with Dr. ${a.doctor_name} (${a.status})`
+                    ).join('\n')}`;
+                  }
+                }
+              } catch (err: any) {
+                console.error('Find appointments error:', err);
+                currentActionResult = `❌ Failed to find appointments: ${err.message}`;
               }
               break;
             default:
