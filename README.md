@@ -27,11 +27,40 @@
 
 ## 🚀 Key Features
 
+* **AI Clinical Assistant (Loli):** Advanced AI-powered assistant for patient care analysis, treatment recommendations, and clinical documentation with voice input support in Myanmar language.
 * **Clinical Record Management:** Comprehensive tracking of patient visits and history.
 * **Tooth-Level Specificity:** Specialized data arrays to track treatments on specific teeth (ISO/FDI standard support).
 * **Financial Tracking:** Integrated billing system to manage treatment costs and payments.
 * **Data Efficiency:** Engineered for scalability, utilizing an optimized PostgreSQL schema capable of handling ~2.2 million records per 500MB of storage.
 * **Real-time Updates:** Instant data persistence and retrieval powered by Supabase.
+
+## 🤖 AI Clinical Assistant (Loli)
+
+**DentalCloud** features an advanced AI assistant named **Loli** powered by Qwen AI technology, designed specifically for dental healthcare:
+
+### ✨ Core Capabilities
+* **Clinical Analysis:** Provides patient case analysis and treatment recommendations
+* **Voice Input:** Supports Myanmar language speech recognition with custom dental terminology
+* **Intelligent Suggestions:** Offers evidence-based dental diagnosis suggestions
+* **Documentation Support:** Assists with clinical documentation and record keeping
+* **Context Awareness:** Maintains conversation context across sessions
+
+### 🧠 Advanced Features
+* **Myanmar Language Support:** Optimized for local language with SpeechGrammarList
+* **Dental Terminology:** Custom vocabulary for better recognition accuracy
+* **Feedback Learning:** Adapts to user preferences based on helpfulness ratings
+* **Multi-mode Operation:** Ask mode for analysis, Agent mode for data changes
+
+### 💬 User-Friendly Interface
+* **Natural Language Processing:** Communicate using conversational language
+* **Visual Feedback:** Thumbs up/down rating system for continuous improvement
+* **Guided Workflows:** Step-by-step assistance for complex procedures
+* **Quick Prompts:** Predefined suggestions for common tasks
+
+### 📈 Autonomous Improvement
+* **Learning Algorithm:** Becomes smarter based on user feedback patterns
+* **Adaptive Responses:** Adjusts communication style to match user preferences
+* **Persistent Memory:** Remembers conversation context and user preferences
 
 ---
 
