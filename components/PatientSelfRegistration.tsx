@@ -84,20 +84,8 @@ const PatientSelfRegistration: React.FC<PatientRegistrationProps> = ({ onBack, o
     setLoading(true);
     
     try {
-      // Create patient record first
-      const patientData = {
-        name: email.split('@')[0], // Use email prefix as name for now
-        email: email,
-        phone: '', // Will be updated later
-        medicalHistory: ''
-      };
-      
-      const patient = await api.patients.create(patientData);
-      
-      // In a real implementation, you would:
-      // 1. Store the hashed password in patient_auth table
-      // 2. Link the patient_auth record to the patient
-      // 3. Set is_verified = true
+      // Call the new registration method that handles both tables
+      await (api.patients as any).register(email, password);
       
       setSuccess('Account created successfully!');
       setStep('complete');
@@ -394,9 +382,9 @@ const PatientSelfRegistration: React.FC<PatientRegistrationProps> = ({ onBack, o
                 Your account has been created successfully. You can now login to access your dashboard.
               </p>
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-700">
-                <p className="font-medium mb-1">Temporary Login Credentials:</p>
-                <p><span className="font-medium">Username:</span> {email.split('@')[0]}</p>
-                <p><span className="font-medium">Password:</span> patient_{/* patient ID first 8 chars */}</p>
+                <p className="font-medium mb-1">Your Login Credentials:</p>
+                <p><span className="font-medium">Username:</span> {email.split('@')[0]} or {email}</p>
+                <p><span className="font-medium">Password:</span> (The password you just set)</p>
               </div>
             </div>
           )}

@@ -171,48 +171,77 @@ export const api = {
       try {
         const trimmedIdentifier = identifier.trim();
         
-        // First try to find by phone
-        let { data, error } = await supabase
+        // 1. Find the patient first by phone or name
+        let { data: patientData, error: pError } = await supabase
           .from('patients')
           .select('id, location_id, name, email, phone, balance, loyalty_points, medical_history, created_at')
-          .eq('phone', trimmedIdentifier);
-        
-        // If not found by phone, try by name
-        if (!data || data.length === 0) {
-          ({ data, error } = await supabase
-            .from('patients')
-            .select('id, location_id, name, email, phone, balance, loyalty_points, medical_history, created_at')
-            .eq('name', trimmedIdentifier));
-        }
-        
-        if (error) {
-          console.error('Patient authentication error:', error);
-          return null;
-        }
-        
-        if (!data || data.length === 0) {
+          .or(`phone.eq."${trimmedIdentifier}",name.eq."${trimmedIdentifier}"`)
+          .maybeSingle();
+
+        if (pError || !patientData) {
           console.log('No patient found with identifier:', trimmedIdentifier);
           return null;
         }
-        
-        const patient = data[0];
-        
-        // For now, we'll use a simple password check
-        // In production, you should implement proper password hashing
-        // This is a temporary solution - in reality, you'd want to store hashed passwords
-        const expectedPassword = `patient_${patient.id.substring(0, 8)}`; // Simple deterministic password
-        
-        if (password === expectedPassword) {
-          console.log('Patient authentication successful for:', trimmedIdentifier);
-          return mapPatient(patient);
+
+        // 2. Check the patient_auth table for the password
+        const { data: authData, error: aError } = await supabase
+          .from('patient_auth')
+          .select('password')
+          .eq('patient_id', patientData.id)
+          .maybeSingle();
+
+        if (aError || !authData) {
+          console.log('No auth record found for patient:', patientData.name);
+          return null;
         }
         
-        console.log('Password mismatch for patient:', trimmedIdentifier);
+        if (password === authData.password) {
+          console.log('Patient authentication successful for:', patientData.name);
+          return mapPatient(patientData);
+        }
+        
+        console.log('Password mismatch for patient:', patientData.name);
         return null;
       } catch (err) {
         console.error('Error authenticating patient:', err);
         return null;
       }
+    },
+
+    // Register patient with password
+    register: async (email: string, password: string): Promise<Patient> => {
+      // 1. Get first location as default
+      const { data: locations } = await supabase.from('locations').select('id').limit(1);
+      const defaultLocationId = locations && locations.length > 0 ? locations[0].id : null;
+
+      if (!defaultLocationId) throw new Error('No clinic location found. Please contact admin.');
+
+      // 2. Create patient record
+      const { data: patient, error: pError } = await supabase
+        .from('patients')
+        .insert({ 
+          name: email.split('@')[0], 
+          email: email,
+          location_id: defaultLocationId
+        })
+        .select()
+        .single();
+
+      if (pError) throw new Error(pError.message);
+
+      // 3. Create auth record with user-defined password
+      const { error: aError } = await supabase
+        .from('patient_auth')
+        .insert({
+          patient_id: patient.id,
+          email: email,
+          password: password,
+          is_verified: true
+        });
+
+      if (aError) throw new Error(aError.message);
+
+      return mapPatient(patient);
     }
   },
 
