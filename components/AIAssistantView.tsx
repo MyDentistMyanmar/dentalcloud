@@ -1048,7 +1048,7 @@ ACTIONS (Available in all modes - Full Database Access):
 
 PATIENT MANAGEMENT:
 - p_c(n, e, ph, m, lp): Create patient. n=name, e=email, ph=phone, m=medicalHistory, lp=loyalty_points.
-- p_u(id, data): Update patient. data: {name, email, phone, medicalHistory, balance, loyalty_points, etc}.
+- p_u(id, data): Update patient profile. id=patient id (or use "name"), data={name, email, phone, medicalHistory, balance, loyalty_points}.
 - p_d(id): Delete patient.
 - p_find(name): Find patient by name (partial match).
 - pat_bal(pid): Get patient balance and loyalty points.
@@ -1149,6 +1149,7 @@ Examples:
 { "action": "tr_create", "params": { "name": "John Doe", "teeth": [18, 19], "desc": "Composite filling", "cost": 150 } }
 { "action": "fin_pay", "params": { "name": "Sarah Johnson", "amt": 175 } }
 { "action": "pat_hist", "params": { "name": "John Smith" } }
+{ "action": "p_u", "params": { "name": "John Doe", "data": { "phone": "0912345678", "medicalHistory": "Allergic to Penicillin" } } }
 `
 
   // Post-process AI responses to remove internal processing artifacts
@@ -1898,6 +1899,18 @@ I can provide guidance on:
               await api.patients.delete(pendingAction.params.id);
             }
             break;
+          case 'p_u':
+            {
+              let patientId = pendingAction.params.id || pendingAction.params.pid;
+              if (!patientId && (pendingAction.params.name || pendingAction.params.n)) {
+                const pName = pendingAction.params.name || pendingAction.params.n;
+                const found = patients.find(p => p.name.toLowerCase().includes(pName.toLowerCase()));
+                if (found) patientId = found.id;
+              }
+              if (!patientId) throw new Error("Patient ID or Name is required for update.");
+              result = await api.patients.update(patientId, pendingAction.params.data);
+            }
+            break;
           case 'dr_c':
             result = await api.doctors.create({ 
               location_id: locationId,
@@ -1938,6 +1951,9 @@ I can provide guidance on:
             break;
           case 'p_c':
             successMessage = `✅ Patient ${result.name} added successfully.`;
+            break;
+          case 'p_u':
+            successMessage = `✅ Patient ${result.name}'s profile updated successfully.`;
             break;
           case 'p_d':
             successMessage = `✅ Patient ${result?.name || 'with ID ' + pendingAction.params.id} deleted successfully.`;
