@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Plus, Loader2, ChevronRight, FileDown, Award } from 'lucide-react';
+import { Search, Plus, Loader2, ChevronRight, FileDown, Award, User, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { Patient, LoyaltyRule } from '../types';
 import { formatCurrency, Currency } from '../utils/currency';
 import { exportPatientsToPDF } from '../utils/pdfExport';
@@ -12,11 +12,22 @@ interface PatientsViewProps {
   onSelectPatient: (patient: Patient) => void;
   onAddPatient: () => void;
   onRedeemPoints?: (patient: Patient, points: number, amount: number) => void;
+  onUpdatePatientAuth?: (patient: Patient, password: string) => void;
   loyaltyEnabled: boolean;
   loyaltyRules?: LoyaltyRule[];
 }
 
-const PatientsView: React.FC<PatientsViewProps> = ({ patients, loading, currency, onSelectPatient, onAddPatient, onRedeemPoints, loyaltyEnabled, loyaltyRules = [] }) => {
+const PatientsView: React.FC<PatientsViewProps> = ({ 
+  patients, 
+  loading, 
+  currency, 
+  onSelectPatient, 
+  onAddPatient, 
+  onRedeemPoints, 
+  onUpdatePatientAuth,
+  loyaltyEnabled, 
+  loyaltyRules = [] 
+}) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -104,6 +115,7 @@ const PatientsView: React.FC<PatientsViewProps> = ({ patients, loading, currency
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Patient Name</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Portal Access</th>
                 <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Contact Info</th>
                 <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Medical Status</th>
                 {loyaltyEnabled && <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Loyalty Points</th>}
@@ -121,6 +133,19 @@ const PatientsView: React.FC<PatientsViewProps> = ({ patients, loading, currency
                       </div>
                       <div className="text-sm font-semibold text-gray-900 group-hover:text-indigo-700">{patient.name}</div>
                     </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {patient.has_account ? (
+                      <div className="flex items-center gap-1.5 text-green-600 bg-green-50 px-2 py-1 rounded-md border border-green-100 w-fit">
+                        <ShieldCheck size={14} />
+                        <span className="text-[10px] font-bold uppercase">Active</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 text-gray-400 bg-gray-50 px-2 py-1 rounded-md border border-gray-100 w-fit">
+                        <ShieldAlert size={14} />
+                        <span className="text-[10px] font-bold uppercase">No Access</span>
+                      </div>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     <div className="flex flex-col">
@@ -172,6 +197,23 @@ const PatientsView: React.FC<PatientsViewProps> = ({ patients, loading, currency
                           <Award size={14} /> Redeem
                         </button>
                       )}
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const input = prompt(`Update Portal Password for ${patient.name}:`, "");
+                          if (input !== null) {
+                            if (input.length < 4) {
+                              alert("Password too short! Use at least 4 characters.");
+                              return;
+                            }
+                            if (onUpdatePatientAuth) onUpdatePatientAuth(patient, input);
+                          }
+                        }}
+                        className="text-amber-600 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded flex items-center gap-1 transition-colors"
+                        title={patient.has_account ? "Change password" : "Create portal account"}
+                      >
+                        <User size={14} /> {patient.has_account ? 'Update Auth' : 'Setup Auth'}
+                      </button>
                       <button className="text-indigo-600 hover:text-indigo-900 flex items-center gap-1">
                         View Chart <ChevronRight size={14} />
                       </button>
@@ -197,7 +239,14 @@ const PatientsView: React.FC<PatientsViewProps> = ({ patients, loading, currency
                     {patient.name?.charAt(0) || '?'}
                   </div>
                   <div>
-                    <div className="font-bold text-gray-900">{patient.name}</div>
+                    <div className="flex items-center gap-2">
+                      <div className="font-bold text-gray-900">{patient.name}</div>
+                      {patient.has_account ? (
+                        <ShieldCheck size={12} className="text-green-500" />
+                      ) : (
+                        <ShieldAlert size={12} className="text-gray-300" />
+                      )}
+                    </div>
                     <div className="text-xs text-gray-500">{patient.phone}</div>
                   </div>
                 </div>

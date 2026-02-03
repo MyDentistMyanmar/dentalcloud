@@ -6,7 +6,8 @@ const mapPatient = (row: any): Patient => ({
   ...row,
   loyalty_points: row?.loyalty_points ?? 0,
   medicalHistory: row?.medical_history ?? row?.medicalHistory,
-  created_at: row?.created_at
+  created_at: row?.created_at,
+  has_account: Array.isArray(row?.patient_auth) ? row.patient_auth.length > 0 : !!row?.patient_auth
 });
 
 // Storage bucket for patient uploads
@@ -43,7 +44,7 @@ export const api = {
       try {
         let query = supabase
           .from('patients')
-          .select('id, location_id, name, email, phone, balance, loyalty_points, medical_history, created_at')
+          .select('id, location_id, name, email, phone, balance, loyalty_points, medical_history, created_at, patient_auth(id)')
           .order('name');
         
         if (locationId) {
@@ -162,6 +163,7 @@ export const api = {
           .insert({
             patient_id: result.id,
             email: data.email || null,
+            phone: data.phone || null,
             password: data.password,
             is_verified: true
           });
@@ -202,7 +204,7 @@ export const api = {
     },
 
     // Update or create patient auth record
-    updateAccount: async (patientId: string, email: string | null, password: string): Promise<void> => {
+    updateAccount: async (patientId: string, email: string | null, password: string, phone?: string | null): Promise<void> => {
       // Check if auth record exists
       const { data: existing } = await supabase
         .from('patient_auth')
@@ -212,9 +214,12 @@ export const api = {
 
       if (existing) {
         // Update
+        const updateData: any = { password, email };
+        if (phone !== undefined) updateData.phone = phone;
+        
         const { error } = await supabase
           .from('patient_auth')
-          .update({ password, email })
+          .update(updateData)
           .eq('patient_id', patientId);
         if (error) throw new Error(error.message);
       } else {
@@ -224,6 +229,7 @@ export const api = {
           .insert({
             patient_id: patientId,
             email: email,
+            phone: phone || null,
             password: password,
             is_verified: true
           });
@@ -284,7 +290,7 @@ export const api = {
       // 2. Check if patient already exists
       let { data: existingPatient, error: fetchError } = await supabase
         .from('patients')
-        .select('id, name, email')
+        .select('id, name, email, phone')
         .eq('email', email)
         .single();
 
@@ -314,6 +320,7 @@ export const api = {
         .upsert({
           patient_id: patient.id,
           email: email,
+          phone: patient.phone || null,
           password: password,
           is_verified: true
         });

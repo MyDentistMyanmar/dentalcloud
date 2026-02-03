@@ -1033,6 +1033,15 @@ const App: React.FC = () => {
                 onSelectPatient={handlePatientSelect} 
                 onAddPatient={() => setShowPatientModal(true)} 
                 onRedeemPoints={(patient, points, amount) => handleRedeemPoints(points, amount, patient)}
+                onUpdatePatientAuth={async (patient, password) => {
+                  try {
+                    await api.patients.updateAccount(patient.id, patient.email || null, password, patient.phone || null);
+                    alert('Patient portal account updated successfully!');
+                    fetchInitialData(); // Refresh to update has_account status
+                  } catch (err: any) {
+                    alert('Error: ' + err.message);
+                  }
+                }}
             />}
             {currentView === 'appointments' && <AppointmentsView appointments={appointments} loading={loading} onAddAppointment={() => {setEditingAppointment(null); setNewAppointmentData({ date: '', time: '', type: 'Checkup', status: 'Scheduled', patient_id: '', doctor_id: '' }); setAvailableTimes([]); setShowAppointmentModal(true)}} onEditAppointment={(apt) => {setEditingAppointment(apt); setNewAppointmentData({ date: apt.date, time: apt.time, type: apt.type || 'Checkup', status: apt.status, patient_id: apt.patient_id, doctor_id: apt.doctor_id, notes: apt.notes }); if (apt.doctor_id && apt.date) fetchAvailableTimes(apt.doctor_id, apt.date); setShowAppointmentModal(true)}} onDeleteAppointment={handleDeleteAppointment} onUpdateStatus={handleUpdateAppointmentStatus} />}
             {currentView === 'doctors' && <DoctorsView doctors={doctors} loading={loading} onAdd={() => {setEditingDoctor(null); setNewDoctorData({ name: '', email: '', phone: '', specialization: '', schedules: [] }); setShowDoctorModal(true)}} onEdit={(doc) => {setEditingDoctor(doc); setNewDoctorData(doc); setShowDoctorModal(true)}} onDelete={handleDeleteDoctor} />}
@@ -1090,8 +1099,9 @@ const App: React.FC = () => {
                 onRedeemPoints={handleRedeemPoints}
                 onUpdateAccount={async (patient, password) => {
                   try {
-                    await api.patients.updateAccount(patient.id, patient.email || null, password);
+                    await api.patients.updateAccount(patient.id, patient.email || null, password, patient.phone || null);
                     alert('Patient account updated successfully!');
+                    fetchInitialData();
                   } catch (err: any) {
                     alert('Error: ' + err.message);
                   }

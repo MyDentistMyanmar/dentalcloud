@@ -18,6 +18,7 @@ export interface Patient {
   loyalty_points: number;
   medicalHistory?: string;
   created_at?: string;
+  has_account?: boolean;
 }
 
 export interface PatientFile {
