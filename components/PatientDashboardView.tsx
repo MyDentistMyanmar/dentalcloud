@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Home, Calendar, FileText, User, LogOut, Settings, Plus, Trash2, Download, Eye, EyeOff } from 'lucide-react';
 import { auth } from '../services/auth';
 import { api } from '../services/api';
-import { Patient, Appointment, ClinicalRecord } from '../types';
+import { Patient, Appointment, ClinicalRecord, Doctor } from '../types';
 import { Modal, Input } from './Shared';
 import Receipt from './Receipt';
 
@@ -23,9 +23,16 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ onLogout }) => {
   const [newAppointment, setNewAppointment] = useState({
     date: '',
     time: '',
-    type: '',
+    type: 'Checkup',
+    status: 'Scheduled',
     notes: ''
   });
+  
+  // State for doctor selection and available times
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [selectedDoctor, setSelectedDoctor] = useState<string>('');
+  const [availableTimes, setAvailableTimes] = useState<string[]>([]);
+  const [loadingAvailableTimes, setLoadingAvailableTimes] = useState(false);
   
   // State for profile editing
   const [editingProfile, setEditingProfile] = useState(false);
@@ -95,6 +102,10 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ onLogout }) => {
       const records = await api.treatments.getHistory(patientId);
       setTreatmentRecords(records);
       
+      // Fetch doctors
+      const allDoctors = await api.doctors.getAll();
+      setDoctors(allDoctors);
+      
     } catch (err: any) {
       setError(err.message || 'Failed to load patient data');
     } finally {
@@ -107,28 +118,32 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ onLogout }) => {
     onLogout();
   };
   
-  const handleCreateAppointment = async () => {
+  const handleCreateAppointment = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!patient) return;
     
     try {
       await api.appointments.create({
         patient_id: patient.id,
-        doctor_id: 'default', // Will be assigned by admin
+        doctor_id: selectedDoctor || undefined,
         date: newAppointment.date,
         time: newAppointment.time,
         type: newAppointment.type,
+        status: newAppointment.status as 'Scheduled' | 'Completed' | 'Cancelled',
         notes: newAppointment.notes,
-        location_id: patient.location_id,
-        status: 'Scheduled'
+        location_id: patient.location_id
       });
       
       setShowCreateAppointment(false);
       setNewAppointment({
         date: '',
         time: '',
-        type: '',
+        type: 'Checkup',
+        status: 'Scheduled',
         notes: ''
       });
+      setSelectedDoctor('');
+      setAvailableTimes([]);
       
       // Refresh appointments
       fetchPatientData();
@@ -208,6 +223,40 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ onLogout }) => {
   const handleDownloadReceipt = (treatment: ClinicalRecord) => {
     setSelectedTreatment(treatment);
     setShowReceipt(true);
+  };
+  
+  const handleDoctorChange = async (doctorId: string) => {
+    setSelectedDoctor(doctorId);
+    setNewAppointment({...newAppointment, time: ''});
+    setAvailableTimes([]);
+    
+    if (doctorId && newAppointment.date) {
+      await fetchAvailableTimes(doctorId, newAppointment.date);
+    }
+  };
+  
+  const handleDateChange = async (date: string) => {
+    setNewAppointment({...newAppointment, date, time: ''});
+    setAvailableTimes([]);
+    
+    if (date && selectedDoctor) {
+      await fetchAvailableTimes(selectedDoctor, date);
+    }
+  };
+  
+  const fetchAvailableTimes = async (doctorId: string, date: string) => {
+    if (!doctorId || !date) return;
+    
+    setLoadingAvailableTimes(true);
+    try {
+      const times = await api.doctors.getAvailableTimes(doctorId, date);
+      setAvailableTimes(times);
+    } catch (err: any) {
+      console.error('Error fetching available times:', err);
+      setAvailableTimes([]);
+    } finally {
+      setLoadingAvailableTimes(false);
+    }
   };
   
   if (loading) {
@@ -631,49 +680,115 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ onLogout }) => {
       {/* Create Appointment Modal */}
       {showCreateAppointment && (
         <Modal title="Schedule New Appointment" onClose={() => setShowCreateAppointment(false)}>
-          <div className="space-y-4">
-            <Input
-              label="Date"
-              type="date"
-              value={newAppointment.date}
-              onChange={(e) => setNewAppointment({...newAppointment, date: e.target.value})}
-              required
-            />
-            <Input
-              label="Time"
-              type="time"
-              value={newAppointment.time}
-              onChange={(e) => setNewAppointment({...newAppointment, time: e.target.value})}
-              required
-            />
-            <Input
-              label="Type"
-              value={newAppointment.type}
-              onChange={(e) => setNewAppointment({...newAppointment, type: e.target.value})}
-              placeholder="e.g., Checkup, Cleaning, Filling"
-              required
-            />
-            <Input
-              label="Notes"
-              value={newAppointment.notes}
-              onChange={(e) => setNewAppointment({...newAppointment, notes: e.target.value})}
-              placeholder="Any special notes for the dentist"
-            />
+          <form onSubmit={handleCreateAppointment} className="space-y-5">
+            <div>
+              <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">Doctor (Optional)</label>
+              <select 
+                className="w-full border-gray-200 border rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500"
+                value={selectedDoctor} 
+                onChange={(e: any) => handleDoctorChange(e.target.value)}
+              >
+                <option value="">No specific doctor</option>
+                {doctors.map(doctor => (
+                  <option key={doctor.id} value={doctor.id}>{doctor.name}{doctor.specialization ? ` - ${doctor.specialization}` : ''}</option>
+                ))}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Input 
+                  label="Date" 
+                  type="date" 
+                  required 
+                  value={newAppointment.date} 
+                  onChange={(e: any) => handleDateChange(e.target.value)} 
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">Time</label>
+                {availableTimes.length > 0 ? (
+                  <select
+                    className="w-full border-gray-200 border rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500"
+                    required
+                    value={newAppointment.time}
+                    onChange={(e: any) => setNewAppointment({...newAppointment, time: e.target.value})}
+                  >
+                    <option value="">Select available time</option>
+                    {availableTimes.map(time => (
+                      <option key={time} value={time}>{time}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <div>
+                    <Input 
+                      type="time" 
+                      required 
+                      value={newAppointment.time} 
+                      onChange={(e: any) => setNewAppointment({...newAppointment, time: e.target.value})} 
+                    />
+                    {selectedDoctor && newAppointment.date && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        {loadingAvailableTimes ? 'Loading available times...' : 'No schedule set for this day or all times booked'}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">Type</label>
+                <select 
+                  className="w-full border-gray-200 border rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500"
+                  value={newAppointment.type} 
+                  onChange={(e: any) => setNewAppointment({...newAppointment, type: e.target.value})}
+                >
+                  <option value="Checkup">Checkup</option>
+                  <option value="Cleaning">Cleaning</option>
+                  <option value="Consultation">Consultation</option>
+                  <option value="Treatment">Treatment</option>
+                  <option value="Follow-up">Follow-up</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">Status</label>
+                <select 
+                  className="w-full border-gray-200 border rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500"
+                  value={newAppointment.status} 
+                  onChange={(e: any) => setNewAppointment({...newAppointment, status: e.target.value})}
+                >
+                  <option value="Scheduled">Scheduled</option>
+                  <option value="Completed">Completed</option>
+                  <option value="Cancelled">Cancelled</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">Notes</label>
+              <textarea 
+                className="w-full border-gray-200 border rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent" 
+                rows={3}
+                value={newAppointment.notes || ''} 
+                onChange={(e: any) => setNewAppointment({...newAppointment, notes: e.target.value})}
+                placeholder="Optional notes about this appointment..."
+              />
+            </div>
             <div className="flex gap-3 pt-4">
               <button
+                type="button"
                 onClick={() => setShowCreateAppointment(false)}
                 className="flex-1 bg-gray-200 text-gray-800 py-3 rounded-lg hover:bg-gray-300 transition-colors"
               >
                 Cancel
               </button>
               <button
-                onClick={handleCreateAppointment}
-                className="flex-1 bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 transition-colors"
+                type="submit"
+                className="flex-1 bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 transition-colors font-medium"
               >
-                Schedule
+                Schedule Appointment
               </button>
             </div>
-          </div>
+          </form>
         </Modal>
       )}
       
