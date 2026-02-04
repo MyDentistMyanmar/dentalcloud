@@ -21,8 +21,11 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, users }) => {
   const currentUser = auth.getCurrentUser();
 
   useEffect(() => {
-    if (currentUser) {
+    if (currentUser && currentUser.userId && currentUser.userId !== 'admin-default' && currentUser.userId !== 'undefined') {
       fetchConversations();
+    } else {
+      setLoading(false);
+      setError('Invalid user session. Please log in again.');
     }
   }, [currentUser]);
 
@@ -82,6 +85,12 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, users }) => {
 
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !selectedConversation || !currentUser) return;
+    
+    // Validate current user ID
+    if (!currentUser.userId || currentUser.userId === 'admin-default' || currentUser.userId === 'undefined') {
+      setError('Invalid user session. Please log in again.');
+      return;
+    }
 
     try {
       const messageData = {
@@ -104,6 +113,12 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, users }) => {
 
   const handleCreateConversation = async (patientId: string) => {
     if (!currentUser) return;
+    
+    // Validate current user ID
+    if (!currentUser.userId || currentUser.userId === 'admin-default' || currentUser.userId === 'undefined') {
+      setError('Invalid user session. Please log in again.');
+      return;
+    }
     
     try {
       const conversation = await api.messages.createConversation(patientId, currentUser.userId);

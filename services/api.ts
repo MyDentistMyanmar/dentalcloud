@@ -1710,6 +1710,12 @@ export const api = {
       // Perform automatic cleanup before fetching conversations
       await api.messages.performAutomaticCleanup();
       
+      // Validate userId is a proper UUID (not 'undefined' or 'admin-default')
+      if (!userId || userId === 'undefined' || userId === 'admin-default') {
+        console.warn('Invalid user ID for conversations:', userId);
+        return [];
+      }
+      
       let query = supabase
         .from('conversations')
         .select(`
@@ -1765,6 +1771,13 @@ export const api = {
     
     // Create new message
     createMessage: async (message: Omit<Message, 'id' | 'timestamp' | 'read'>): Promise<Message> => {
+      // Validate required UUID fields
+      if (!message.conversation_id || message.conversation_id === 'undefined' ||
+          !message.sender_id || message.sender_id === 'undefined' || message.sender_id === 'admin-default' ||
+          !message.recipient_id || message.recipient_id === 'undefined' || message.recipient_id === 'admin-default') {
+        throw new Error('Invalid UUID fields in message data');
+      }
+      
       const newMessage = {
         ...message,
         timestamp: new Date().toISOString(),
@@ -1797,6 +1810,11 @@ export const api = {
     createConversation: async (patientId: string, adminId: string): Promise<Conversation> => {
       // Perform automatic cleanup before creating new conversation
       await api.messages.performAutomaticCleanup();
+      
+      // Validate UUIDs
+      if (!patientId || patientId === 'undefined' || !adminId || adminId === 'undefined' || adminId === 'admin-default') {
+        throw new Error('Invalid patient or admin ID for conversation creation');
+      }
       
       const { data: patient } = await supabase
         .from('patients')
