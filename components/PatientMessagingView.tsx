@@ -6,10 +6,14 @@ import { auth } from '../services/auth';
 import { supabase } from '../services/supabase';
 
 interface PatientMessagingViewProps {
-  currentUser: any;
+  currentUser: { userId?: string } | { id: string };
 }
 
 const PatientMessagingView: React.FC<PatientMessagingViewProps> = ({ currentUser }) => {
+  const getUserId = (): string | undefined => {
+    return ('userId' in currentUser) ? currentUser.userId : ('id' in currentUser) ? (currentUser as any).id : undefined;
+  };
+  
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -19,7 +23,8 @@ const PatientMessagingView: React.FC<PatientMessagingViewProps> = ({ currentUser
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (currentUser && currentUser.userId && currentUser.userId !== 'admin-default' && currentUser.userId !== 'undefined') {
+    const userId = getUserId();
+    if (currentUser && userId && userId !== 'admin-default' && userId !== 'undefined') {
       fetchConversations();
     } else {
       setLoading(false);
@@ -46,8 +51,9 @@ const PatientMessagingView: React.FC<PatientMessagingViewProps> = ({ currentUser
     try {
       setLoading(true);
       setError(null);
-      if (currentUser && currentUser.userId && currentUser.userId !== 'admin-default' && currentUser.userId !== 'undefined') {
-        const convs = await api.messages.getConversations(currentUser.userId, 'patient');
+      const userId = getUserId();
+      if (currentUser && userId && userId !== 'admin-default' && userId !== 'undefined') {
+        const convs = await api.messages.getConversations(userId, 'patient');
         setConversations(convs);
         if (convs.length > 0 && !selectedConversation) {
           setSelectedConversation(convs[0]);
@@ -72,9 +78,10 @@ const PatientMessagingView: React.FC<PatientMessagingViewProps> = ({ currentUser
   };
 
   const markConversationAsRead = async (conversationId: string) => {
-    if (currentUser && currentUser.userId && currentUser.userId !== 'admin-default' && currentUser.userId !== 'undefined') {
+    const userId = getUserId();
+    if (currentUser && userId && userId !== 'admin-default' && userId !== 'undefined') {
       try {
-        await api.messages.markAsRead(conversationId, currentUser.userId, 'patient');
+        await api.messages.markAsRead(conversationId, userId, 'patient');
         // Refresh conversations to update unread counts
         fetchConversations();
       } catch (err: any) {
@@ -87,7 +94,8 @@ const PatientMessagingView: React.FC<PatientMessagingViewProps> = ({ currentUser
     if (!newMessage.trim() || !selectedConversation || !currentUser) return;
     
     // Validate current user ID
-    if (!currentUser.userId || currentUser.userId === 'admin-default' || currentUser.userId === 'undefined') {
+    const userId = getUserId();
+    if (!userId || userId === 'admin-default' || userId === 'undefined') {
       setError('Invalid user session. Please log in again.');
       return;
     }
@@ -95,7 +103,7 @@ const PatientMessagingView: React.FC<PatientMessagingViewProps> = ({ currentUser
     try {
       const messageData = {
         conversation_id: selectedConversation.id,
-        sender_id: currentUser.userId,
+        sender_id: userId,
         sender_type: 'patient' as const,
         recipient_id: selectedConversation.admin_id,
         recipient_type: 'admin' as const,
@@ -115,7 +123,8 @@ const PatientMessagingView: React.FC<PatientMessagingViewProps> = ({ currentUser
     if (!currentUser) return;
     
     // Validate current user ID
-    if (!currentUser.userId || currentUser.userId === 'admin-default' || currentUser.userId === 'undefined') {
+    const userId = getUserId();
+    if (!userId || userId === 'admin-default' || userId === 'undefined') {
       setError('Invalid user session. Please log in again.');
       return;
     }
@@ -125,7 +134,7 @@ const PatientMessagingView: React.FC<PatientMessagingViewProps> = ({ currentUser
     try {
       const { data: admins } = await supabase.from('users').select('id').limit(1);
       if (admins && admins.length > 0) {
-        const conversation = await api.messages.createConversation(currentUser.userId, admins[0].id);
+        const conversation = await api.messages.createConversation(userId, admins[0].id);
         setConversations([conversation, ...conversations]);
         setSelectedConversation(conversation);
       }
