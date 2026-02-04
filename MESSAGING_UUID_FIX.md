@@ -116,5 +116,6 @@ To verify the fix works:
 
 1. `services/api.ts` - Added UUID validation to messaging API functions
 2. `components/MessagingView.tsx` - Added session validation and error handling
+3. `components/PatientMessagingView.tsx` - Added session validation and error handling
 
 This fix ensures that the messaging system gracefully handles invalid user sessions and provides clear error messages instead of crashing with UUID syntax errors.

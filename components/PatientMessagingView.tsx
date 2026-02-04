@@ -19,8 +19,11 @@ const PatientMessagingView: React.FC<PatientMessagingViewProps> = ({ currentUser
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (currentUser) {
+    if (currentUser && currentUser.userId && currentUser.userId !== 'admin-default' && currentUser.userId !== 'undefined') {
       fetchConversations();
+    } else {
+      setLoading(false);
+      setError('Invalid user session. Please log in again.');
     }
   }, [currentUser]);
 
@@ -43,12 +46,14 @@ const PatientMessagingView: React.FC<PatientMessagingViewProps> = ({ currentUser
     try {
       setLoading(true);
       setError(null);
-      if (currentUser) {
+      if (currentUser && currentUser.userId && currentUser.userId !== 'admin-default' && currentUser.userId !== 'undefined') {
         const convs = await api.messages.getConversations(currentUser.userId, 'patient');
         setConversations(convs);
         if (convs.length > 0 && !selectedConversation) {
           setSelectedConversation(convs[0]);
         }
+      } else {
+        setError('Invalid user session. Please log in again.');
       }
     } catch (err: any) {
       setError(err.message);
@@ -67,7 +72,7 @@ const PatientMessagingView: React.FC<PatientMessagingViewProps> = ({ currentUser
   };
 
   const markConversationAsRead = async (conversationId: string) => {
-    if (currentUser) {
+    if (currentUser && currentUser.userId && currentUser.userId !== 'admin-default' && currentUser.userId !== 'undefined') {
       try {
         await api.messages.markAsRead(conversationId, currentUser.userId, 'patient');
         // Refresh conversations to update unread counts
@@ -80,6 +85,12 @@ const PatientMessagingView: React.FC<PatientMessagingViewProps> = ({ currentUser
 
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !selectedConversation || !currentUser) return;
+    
+    // Validate current user ID
+    if (!currentUser.userId || currentUser.userId === 'admin-default' || currentUser.userId === 'undefined') {
+      setError('Invalid user session. Please log in again.');
+      return;
+    }
 
     try {
       const messageData = {
@@ -102,6 +113,12 @@ const PatientMessagingView: React.FC<PatientMessagingViewProps> = ({ currentUser
 
   const handleCreateConversation = async () => {
     if (!currentUser) return;
+    
+    // Validate current user ID
+    if (!currentUser.userId || currentUser.userId === 'admin-default' || currentUser.userId === 'undefined') {
+      setError('Invalid user session. Please log in again.');
+      return;
+    }
     
     // For demo purposes, we'll create a conversation with the first admin
     // In a real app, you might want to let the patient choose which admin to contact
