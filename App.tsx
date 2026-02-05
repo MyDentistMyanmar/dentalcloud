@@ -19,7 +19,9 @@ import {
   MapPin,
   Menu,
   X,
-  MessageCircle
+  MessageCircle,
+  Monitor,
+  AlertTriangle
 } from 'lucide-react';
 
 import { Modal, Input, NavItem } from './components/Shared';
@@ -77,6 +79,22 @@ const App: React.FC = () => {
   const [currentLocationId, setCurrentLocationId] = useState<string>(() => {
     return localStorage.getItem('currentLocationId') || '';
   });
+  
+  // State for mobile device detection
+  const [isMobileDevice, setIsMobileDevice] = useState(window.innerWidth < 768);
+  
+  // Effect to handle window resize events
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobileDevice(window.innerWidth < 768);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
   
   // -- Data State --
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -919,6 +937,28 @@ const App: React.FC = () => {
       }>
         <PatientDashboardView onLogout={handleLogout} messagingEnabled={messagingEnabled} />
       </Suspense>
+    );
+  }
+
+  // Show mobile warning modal if admin is on mobile device
+  if (isAuthenticated && isAdmin && isMobileDevice) {
+    return (
+      <div className="fixed inset-0 bg-gray-900 flex items-center justify-center p-4 z-50">
+        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center border border-gray-200">
+          <div className="mx-auto flex items-center justify-center w-16 h-16 rounded-full bg-red-100 mb-6">
+            <AlertTriangle className="h-8 w-8 text-red-600" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-3">Not Designed for Mobile</h2>
+          <p className="text-gray-600 mb-6">
+            This application is only designed for tablets and desktops.
+            Please access the admin dashboard from a larger screen device.
+          </p>
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-800 rounded-lg border border-amber-200">
+            <Monitor className="w-4 h-4" />
+            <span className="text-sm font-medium">Desktop/Tablet Only</span>
+          </div>
+        </div>
+      </div>
     );
   }
 
