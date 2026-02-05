@@ -973,7 +973,9 @@ const App: React.FC = () => {
              {isAdmin && (
                <NavItem icon={<Package size={18} />} label="Inventory" active={currentView === 'inventory'} onClick={() => { setCurrentView('inventory'); setIsMobileMenuOpen(false); }} />
              )}
-             <NavItem icon={<MessageCircle size={18} />} label="Messaging" active={currentView === 'messaging'} onClick={() => { setCurrentView('messaging'); setIsMobileMenuOpen(false); }} />
+             {isAdmin && (
+               <NavItem icon={<MessageCircle size={18} />} label="Messaging" active={currentView === 'messaging'} onClick={() => { setCurrentView('messaging'); setIsMobileMenuOpen(false); }} />
+             )}
              <NavItem icon={<Sparkles size={18} />} label="AI Assistant" active={currentView === 'ai-assistant'} onClick={() => { setCurrentView('ai-assistant'); setIsMobileMenuOpen(false); }} />
           </div>
           
@@ -1089,7 +1091,7 @@ const App: React.FC = () => {
               medicines={medicines}
               expenses={expenses}
             />}
-            {currentView === 'messaging' && <MessagingView 
+            {currentView === 'messaging' && isAdmin && <MessagingView 
               patients={patients} 
               users={users} 
             />}

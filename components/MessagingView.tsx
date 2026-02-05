@@ -24,7 +24,7 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, users }) => {
       user.userId && 
       user.userId !== 'admin-default' && 
       user.userId !== 'undefined' &&
-      (user.role === 'admin' || user.role === 'normal');
+      user.role === 'admin';
     
     return { user, isValid };
   });
@@ -58,9 +58,9 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, users }) => {
       } else if (user.userId === 'admin-default') {
         valid = false;
         errorMsg = 'The default admin account cannot be used for messaging. Please create a staff account with a valid ID.';
-      } else if (user.role !== 'admin' && user.role !== 'normal') {
+      } else if (user.role !== 'admin') {
         valid = false;
-        errorMsg = 'Your account role does not have permission to use the messaging system.';
+        errorMsg = 'Only administrators have permission to use the messaging system.';
       } else {
         valid = true;
       }
@@ -95,7 +95,7 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, users }) => {
       user.userId && 
       user.userId !== 'admin-default' && 
       user.userId !== 'undefined' &&
-      (user.role === 'admin' || user.role === 'normal');
+      user.role === 'admin';
     
     if (!valid && user) {
       setSessionState({ user, isValid: valid });
@@ -128,7 +128,7 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, users }) => {
       user.userId && 
       user.userId !== 'admin-default' && 
       user.userId !== 'undefined' &&
-      (user.role === 'admin' || user.role === 'normal');
+      user.role === 'admin';
       
     if (!valid && user) {
       setSessionState({ user, isValid: valid });
@@ -169,7 +169,7 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, users }) => {
       user.userId && 
       user.userId !== 'admin-default' && 
       user.userId !== 'undefined' &&
-      (user.role === 'admin' || user.role === 'normal');
+      user.role === 'admin';
       
     if (!valid && user) {
       setSessionState({ user, isValid: valid });
@@ -201,7 +201,7 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, users }) => {
       user.userId && 
       user.userId !== 'admin-default' && 
       user.userId !== 'undefined' &&
-      (user.role === 'admin' || user.role === 'normal');
+      user.role === 'admin';
     
     if (!valid && user) {
       setSessionState({ user, isValid: valid });
@@ -230,7 +230,7 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, users }) => {
       user.userId && 
       user.userId !== 'admin-default' && 
       user.userId !== 'undefined' &&
-      (user.role === 'admin' || user.role === 'normal');
+      user.role === 'admin';
     
     if (!newMessage.trim() || !selectedConversation || !valid || !user?.userId) return;
     
@@ -275,7 +275,7 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, users }) => {
       user.userId && 
       user.userId !== 'admin-default' && 
       user.userId !== 'undefined' &&
-      (user.role === 'admin' || user.role === 'normal');
+      user.role === 'admin';
     
     if (!valid || !user?.userId) return;
     

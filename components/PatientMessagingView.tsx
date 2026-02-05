@@ -129,14 +129,20 @@ const PatientMessagingView: React.FC<PatientMessagingViewProps> = ({ currentUser
       return;
     }
     
-    // For demo purposes, we'll create a conversation with the first admin
-    // In a real app, you might want to let the patient choose which admin to contact
+    // We'll create a conversation with the first available admin user
     try {
-      const { data: admins } = await supabase.from('users').select('id').limit(1);
+      const { data: admins } = await supabase
+        .from('users')
+        .select('id')
+        .eq('role', 'admin')
+        .limit(1);
+      
       if (admins && admins.length > 0) {
         const conversation = await api.messages.createConversation(userId, admins[0].id);
         setConversations([conversation, ...conversations]);
         setSelectedConversation(conversation);
+      } else {
+        setError('No administrators are currently available for messaging.');
       }
     } catch (err: any) {
       setError(err.message);
@@ -236,7 +242,7 @@ const PatientMessagingView: React.FC<PatientMessagingViewProps> = ({ currentUser
                 >
                   <div className="flex justify-between items-start">
                     <div className="flex-1 min-w-0">
-                      <h4 className="font-medium text-gray-900 truncate">Clinic Staff</h4>
+                      <h4 className="font-medium text-gray-900 truncate">Administrator</h4>
                       <p className="text-sm text-gray-500 truncate mt-1">
                         {conv.last_message || 'No messages yet'}
                       </p>
@@ -268,8 +274,8 @@ const PatientMessagingView: React.FC<PatientMessagingViewProps> = ({ currentUser
                     <User className="w-5 h-5 text-indigo-600" />
                   </div>
                   <div>
-                    <h3 className="font-medium text-gray-900">Clinic Staff</h3>
-                    <p className="text-sm text-gray-500">Administrator</p>
+                    <h3 className="font-medium text-gray-900">Administrator</h3>
+                    <p className="text-sm text-gray-500">Messaging Support</p>
                   </div>
                 </div>
               </div>
