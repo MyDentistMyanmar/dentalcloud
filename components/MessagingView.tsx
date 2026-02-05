@@ -18,28 +18,71 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, users }) => {
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const currentUser = auth.getCurrentUser();
+  const [sessionState, setSessionState] = useState(() => {
+    const user = auth.getCurrentUser();
+    return {
+      user,
+      isValid: user && 
+        user.userId && 
+        user.userId !== 'admin-default' && 
+        user.userId !== 'undefined' &&
+        user.role === 'admin'
+    };
+  });
   
-  // Store session validation result to prevent unnecessary re-renders
-  const isValidSession = currentUser && 
-    currentUser.userId && 
-    currentUser.userId !== 'admin-default' && 
-    currentUser.userId !== 'undefined' &&
-    currentUser.role === 'admin';
+  // Memoize session validation to prevent unnecessary re-renders
+  const isValidSession = sessionState.isValid;
+  const currentUser = sessionState.user;
 
+  // Effect to check session validity periodically
   useEffect(() => {
-    if (isValidSession) {
-      fetchConversations();
-    } else {
-      setLoading(false);
-      if (currentUser) {
+    const checkSession = () => {
+      const user = auth.getCurrentUser();
+      const valid = user && 
+        user.userId && 
+        user.userId !== 'admin-default' && 
+        user.userId !== 'undefined' &&
+        user.role === 'admin';
+        
+      setSessionState({ user, isValid: valid });
+      
+      if (!valid && user) {
         setError('Invalid user session. Please log in again.');
+        setLoading(false);
+      } else if (valid) {
+        setError(null);
+        if (conversations.length === 0) {
+          fetchConversations();
+        }
       }
-    }
-  }, [isValidSession, currentUser?.userId]);
+    };
+    
+    // Initial check
+    checkSession();
+    
+    // Set up interval to check session validity
+    const sessionCheckInterval = setInterval(checkSession, 5000); // Check every 5 seconds
+    
+    return () => {
+      clearInterval(sessionCheckInterval);
+    };
+  }, []);
 
   useEffect(() => {
-    if (selectedConversation) {
+    const user = auth.getCurrentUser();
+    const valid = user && 
+      user.userId && 
+      user.userId !== 'admin-default' && 
+      user.userId !== 'undefined' &&
+      user.role === 'admin';
+    
+    if (!valid) {
+      setSessionState({ user, isValid: valid });
+      setError('Invalid user session. Please log in again.');
+      return;
+    }
+    
+    if (selectedConversation && valid) {
       fetchMessages(selectedConversation.id);
       markConversationAsRead(selectedConversation.id);
     }
@@ -54,53 +97,108 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, users }) => {
   };
 
   const fetchConversations = async () => {
+    // Re-check session validity before fetching
+    const user = auth.getCurrentUser();
+    const valid = user && 
+      user.userId && 
+      user.userId !== 'admin-default' && 
+      user.userId !== 'undefined' &&
+      user.role === 'admin';
+      
+    if (!valid) {
+      setSessionState({ user, isValid: valid });
+      setError('Invalid user session. Please log in again.');
+      setLoading(false);
+      return;
+    }
+    
     try {
       setLoading(true);
       setError(null);
-      if (isValidSession && currentUser?.userId) {
-        const convs = await api.messages.getConversations(currentUser.userId, 'admin');
-        setConversations(convs);
-        if (convs.length > 0 && !selectedConversation) {
-          setSelectedConversation(convs[0]);
-        }
-      } else if (currentUser) {
-        setError('Invalid user session. Please log in again.');
+      
+      const convs = await api.messages.getConversations(user.userId, 'admin');
+      setConversations(convs);
+      if (convs.length > 0 && !selectedConversation) {
+        setSelectedConversation(convs[0]);
       }
     } catch (err: any) {
-      setError(err.message);
+      // Check if error is related to session
+      if (err.message.includes('Invalid user session') || err.message.includes('session') || err.message.includes('auth')) {
+        setError('Invalid user session. Please log in again.');
+        setSessionState({ user: null, isValid: false });
+      } else {
+        setError(err.message);
+      }
     } finally {
       setLoading(false);
     }
   };
 
   const fetchMessages = async (conversationId: string) => {
+    const user = auth.getCurrentUser();
+    const valid = user && 
+      user.userId && 
+      user.userId !== 'admin-default' && 
+      user.userId !== 'undefined' &&
+      user.role === 'admin';
+      
+    if (!valid) {
+      setSessionState({ user, isValid: valid });
+      setError('Invalid user session. Please log in again.');
+      return;
+    }
+    
     try {
       const msgs = await api.messages.getMessages(conversationId);
       setMessages(msgs);
     } catch (err: any) {
-      setError(err.message);
-    }
-  };
-
-  const markConversationAsRead = async (conversationId: string) => {
-    if (isValidSession && currentUser?.userId) {
-      try {
-        await api.messages.markAsRead(conversationId, currentUser.userId, 'admin');
-        // Only refresh if we're still on the same conversation
-        if (selectedConversation?.id === conversationId) {
-          fetchConversations();
-        }
-      } catch (err: any) {
-        console.error('Failed to mark as read:', err);
+      // Check if error is related to session
+      if (err.message.includes('Invalid user session') || err.message.includes('session') || err.message.includes('auth')) {
+        setError('Invalid user session. Please log in again.');
+        setSessionState({ user: null, isValid: false });
+      } else {
+        setError(err.message);
       }
     }
   };
 
+  const markConversationAsRead = async (conversationId: string) => {
+    const user = auth.getCurrentUser();
+    const valid = user && 
+      user.userId && 
+      user.userId !== 'admin-default' && 
+      user.userId !== 'undefined' &&
+      user.role === 'admin';
+    
+    if (!valid) {
+      setSessionState({ user, isValid: valid });
+      setError('Invalid user session. Please log in again.');
+      return;
+    }
+    
+    try {
+      await api.messages.markAsRead(conversationId, user.userId, 'admin');
+      // Only refresh if we're still on the same conversation
+      if (selectedConversation?.id === conversationId) {
+        fetchConversations();
+      }
+    } catch (err: any) {
+      console.error('Failed to mark as read:', err);
+    }
+  };
+
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || !selectedConversation || !isValidSession || !currentUser?.userId) return;
+    const user = auth.getCurrentUser();
+    const valid = user && 
+      user.userId && 
+      user.userId !== 'admin-default' && 
+      user.userId !== 'undefined' &&
+      user.role === 'admin';
+    
+    if (!newMessage.trim() || !selectedConversation || !valid || !user?.userId) return;
     
     // Validate current user ID
-    if (!currentUser.userId || currentUser.userId === 'admin-default' || currentUser.userId === 'undefined') {
+    if (!user.userId || user.userId === 'admin-default' || user.userId === 'undefined') {
       setError('Invalid user session. Please log in again.');
       return;
     }
@@ -108,7 +206,7 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, users }) => {
     try {
       const messageData = {
         conversation_id: selectedConversation.id,
-        sender_id: currentUser.userId,
+        sender_id: user.userId,
         sender_type: 'admin' as const,
         recipient_id: selectedConversation.patient_id,
         recipient_type: 'patient' as const,
@@ -120,25 +218,44 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, users }) => {
       fetchMessages(selectedConversation.id);
       fetchConversations(); // Refresh to update last message
     } catch (err: any) {
-      setError(err.message);
+      // Check if error is related to session
+      if (err.message.includes('Invalid user session') || err.message.includes('session') || err.message.includes('auth')) {
+        setError('Invalid user session. Please log in again.');
+        setSessionState({ user: null, isValid: false });
+      } else {
+        setError(err.message);
+      }
     }
   };
 
   const handleCreateConversation = async (patientId: string) => {
-    if (!isValidSession || !currentUser?.userId) return;
+    const user = auth.getCurrentUser();
+    const valid = user && 
+      user.userId && 
+      user.userId !== 'admin-default' && 
+      user.userId !== 'undefined' &&
+      user.role === 'admin';
+    
+    if (!valid || !user?.userId) return;
     
     // Validate current user ID
-    if (!currentUser.userId || currentUser.userId === 'admin-default' || currentUser.userId === 'undefined') {
+    if (!user.userId || user.userId === 'admin-default' || user.userId === 'undefined') {
       setError('Invalid user session. Please log in again.');
       return;
     }
     
     try {
-      const conversation = await api.messages.createConversation(patientId, currentUser.userId);
+      const conversation = await api.messages.createConversation(patientId, user.userId);
       setConversations([conversation, ...conversations]);
       setSelectedConversation(conversation);
     } catch (err: any) {
-      setError(err.message);
+      // Check if error is related to session
+      if (err.message.includes('Invalid user session') || err.message.includes('session') || err.message.includes('auth')) {
+        setError('Invalid user session. Please log in again.');
+        setSessionState({ user: null, isValid: false });
+      } else {
+        setError(err.message);
+      }
     }
   };
 
