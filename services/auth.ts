@@ -47,22 +47,27 @@ export const auth = {
       throw new Error('Invalid CAPTCHA. Please try again.');
     }
 
-    // Check default admin first
-    if (username === DEFAULT_ADMIN.username && password === DEFAULT_ADMIN.password) {
-      const session: AuthSession = {
-        userId: 'admin-default',
-        username: DEFAULT_ADMIN.username,
-        role: 'admin',
-        location_id: null,
-        loginTime: Date.now()
-      };
-      this.setSession(session);
-      return session;
-    }
-
-    // Check database users
+    // Check database users (including default admin if already initialized)
     try {
       const user = await api.users.authenticate(username, password);
+      
+      if (!user && username === DEFAULT_ADMIN.username && password === DEFAULT_ADMIN.password) {
+        // If database auth fails but credentials match default, initialize and try again
+        await this.initializeDefaultAdmin();
+        const retryUser = await api.users.authenticate(username, password);
+        if (retryUser) {
+          const session: AuthSession = {
+            userId: retryUser.id,
+            username: retryUser.username,
+            role: retryUser.role,
+            location_id: retryUser.location_id || null,
+            loginTime: Date.now()
+          };
+          this.setSession(session);
+          return session;
+        }
+      }
+
       if (!user) {
         throw new Error('Invalid username or password');
       }

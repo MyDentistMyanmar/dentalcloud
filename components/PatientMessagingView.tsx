@@ -24,7 +24,7 @@ const PatientMessagingView: React.FC<PatientMessagingViewProps> = ({ currentUser
 
   useEffect(() => {
     const userId = getUserId();
-    if (currentUser && userId && userId !== 'admin-default' && userId !== 'undefined') {
+    if (currentUser && userId && userId !== 'undefined') {
       fetchConversations();
     } else {
       setLoading(false);
@@ -52,7 +52,7 @@ const PatientMessagingView: React.FC<PatientMessagingViewProps> = ({ currentUser
       setLoading(true);
       setError(null);
       const userId = getUserId();
-      if (currentUser && userId && userId !== 'admin-default' && userId !== 'undefined') {
+      if (currentUser && userId && userId !== 'undefined') {
         const convs = await api.messages.getConversations(userId, 'patient');
         setConversations(convs);
         if (convs.length > 0 && !selectedConversation) {
@@ -79,7 +79,7 @@ const PatientMessagingView: React.FC<PatientMessagingViewProps> = ({ currentUser
 
   const markConversationAsRead = async (conversationId: string) => {
     const userId = getUserId();
-    if (currentUser && userId && userId !== 'admin-default' && userId !== 'undefined') {
+    if (currentUser && userId && userId !== 'undefined') {
       try {
         await api.messages.markAsRead(conversationId, userId, 'patient');
         // Refresh conversations to update unread counts
@@ -95,7 +95,7 @@ const PatientMessagingView: React.FC<PatientMessagingViewProps> = ({ currentUser
     
     // Validate current user ID
     const userId = getUserId();
-    if (!userId || userId === 'admin-default' || userId === 'undefined') {
+    if (!userId || userId === 'undefined') {
       setError('Invalid user session. Please log in again.');
       return;
     }
@@ -124,7 +124,7 @@ const PatientMessagingView: React.FC<PatientMessagingViewProps> = ({ currentUser
     
     // Validate current user ID
     const userId = getUserId();
-    if (!userId || userId === 'admin-default' || userId === 'undefined') {
+    if (!userId || userId === 'undefined') {
       setError('Invalid user session. Please log in again.');
       return;
     }

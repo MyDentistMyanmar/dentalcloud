@@ -22,7 +22,6 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, users }) => {
     const user = auth.getCurrentUser();
     const isValid = user && 
       user.userId && 
-      user.userId !== 'admin-default' && 
       user.userId !== 'undefined' &&
       user.role === 'admin';
     
@@ -44,7 +43,6 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, users }) => {
           hasUser: !!user,
           userId: user?.userId,
           role: user?.role,
-          isDefaultAdmin: user?.userId === 'admin-default',
           isUndefined: user?.userId === 'undefined'
         });
       }
@@ -55,9 +53,6 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, users }) => {
       if (!user || !user.userId || user.userId === 'undefined') {
         valid = false;
         errorMsg = 'Invalid user session. Please log in again.';
-      } else if (user.userId === 'admin-default') {
-        valid = false;
-        errorMsg = 'The default admin account cannot be used for messaging. Please create a staff account with a valid ID.';
       } else if (user.role !== 'admin') {
         valid = false;
         errorMsg = 'Only administrators have permission to use the messaging system.';
@@ -93,17 +88,12 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, users }) => {
     const user = auth.getCurrentUser();
     const valid = user && 
       user.userId && 
-      user.userId !== 'admin-default' && 
       user.userId !== 'undefined' &&
       user.role === 'admin';
     
     if (!valid && user) {
       setSessionState({ user, isValid: valid });
-      if (user.userId === 'admin-default') {
-        setError('The default admin account cannot be used for messaging. Please create a staff account with a valid ID.');
-      } else {
-        setError('Invalid user session. Please log in again.');
-      }
+      setError('Invalid user session. Please log in again.');
       return;
     }
     
@@ -126,17 +116,12 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, users }) => {
     const user = auth.getCurrentUser();
     const valid = user && 
       user.userId && 
-      user.userId !== 'admin-default' && 
       user.userId !== 'undefined' &&
       user.role === 'admin';
       
     if (!valid && user) {
       setSessionState({ user, isValid: valid });
-      if (user.userId === 'admin-default') {
-        setError('The default admin account cannot be used for messaging. Please create a staff account with a valid ID.');
-      } else {
-        setError('Invalid user session. Please log in again.');
-      }
+      setError('Invalid user session. Please log in again.');
       setLoading(false);
       return;
     }
@@ -167,17 +152,12 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, users }) => {
     const user = auth.getCurrentUser();
     const valid = user && 
       user.userId && 
-      user.userId !== 'admin-default' && 
       user.userId !== 'undefined' &&
       user.role === 'admin';
       
     if (!valid && user) {
       setSessionState({ user, isValid: valid });
-      if (user.userId === 'admin-default') {
-        setError('The default admin account cannot be used for messaging. Please create a staff account with a valid ID.');
-      } else {
-        setError('Invalid user session. Please log in again.');
-      }
+      setError('Invalid user session. Please log in again.');
       return;
     }
     
@@ -199,17 +179,12 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, users }) => {
     const user = auth.getCurrentUser();
     const valid = user && 
       user.userId && 
-      user.userId !== 'admin-default' && 
       user.userId !== 'undefined' &&
       user.role === 'admin';
     
     if (!valid && user) {
       setSessionState({ user, isValid: valid });
-      if (user.userId === 'admin-default') {
-        setError('The default admin account cannot be used for messaging. Please create a staff account with a valid ID.');
-      } else {
-        setError('Invalid user session. Please log in again.');
-      }
+      setError('Invalid user session. Please log in again.');
       return;
     }
     
@@ -228,19 +203,14 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, users }) => {
     const user = auth.getCurrentUser();
     const valid = user && 
       user.userId && 
-      user.userId !== 'admin-default' && 
       user.userId !== 'undefined' &&
       user.role === 'admin';
     
     if (!newMessage.trim() || !selectedConversation || !valid || !user?.userId) return;
     
     // Validate current user ID
-    if (!user.userId || user.userId === 'admin-default' || user.userId === 'undefined') {
-      if (user.userId === 'admin-default') {
-        setError('The default admin account cannot be used for messaging. Please create a staff account with a valid ID.');
-      } else {
-        setError('Invalid user session. Please log in again.');
-      }
+    if (!user.userId || user.userId === 'undefined') {
+      setError('Invalid user session. Please log in again.');
       return;
     }
 
@@ -273,19 +243,14 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, users }) => {
     const user = auth.getCurrentUser();
     const valid = user && 
       user.userId && 
-      user.userId !== 'admin-default' && 
       user.userId !== 'undefined' &&
       user.role === 'admin';
     
     if (!valid || !user?.userId) return;
     
     // Validate current user ID
-    if (!user.userId || user.userId === 'admin-default' || user.userId === 'undefined') {
-      if (user.userId === 'admin-default') {
-        setError('The default admin account cannot be used for messaging. Please create a staff account with a valid ID.');
-      } else {
-        setError('Invalid user session. Please log in again.');
-      }
+    if (!user.userId || user.userId === 'undefined') {
+      setError('Invalid user session. Please log in again.');
       return;
     }
     
