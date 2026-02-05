@@ -1718,17 +1718,7 @@ export const api = {
       
       let query = supabase
         .from('conversations')
-        .select(`
-          id,
-          patient_id,
-          patients!inner(name),
-          admin_id,
-          users!inner(username),
-          last_message,
-          last_message_time,
-          created_at,
-          messages(count)
-        `)
+        .select('*')
         .order('last_message_time', { ascending: false });
 
       if (userType === 'patient') {
@@ -1741,17 +1731,57 @@ export const api = {
       
       if (error) throw new Error(error.message);
       
-      return data.map((conv: any) => ( {
-        id: conv.id,
-        patient_id: conv.patient_id,
-        patient_name: conv.patients?.name || (Array.isArray(conv.patients) ? conv.patients[0]?.name : 'Unknown Patient'),
-        admin_id: conv.admin_id,
-        admin_name: conv.users?.username || (Array.isArray(conv.users) ? conv.users[0]?.username : 'Unknown Admin'),
-        last_message: conv.last_message,
-        last_message_time: conv.last_message_time,
-        unread_count: conv.messages?.[0]?.count || 0,
-        created_at: conv.created_at
-      }));
+      // Get patient and admin names separately to avoid join issues
+      const conversationsWithNames = [];
+      
+      for (const conv of data || []) {
+        // Get patient name
+        let patientName = 'Unknown Patient';
+        if (conv.patient_id) {
+          const { data: patientData } = await supabase
+            .from('patients')
+            .select('name')
+            .eq('id', conv.patient_id)
+            .single();
+          patientName = patientData?.name || 'Unknown Patient';
+        }
+        
+        // Get admin name
+        let adminName = 'Unknown Admin';
+        if (conv.admin_id) {
+          const { data: adminData } = await supabase
+            .from('users')
+            .select('username')
+            .eq('id', conv.admin_id)
+            .single();
+          adminName = adminData?.username || 'Unknown Admin';
+        }
+        
+        // Count unread messages for this conversation
+        let unreadCount = 0;
+        if (conv.id) {
+          const { count } = await supabase
+            .from('messages')
+            .select('*', { count: 'exact', head: true })
+            .eq('conversation_id', conv.id)
+            .eq('read', false);
+          unreadCount = count || 0;
+        }
+        
+        conversationsWithNames.push({
+          id: conv.id,
+          patient_id: conv.patient_id,
+          patient_name: patientName,
+          admin_id: conv.admin_id,
+          admin_name: adminName,
+          last_message: conv.last_message,
+          last_message_time: conv.last_message_time,
+          unread_count: unreadCount,
+          created_at: conv.created_at
+        });
+      }
+      
+      return conversationsWithNames;
     },
     
     // Get messages for a conversation
