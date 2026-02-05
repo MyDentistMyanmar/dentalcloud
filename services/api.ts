@@ -1718,7 +1718,17 @@ export const api = {
       
       let query = supabase
         .from('conversations')
-        .select('*')
+        .select(`
+          id,
+          patient_id,
+          patients!inner(name),
+          admin_id,
+          users!inner(username),
+          last_message,
+          last_message_time,
+          created_at,
+          messages(count)
+        `)
         .order('last_message_time', { ascending: false });
 
       if (userType === 'patient') {
@@ -1731,57 +1741,17 @@ export const api = {
       
       if (error) throw new Error(error.message);
       
-      // Get patient and admin names separately to avoid join issues
-      const conversationsWithNames = [];
-      
-      for (const conv of data || []) {
-        // Get patient name
-        let patientName = 'Unknown Patient';
-        if (conv.patient_id) {
-          const { data: patientData } = await supabase
-            .from('patients')
-            .select('name')
-            .eq('id', conv.patient_id)
-            .single();
-          patientName = patientData?.name || 'Unknown Patient';
-        }
-        
-        // Get admin name
-        let adminName = 'Unknown Admin';
-        if (conv.admin_id) {
-          const { data: adminData } = await supabase
-            .from('users')
-            .select('username')
-            .eq('id', conv.admin_id)
-            .single();
-          adminName = adminData?.username || 'Unknown Admin';
-        }
-        
-        // Count unread messages for this conversation
-        let unreadCount = 0;
-        if (conv.id) {
-          const { count } = await supabase
-            .from('messages')
-            .select('*', { count: 'exact', head: true })
-            .eq('conversation_id', conv.id)
-            .eq('read', false);
-          unreadCount = count || 0;
-        }
-        
-        conversationsWithNames.push({
-          id: conv.id,
-          patient_id: conv.patient_id,
-          patient_name: patientName,
-          admin_id: conv.admin_id,
-          admin_name: adminName,
-          last_message: conv.last_message,
-          last_message_time: conv.last_message_time,
-          unread_count: unreadCount,
-          created_at: conv.created_at
-        });
-      }
-      
-      return conversationsWithNames;
+      return data.map((conv: any) => ( {
+        id: conv.id,
+        patient_id: conv.patient_id,
+        patient_name: conv.patients?.name || (Array.isArray(conv.patients) ? conv.patients[0]?.name : 'Unknown Patient'),
+        admin_id: conv.admin_id,
+        admin_name: conv.users?.username || (Array.isArray(conv.users) ? conv.users[0]?.username : 'Unknown Admin'),
+        last_message: conv.last_message,
+        last_message_time: conv.last_message_time,
+        unread_count: conv.messages?.[0]?.count || 0,
+        created_at: conv.created_at
+      }));
     },
     
     // Get messages for a conversation
@@ -1902,51 +1872,29 @@ export const api = {
       if (error) throw new Error(error.message);
     },
     
-    // Remove all messages
+    // Toggle messaging feature state
+    toggleMessagingFeature: (enabled: boolean): void => {
+      // This is primarily handled in App.tsx state, but we provide this hook for API-level side effects if needed
+      console.log(`Messaging feature ${enabled ? 'enabled' : 'disabled'}`);
+    },
+    
+    // Remove all messages and conversations (for maintenance)
     removeAllMessages: async (): Promise<void> => {
-      try {
-        // Delete all messages
-        const { error: messageError } = await supabase
-          .from('messages')
-          .delete()
-          .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
-        
-        if (messageError) throw new Error(messageError.message);
-        
-        // Also delete all conversations since they won't have any messages left
-        const { error: convError } = await supabase
-          .from('conversations')
-          .delete()
-          .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
-        
-        if (convError) throw new Error(convError.message);
-        
-        console.log('All messages and conversations removed successfully');
-      } catch (error) {
-        console.error('Error removing all messages:', error);
-        throw error;
-      }
-    },
-    
-    // Toggle messaging feature (by storing setting in database or local storage)
-    toggleMessagingFeature: async (enabled: boolean): Promise<void> => {
-      // In a real implementation, this would store the setting in the database
-      // For now, we'll use localStorage as a temporary solution
-      localStorage.setItem('messaging_enabled', enabled.toString());
-    },
-    
-    // Check if messaging feature is enabled
-    isMessagingEnabled: (): boolean => {
-      const storedValue = localStorage.getItem('messaging_enabled');
-      // Default to true if not set
-      return storedValue ? storedValue === 'true' : true;
-    },
-    
-    // Get messaging feature status
-    getMessagingStatus: async (): Promise<boolean> => {
-      // In a real implementation, this would fetch from the database
-      // For now, we'll use localStorage
-      return api.messages.isMessagingEnabled();
+      // Delete all messages
+      const { error: msgError } = await supabase
+        .from('messages')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all using always-true condition
+      
+      if (msgError) throw new Error(msgError.message);
+      
+      // Delete all conversations
+      const { error: convError } = await supabase
+        .from('conversations')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+      
+      if (convError) throw new Error(convError.message);
     },
     
     // Automatic cleanup function - removes messages older than 2 months

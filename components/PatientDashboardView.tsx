@@ -9,10 +9,10 @@ import PatientMessagingView from './PatientMessagingView';
 
 interface PatientDashboardProps {
   onLogout: () => void;
-  messagingEnabled: boolean;
+  messagingEnabled?: boolean;
 }
 
-const PatientDashboard: React.FC<PatientDashboardProps> = ({ onLogout, messagingEnabled }) => {
+const PatientDashboard: React.FC<PatientDashboardProps> = ({ onLogout, messagingEnabled = true }) => {
   const [activeTab, setActiveTab] = useState<'home' | 'appointments' | 'records' | 'profile' | 'messages'>('home');
   const [patient, setPatient] = useState<Patient | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -305,7 +305,7 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ onLogout, messaging
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen bg-gray-50 flex flex-col" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
       {/* Header */}
       <div className="bg-white shadow-sm border-b border-gray-200 px-4 py-3">
         <div className="flex items-center justify-between">
@@ -562,12 +562,6 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ onLogout, messaging
           </div>
         )}
 
-        {activeTab === 'messages' && (
-          <div className="px-4">
-            <PatientMessagingView currentUser={patient} messagingEnabled={messagingEnabled} />
-          </div>
-        )}
-
         {activeTab === 'profile' && (
           <div className="px-4">
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
@@ -632,6 +626,12 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ onLogout, messaging
             </div>
           </div>
         )}
+
+        {activeTab === 'messages' && messagingEnabled && (
+          <div className="px-4">
+            <PatientMessagingView currentUser={auth.getCurrentUser()} />
+          </div>
+        )}
       </div>
 
       {/* Mobile Optimized Bottom Navigation */}
@@ -675,19 +675,21 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ onLogout, messaging
             <FileText className="w-6 h-6 mb-1" />
             <span className="text-[10px]">Records</span>
           </button>
-          
-          <button
-            onClick={() => setActiveTab('messages')}
-            className={`flex flex-col items-center py-2 px-2 rounded-xl transition-colors flex-1 max-w-[80px] ${
-              activeTab === 'messages' 
-                ? 'text-indigo-600 bg-indigo-50' 
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-            aria-label="Messages"
-          >
-            <MessageCircle className="w-6 h-6 mb-1" />
-            <span className="text-[10px]">Messages</span>
-          </button>
+
+          {messagingEnabled && (
+            <button
+              onClick={() => setActiveTab('messages')}
+              className={`flex flex-col items-center py-2 px-2 rounded-xl transition-colors flex-1 max-w-[80px] ${
+                activeTab === 'messages' 
+                  ? 'text-indigo-600 bg-indigo-50' 
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+              aria-label="Messages"
+            >
+              <MessageCircle className="w-6 h-6 mb-1" />
+              <span className="text-[10px]">Messages</span>
+            </button>
+          )}
           
           <button
             onClick={() => setActiveTab('profile')}
