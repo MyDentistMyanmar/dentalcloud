@@ -2332,8 +2332,15 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                 }
                 if (!patientId) throw new Error("Patient ID or Name is required for medicine sale.");
                 
+                // --- PLANNING STEP ---
+                const medState = await api.planning.getMedicineState(params.mid, locationId);
+                const patState = await api.planning.getPatientState(patientId, locationId);
+                console.log('Planning State for Medicine Sale:', { medState, patState });
+
                 result = await api.medicines.sell(patientId, params.mid, params.qty, locationId, params.tid);
-                currentActionResult = `✅ Sold ${params.qty} ${result.sale.medicine_name} to ${result.sale.patient_name} for ${result.sale.total_price} MMK. New stock: ${result.new_stock}`;
+                currentActionResult = `✅ Sold ${params.qty} ${result.sale.medicine_name} to ${result.sale.patient_name} for ${result.sale.total_price} MMK.
+📦 Stock Level: ${medState?.stock} -> ${result.new_stock}
+💰 Patient Balance: ${patState?.balance} -> ${Number(patState?.balance) + result.sale.total_price} MMK.`;
               } catch (err: any) {
                 currentActionResult = `❌ Failed to sell medicine: ${err.message}`;
               }
@@ -2580,14 +2587,18 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                 }
                 if (!patientId) throw new Error("Patient ID or Name is required for appointment creation.");
 
+                // --- PLANNING STEP ---
+                const availability = await api.planning.getDoctorAvailability(params.dr_id, params.dt);
+                console.log('Doctor Availability State:', availability);
+
                 result = await api.appointments.create({ 
                   location_id: locationId,
                   patient_id: patientId,
                   doctor_id: params.dr_id,
                   date: params.dt,
-                  time: params.t,
-                  type: params.ty,
-                  notes: params.n,
+                  time: params.t || params.tm,
+                  type: params.ty || params.type,
+                  notes: params.n || params.notes,
                   status: 'Scheduled'
                 });
                 currentActionResult = `✅ Appointment created successfully for ${result.patient_name} with Dr. ${result.doctor_name} at ${result.time}.`;
@@ -2743,7 +2754,7 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
             case 'tr_create':
               try {
                 let patientId = params.pid || params.p_id;
-                // Patient Name Lookup Enhancement
+                // Patient Name Lookup
                 if (!patientId && (params.name || params.n)) {
                   const pName = params.name || params.n;
                   const found = patients.find(p => p.name.toLowerCase().includes(pName.toLowerCase()));
@@ -2752,24 +2763,23 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                 
                 if (!patientId) throw new Error("Patient ID or Name is required for treatment recording.");
 
+                // --- PLANNING STEP ---
+                const currentState = await api.planning.getPatientState(patientId, locationId);
+                console.log('Planning State for Treatment:', currentState);
+
                 result = await api.treatments.record({
                   location_id: locationId,
                   patient_id: patientId,
                   teeth: params.teeth || [],
                   description: params.desc,
-                  cost: params.cost || 0
+                  cost: params.cost || 0,
+                  medications: params.meds // Pass medications directly to service
                 });
                 
-                if (params.meds && Array.isArray(params.meds)) {
-                  for (const medSale of params.meds) {
-                    const medicine = medicines.find(m => m.id === medSale.id);
-                    if (medicine && medicine.stock >= medSale.qty) {
-                      await api.medicines.update(medSale.id, { stock: medicine.stock - medSale.qty });
-                    }
-                  }
-                }
-                const pName = patients.find(p => p.id === patientId)?.name || patientId;
-                currentActionResult = `✅ Treatment recorded successfully for patient ${pName}. Balance updated to ${result.new_balance} MMK.`;
+                const pName = currentState?.name || patientId;
+                currentActionResult = `✅ Treatment recorded successfully for ${pName}. 
+💰 Previous Balance: ${currentState?.balance} MMK
+📈 New Balance: ${result.new_balance} MMK.`;
               } catch (err: any) {
                 console.error('Treatment record error:', err);
                 currentActionResult = `❌ Failed to record treatment: ${err.message}`;

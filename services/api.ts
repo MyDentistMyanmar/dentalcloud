@@ -376,6 +376,18 @@ export const api = {
       }
     },
     create: async (data: Partial<Appointment>): Promise<Appointment> => {
+      if (!data.location_id) throw new Error('location_id is required');
+      if (!data.doctor_id) throw new Error('doctor_id is required');
+      if (!data.date) throw new Error('date is required');
+      if (!data.time) throw new Error('time is required');
+
+      // 1. Validate Doctor Availability
+      const availableTimes = await api.doctors.getAvailableTimes(data.doctor_id, data.date);
+      const requestedTime = data.time.slice(0, 5); // Ensure HH:MM
+      if (!availableTimes.includes(requestedTime)) {
+        throw new Error(`Doctor is not available at ${requestedTime} on ${data.date}. Available times: ${availableTimes.join(', ')}`);
+      }
+
       const payload = {
         location_id: data.location_id,
         patient_id: data.patient_id,
@@ -393,7 +405,10 @@ export const api = {
         .select('*, patients(name), doctors(name)')
         .single();
 
-      if (error) throw new Error(error.message);
+      if (error) {
+        if (error.code === '23503') throw new Error('Invalid Patient or Doctor ID');
+        throw new Error(error.message);
+      }
       
       // Flatten the response
       return {
@@ -551,8 +566,54 @@ export const api = {
 
       if (error) throw new Error(error.message);
     },
-    record: async (data: { location_id: string; patient_id: string; teeth: number[]; description: string; cost: number }) => {
-      // 1. Insert Treatment Record
+    record: async (data: { 
+      location_id: string; 
+      patient_id: string; 
+      teeth: number[]; 
+      description: string; 
+      cost: number;
+      medications?: { id: string; qty: number }[] 
+    }) => {
+      if (!data.location_id) throw new Error('location_id is required');
+      
+      // 1. Validate Tooth Numbers
+      if (data.teeth && data.teeth.length > 0) {
+        const invalidTeeth = data.teeth.filter(t => t < 1 || t > 32);
+        if (invalidTeeth.length > 0) {
+          throw new Error(`Invalid tooth numbers: ${invalidTeeth.join(', ')}. Must be between 1 and 32.`);
+        }
+      }
+
+      // 2. Fetch patient state
+      const { data: patient, error: fetchError } = await supabase
+        .from('patients')
+        .select('id, name, balance, loyalty_points')
+        .eq('id', data.patient_id)
+        .eq('location_id', data.location_id)
+        .single();
+
+      if (fetchError || !patient) throw new Error('Patient not found in this location');
+
+      // 3. Handle Medications (Constraint Validation)
+      let medicationTotal = 0;
+      const medicationResults = [];
+      if (data.medications && data.medications.length > 0) {
+        for (const med of data.medications) {
+          const { data: medicine, error: mError } = await supabase
+            .from('medicines')
+            .select('*')
+            .eq('id', med.id)
+            .single();
+          
+          if (mError || !medicine) throw new Error(`Medicine with ID ${med.id} not found`);
+          if (medicine.stock < med.qty) throw new Error(`Insufficient stock for ${medicine.name}. Available: ${medicine.stock}`);
+          
+          medicationTotal += Number(medicine.price) * med.qty;
+          medicationResults.push({ med, medicine });
+        }
+      }
+
+      // 4. Insert Treatment Record
       const treatmentData = {
         location_id: data.location_id,
         patient_id: data.patient_id,
@@ -568,20 +629,22 @@ export const api = {
         .select()
         .single();
       
-      if (insertError) throw new Error(insertError.message);
+      if (insertError) throw new Error(`Treatment recording failed: ${insertError.message}`);
 
-      // 2. Update Patient Balance and Points
-      const { data: patient, error: fetchError } = await supabase
-        .from('patients')
-        .select('balance, loyalty_points')
-        .eq('id', data.patient_id)
-        .single();
+      // 5. Execute Medication Sales & Stock Updates
+      for (const res of medicationResults) {
+        await api.medicines.sell(data.patient_id, res.med.id, res.med.qty, data.location_id, result.id);
+      }
 
-      if (fetchError) throw new Error(fetchError.message);
-
-      const newBalance = (patient?.balance || 0) + data.cost;
+      // 6. Update Patient Balance and Points (Total = Treatment Cost + Medication Cost)
+      // Note: api.medicines.sell already updates balance and points. 
+      // We only need to update the balance/points for the TREATMENT cost here if not already handled.
+      // Actually, to keep it simple and avoid double counting, we'll let api.medicines.sell handle its part
+      // and we handle the treatment cost part here.
       
-      // Calculate points based on active rules
+      const treatmentBalance = (patient.balance || 0) + data.cost;
+      
+      // Calculate points for TREATMENT only
       const rules = await api.loyalty.getRules(data.location_id);
       const treatmentRule = rules.find(r => r.event_type === 'TREATMENT' && r.active);
       const pointsPerUnit = treatmentRule ? treatmentRule.points_per_unit : 0.001;
@@ -592,14 +655,14 @@ export const api = {
         earnedPoints = Math.floor(data.cost * pointsPerUnit);
       }
       
-      const newPoints = (patient?.loyalty_points || 0) + earnedPoints;
+      const newPoints = (patient.loyalty_points || 0) + earnedPoints;
 
       const { error: updateError } = await supabase
         .from('patients')
-        .update({ balance: newBalance, loyalty_points: newPoints })
+        .update({ balance: treatmentBalance, loyalty_points: newPoints })
         .eq('id', data.patient_id);
 
-      if (updateError) throw new Error(updateError.message);
+      if (updateError) throw new Error(`Patient balance update failed: ${updateError.message}`);
 
       if (earnedPoints > 0) {
         await api.loyalty.addTransaction({
@@ -611,7 +674,10 @@ export const api = {
         });
       }
       
-      return { status: "success", new_balance: newBalance, record: result };
+      // Fetch final state for return
+      const { data: finalPatient } = await supabase.from('patients').select('balance').eq('id', data.patient_id).single();
+      
+      return { status: "success", new_balance: finalPatient?.balance, record: result };
     },
     undoRecord: async (recordId: string, patientId: string, cost: number) => {
       // 1. Delete the record
@@ -1326,20 +1392,35 @@ export const api = {
       if (error) throw new Error(error.message);
     },
     sell: async (patientId: string, medicineId: string, quantity: number, locationId: string, treatmentId?: string): Promise<{ sale: MedicineSale; new_stock: number }> => {
-      // Get medicine details
-      const medicine = await api.medicines.getById(medicineId);
-      if (!medicine) {
-        throw new Error('Medicine not found');
-      }
+      if (!locationId) throw new Error('locationId is required for medicine sales');
+      if (quantity <= 0) throw new Error('Quantity must be greater than 0');
 
+      // 1. Get medicine and patient state (Planning/State Fetching)
+      const { data: medicine, error: mError } = await supabase
+        .from('medicines')
+        .select('*')
+        .eq('id', medicineId)
+        .eq('location_id', locationId)
+        .single();
+
+      if (mError || !medicine) throw new Error('Medicine not found in this location');
       if (medicine.stock < quantity) {
         throw new Error(`Insufficient stock. Available: ${medicine.stock} ${medicine.unit}`);
       }
 
-      const totalPrice = medicine.price * quantity;
+      const { data: patient, error: pError } = await supabase
+        .from('patients')
+        .select('id, name, balance, loyalty_points')
+        .eq('id', patientId)
+        .eq('location_id', locationId)
+        .single();
+
+      if (pError || !patient) throw new Error('Patient not found in this location');
+
+      const totalPrice = Number(medicine.price) * quantity;
       const newStock = medicine.stock - quantity;
 
-      // Create sale record
+      // 2. Create sale record
       const saleData = {
         location_id: locationId,
         patient_id: patientId,
@@ -1357,48 +1438,48 @@ export const api = {
         .select('*, patients(name), medicines(name)')
         .single();
 
-      if (saleError) throw new Error(saleError.message);
+      if (saleError) throw new Error(`Sale failed: ${saleError.message}`);
 
-      // Update stock
-      await api.medicines.update(medicineId, { stock: newStock });
+      // 3. Update stock (decrement)
+      const { error: stockError } = await supabase
+        .from('medicines')
+        .update({ stock: newStock })
+        .eq('id', medicineId)
+        .gte('stock', quantity); // Atomicity check: ensure stock hasn't changed
 
-      // Update patient balance and points
-      const { data: patient } = await supabase
+      if (stockError) throw new Error(`Stock update failed: ${stockError.message}`);
+
+      // 4. Update patient balance and points
+      const newBalance = (patient.balance || 0) + totalPrice;
+      
+      // Calculate points based on active rules
+      const rules = await api.loyalty.getRules(locationId);
+      const purchaseRule = rules.find(r => r.event_type === 'PURCHASE' && r.active);
+      const pointsPerUnit = purchaseRule ? purchaseRule.points_per_unit : 0.001;
+      const minAmount = purchaseRule?.min_amount || 0;
+      
+      let earnedPoints = 0;
+      if (totalPrice >= minAmount) {
+        earnedPoints = Math.floor(totalPrice * pointsPerUnit);
+      }
+      
+      const newPoints = (patient.loyalty_points || 0) + earnedPoints;
+      
+      const { error: pUpdateError } = await supabase
         .from('patients')
-        .select('balance, loyalty_points')
-        .eq('id', patientId)
-        .single();
+        .update({ balance: newBalance, loyalty_points: newPoints })
+        .eq('id', patientId);
 
-      if (patient) {
-        const newBalance = (patient.balance || 0) + totalPrice;
-        
-        // Calculate points based on active rules
-        const rules = await api.loyalty.getRules(locationId);
-        const purchaseRule = rules.find(r => r.event_type === 'PURCHASE' && r.active);
-        const pointsPerUnit = purchaseRule ? purchaseRule.points_per_unit : 0.001;
-        const minAmount = purchaseRule?.min_amount || 0;
-        
-        let earnedPoints = 0;
-        if (totalPrice >= minAmount) {
-          earnedPoints = Math.floor(totalPrice * pointsPerUnit);
-        }
-        
-        const newPoints = (patient.loyalty_points || 0) + earnedPoints;
-        
-        await supabase
-          .from('patients')
-          .update({ balance: newBalance, loyalty_points: newPoints })
-          .eq('id', patientId);
+      if (pUpdateError) throw new Error(`Patient update failed: ${pUpdateError.message}`);
           
-        if (earnedPoints > 0) {
-          await api.loyalty.addTransaction({
-            patient_id: patientId,
-            location_id: locationId,
-            points: earnedPoints,
-            type: 'EARNED',
-            description: `Earned from medicine purchase: ${medicine.name}`
-          });
-        }
+      if (earnedPoints > 0) {
+        await api.loyalty.addTransaction({
+          patient_id: patientId,
+          location_id: locationId,
+          points: earnedPoints,
+          type: 'EARNED',
+          description: `Earned from medicine purchase: ${medicine.name} (Qty: ${quantity})`
+        });
       }
 
       return {
@@ -1704,6 +1785,51 @@ export const api = {
     }
   },
   
+  // Planning & Audit Utilities
+  planning: {
+    getPatientState: async (patientId: string, locationId: string) => {
+      const { data, error } = await supabase
+        .from('patients')
+        .select('id, name, balance, loyalty_points, medical_history')
+        .eq('id', patientId)
+        .eq('location_id', locationId)
+        .single();
+      if (error) throw new Error(`Planning error: ${error.message}`);
+      return data;
+    },
+    getMedicineState: async (medicineId: string, locationId: string) => {
+      const { data, error } = await supabase
+        .from('medicines')
+        .select('id, name, stock, price, min_stock')
+        .eq('id', medicineId)
+        .eq('location_id', locationId)
+        .single();
+      if (error) throw new Error(`Planning error: ${error.message}`);
+      return data;
+    },
+    getDoctorAvailability: async (doctorId: string, date: string) => {
+      const dayOfWeek = new Date(date).getDay();
+      const { data: schedules, error: sError } = await supabase
+        .from('doctor_schedules')
+        .select('*')
+        .eq('doctor_id', doctorId)
+        .eq('day_of_week', dayOfWeek);
+      
+      if (sError) throw new Error(`Planning error: ${sError.message}`);
+      
+      const { data: appointments, error: aError } = await supabase
+        .from('appointments')
+        .select('time')
+        .eq('doctor_id', doctorId)
+        .eq('date', date)
+        .eq('status', 'Scheduled');
+      
+      if (aError) throw new Error(`Planning error: ${aError.message}`);
+      
+      return { schedules, appointments };
+    }
+  },
+
   messages: {
     // Get conversations for a user
     getConversations: async (userId: string, userType: 'patient' | 'admin'): Promise<Conversation[]> => {
