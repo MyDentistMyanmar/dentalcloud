@@ -39,26 +39,33 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     setLoading(true);
 
     try {
-      if (loginMode === 'admin') {
-        // Admin login with CAPTCHA
-        if (captchaAnswer.length !== 4 || !/^[0-9]{4}$/.test(captchaAnswer)) {
-          setError('Please enter exactly 4 digits for CAPTCHA');
-          setLoading(false);
-          return;
-        }
+      // CAPTCHA required for both staff and patient login
+      if (captchaAnswer.length !== 4 || !/^[0-9]{4}$/.test(captchaAnswer)) {
+        setError('Please enter exactly 4 digits for CAPTCHA');
+        setLoading(false);
+        return;
+      }
 
-        const expected = parseInt(captchaDigits.join(''), 10);
-        await auth.login(username, password, parseInt(captchaAnswer, 10), expected);
+      const expected = parseInt(captchaDigits.join(''), 10);
+      const enteredCaptcha = parseInt(captchaAnswer, 10);
+
+      if (enteredCaptcha !== expected) {
+        setError('Incorrect CAPTCHA. Please try again.');
+        generateCaptcha();
+        setLoading(false);
+        return;
+      }
+
+      if (loginMode === 'admin') {
+        await auth.login(username, password, enteredCaptcha, expected);
       } else {
-        // Patient login (phone or name + password)
+        // Patient login (phone or name + password) with CAPTCHA
         await auth.patientLogin(username, password);
       }
       onLoginSuccess();
     } catch (err: any) {
       setError(err.message || 'Login failed. Please try again.');
-      if (loginMode === 'admin') {
-        generateCaptcha(); // Regenerate CAPTCHA on error
-      }
+      generateCaptcha(); // Regenerate CAPTCHA on error
     } finally {
       setLoading(false);
     }
@@ -216,7 +223,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                 onClick={() => {
                   setLoginMode('patient');
                   setError('');
-                  setCaptchaAnswer('');
+                  generateCaptcha();
                 }}
                 className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
                   loginMode === 'patient' 
@@ -281,45 +288,43 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                 </div>
               </div>
 
-              {/* CAPTCHA - Only for admin login */}
-              {loginMode === 'admin' && (
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    VERIFICATION
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 flex items-center justify-center gap-2 border-2 border-dashed border-gray-200 rounded-lg p-2 bg-gray-50">
-                      {captchaDigits.map((digit, index) => (
-                        <span key={index} className="text-lg font-bold text-gray-700 w-6 h-6 flex items-center justify-center bg-white rounded border border-gray-200">
-                          {digit}
-                        </span>
-                      ))}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={generateCaptcha}
-                      className="p-2 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
-                      title="Refresh Verification"
-                    >
-                      <RefreshCw size={14} className="text-gray-500" />
-                    </button>
+              {/* CAPTCHA - Required for both staff and patient login */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  VERIFICATION
+                </label>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 flex items-center justify-center gap-2 border-2 border-dashed border-gray-200 rounded-lg p-2 bg-gray-50">
+                    {captchaDigits.map((digit, index) => (
+                      <span key={index} className="text-lg font-bold text-gray-700 w-6 h-6 flex items-center justify-center bg-white rounded border border-gray-200">
+                        {digit}
+                      </span>
+                    ))}
                   </div>
-                  <div className="mt-1.5">
-                    <input
-                      type="text"
-                      value={captchaAnswer}
-                      onChange={(e) => {
-                        const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 4);
-                        setCaptchaAnswer(value);
-                      }}
-                      placeholder="Enter the 4 digits shown above"
-                      required
-                      maxLength={4}
-                      className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white text-sm"
-                    />
-                  </div>
+                  <button
+                    type="button"
+                    onClick={generateCaptcha}
+                    className="p-2 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
+                    title="Refresh Verification"
+                  >
+                    <RefreshCw size={14} className="text-gray-500" />
+                  </button>
                 </div>
-              )}
+                <div className="mt-1.5">
+                  <input
+                    type="text"
+                    value={captchaAnswer}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 4);
+                      setCaptchaAnswer(value);
+                    }}
+                    placeholder="Enter the 4 digits shown above"
+                    required
+                    maxLength={4}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white text-sm"
+                  />
+                </div>
+              </div>
 
               <div className="flex items-center justify-between">
                 <label className="flex items-center gap-1.5 cursor-pointer">
@@ -400,4 +405,6 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
 };
 
 export default LoginView;
+
+
 
