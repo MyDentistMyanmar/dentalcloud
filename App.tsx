@@ -396,7 +396,11 @@ const App: React.FC = () => {
 
   const fetchMedicines = async () => {
     try {
-      const medData = await api.medicines.getAll();
+      if (!currentLocationId) {
+        setMedicines([]);
+        return;
+      }
+      const medData = await api.medicines.getAll(currentLocationId);
       setMedicines(medData);
     } catch (err: any) {
       console.warn('Error fetching medicines:', err);
@@ -413,7 +417,7 @@ const App: React.FC = () => {
       setTreatmentHistory([]);
     }
     try {
-      const txs = await api.loyalty.getTransactions(patient.id);
+      const txs = await api.loyalty.getTransactions(patient.id, currentLocationId || patient.location_id);
       setLoyaltyTransactions(txs);
     } catch (e) {
       setLoyaltyTransactions([]);
@@ -430,7 +434,7 @@ const App: React.FC = () => {
   const fetchGlobalRecords = async () => {
     setLoading(true);
     try {
-      const records = await api.treatments.getAllRecords();
+      const records = await api.treatments.getAllRecords(currentLocationId || undefined);
       setGlobalRecords(records);
     } catch (err: any) {
       console.error(err);
@@ -1196,7 +1200,7 @@ const App: React.FC = () => {
                     await api.patients.update(id, data);
                     fetchInitialData();
                     // update selectedPatient to reflect changes
-                    const updated = await api.patients.getAll();
+                    const updated = await api.patients.getAll(currentLocationId || undefined);
                     const p = updated.find(x => x.id === id);
                     if (p) setSelectedPatient(p);
                   } catch (err: any) {

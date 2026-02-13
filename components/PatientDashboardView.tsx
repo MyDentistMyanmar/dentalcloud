@@ -83,9 +83,11 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ onLogout, messaging
       if (!patientId) {
         throw new Error('No patient session found');
       }
+
+      const sessionLocationId = auth.getCurrentUser()?.location_id || undefined;
       
       // Fetch patient profile
-      const allPatients = await api.patients.getAll();
+      const allPatients = await api.patients.getAll(sessionLocationId);
       const patientData = allPatients.find(p => p.id === patientId);
       if (!patientData) {
         throw new Error('Patient data not found');
@@ -109,7 +111,7 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ onLogout, messaging
       setTreatmentRecords(records);
       
       // Fetch doctors
-      const allDoctors = await api.doctors.getAll();
+      const allDoctors = await api.doctors.getAll(patientData.location_id);
       setDoctors(allDoctors);
       
     } catch (err: any) {
