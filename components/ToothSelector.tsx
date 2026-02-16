@@ -83,11 +83,11 @@ export const ToothSelector: React.FC<SelectorProps> = ({ selectedTeeth, onToggle
         <p className="text-[10px] text-slate-500">Universal Numbering System</p>
       </div>
 
-      {/* Orientation Labels */}
+      {/* Orientation Labels - Dentist's perspective (facing patient) */}
       <div className="w-full max-w-[380px] grid grid-cols-3 items-center text-[9px] font-bold uppercase tracking-wider text-slate-500 px-1">
-        <span className="text-left">Left</span>
-        <span className="text-center">Upper</span>
-        <span className="text-right">Right</span>
+        <span className="text-left">Right</span>
+        <span className="text-center">Maxilla</span>
+        <span className="text-right">Left</span>
       </div>
 
       {/* React Teeth Selector Component */}
@@ -110,11 +110,11 @@ export const ToothSelector: React.FC<SelectorProps> = ({ selectedTeeth, onToggle
         </div>
       </div>
 
-      {/* Bottom Orientation Labels */}
+      {/* Bottom Orientation Labels - Dentist's perspective (facing patient) */}
       <div className="w-full max-w-[380px] grid grid-cols-3 items-center text-[9px] font-bold uppercase tracking-wider text-slate-500 px-1 -mt-1">
-        <span className="text-left">Left</span>
-        <span className="text-center">Lower</span>
-        <span className="text-right">Right</span>
+        <span className="text-left">Right</span>
+        <span className="text-center">Mandible</span>
+        <span className="text-right">Left</span>
       </div>
 
       {/* Legend - Very Compact */}
