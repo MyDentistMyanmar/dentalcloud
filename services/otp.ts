@@ -10,20 +10,295 @@ export interface OTPRecord {
 }
 
 export const otpService = {
-  // Generate a random 6-digit OTP
+  /**
+   * Request OTP for patient registration using Supabase Auth
+   * This uses Supabase's built-in email verification
+   */
+  async requestOTP(email: string): Promise<{ success: boolean; message: string }> {
+    try {
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return { success: false, message: 'Please enter a valid email address' };
+      }
+
+      // Use Supabase Auth's built-in OTP system
+      // This sends an email with a 6-digit code
+      const { error } = await supabase.auth.signInWithOtp({
+        email: email.toLowerCase().trim(),
+        options: {
+          // Don't create a session until OTP is verified
+          shouldCreateUser: true,
+        }
+      });
+
+      if (error) {
+        console.error('Supabase OTP request error:', error);
+        
+        // Handle rate limiting
+        if (error.message.includes('rate') || error.message.includes('limit')) {
+          return { 
+            success: false, 
+            message: 'Too many requests. Please wait a few minutes before trying again.' 
+          };
+        }
+        
+        return { success: false, message: error.message };
+      }
+
+      return { 
+        success: true, 
+        message: 'Verification code sent to your email address. Check your inbox (and spam folder).' 
+      };
+    } catch (error: any) {
+      console.error('OTP request failed:', error);
+      return { 
+        success: false, 
+        message: error.message || 'Failed to send verification code' 
+      };
+    }
+  },
+
+  /**
+   * Verify OTP code using Supabase Auth
+   */
+  async verifyOTP(email: string, code: string): Promise<{ success: boolean; userId?: string; message?: string }> {
+    try {
+      const { data, error } = await supabase.auth.verifyOtp({
+        email: email.toLowerCase().trim(),
+        token: code,
+        type: 'email' // Use 'email' for signInWithOtp, 'signup' for signUp
+      });
+
+      if (error) {
+        console.error('OTP verification error:', error);
+        
+        // Provide user-friendly error messages
+        if (error.message.includes('expired')) {
+          return { success: false, message: 'Verification code has expired. Please request a new one.' };
+        }
+        if (error.message.includes('invalid')) {
+          return { success: false, message: 'Invalid verification code. Please check and try again.' };
+        }
+        
+        return { success: false, message: error.message };
+      }
+
+      if (!data.user) {
+        return { success: false, message: 'Verification failed. Please try again.' };
+      }
+
+      return { 
+        success: true, 
+        userId: data.user.id,
+        message: 'Email verified successfully!' 
+      };
+    } catch (error: any) {
+      console.error('OTP verification failed:', error);
+      return { 
+        success: false, 
+        message: error.message || 'Failed to verify code' 
+      };
+    }
+  },
+
+  /**
+   * Sign up a new user with email and password using Supabase Auth
+   * This will send a confirmation email automatically
+   */
+  async signUpWithPassword(email: string, password: string): Promise<{ 
+    success: boolean; 
+    userId?: string; 
+    needsVerification?: boolean;
+    message?: string 
+  }> {
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: email.toLowerCase().trim(),
+        password,
+        options: {
+          emailRedirectTo: window.location.origin,
+        }
+      });
+
+      if (error) {
+        console.error('Sign up error:', error);
+        
+        if (error.message.includes('already registered')) {
+          return { success: false, message: 'This email is already registered. Please login instead.' };
+        }
+        
+        return { success: false, message: error.message };
+      }
+
+      // Check if user needs email confirmation
+      const needsVerification = data.user && !data.user.email_confirmed_at;
+      
+      return { 
+        success: true, 
+        userId: data.user?.id,
+        needsVerification,
+        message: needsVerification 
+          ? 'Please check your email for the verification code.'
+          : 'Account created successfully!'
+      };
+    } catch (error: any) {
+      console.error('Sign up failed:', error);
+      return { 
+        success: false, 
+        message: error.message || 'Failed to create account' 
+      };
+    }
+  },
+
+  /**
+   * Verify signup OTP (for email + password signup flow)
+   */
+  async verifySignupOTP(email: string, code: string): Promise<{ success: boolean; userId?: string; message?: string }> {
+    try {
+      const { data, error } = await supabase.auth.verifyOtp({
+        email: email.toLowerCase().trim(),
+        token: code,
+        type: 'signup'
+      });
+
+      if (error) {
+        console.error('Signup OTP verification error:', error);
+        return { success: false, message: error.message };
+      }
+
+      if (!data.user) {
+        return { success: false, message: 'Verification failed. Please try again.' };
+      }
+
+      return { 
+        success: true, 
+        userId: data.user.id,
+        message: 'Email verified successfully!' 
+      };
+    } catch (error: any) {
+      console.error('Signup OTP verification failed:', error);
+      return { 
+        success: false, 
+        message: error.message || 'Failed to verify code' 
+      };
+    }
+  },
+
+  /**
+   * Update password for authenticated user
+   */
+  async updatePassword(newPassword: string): Promise<{ success: boolean; message?: string }> {
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (error) {
+        console.error('Password update error:', error);
+        return { success: false, message: error.message };
+      }
+
+      return { success: true, message: 'Password updated successfully!' };
+    } catch (error: any) {
+      console.error('Password update failed:', error);
+      return { 
+        success: false, 
+        message: error.message || 'Failed to update password' 
+      };
+    }
+  },
+
+  /**
+   * Sign out the current user
+   */
+  async signOut(): Promise<void> {
+    await supabase.auth.signOut();
+  },
+
+  /**
+   * Get current authenticated user
+   */
+  async getCurrentUser() {
+    const { data: { user } } = await supabase.auth.getUser();
+    return user;
+  },
+
+  /**
+   * Check if email is already registered in patient_auth table
+   * (for checking existing patient accounts, separate from Supabase Auth)
+   */
+  async isEmailRegistered(email: string): Promise<boolean> {
+    try {
+      const { data, error } = await supabase
+        .from('patient_auth')
+        .select('id')
+        .eq('email', email.toLowerCase().trim())
+        .limit(1);
+      
+      if (error) {
+        console.error('Email check error:', error);
+        return false;
+      }
+      
+      return data && data.length > 0;
+    } catch (error) {
+      console.error('Email registration check failed:', error);
+      return false;
+    }
+  },
+
+  /**
+   * Resend OTP verification email
+   */
+  async resendOTP(email: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: email.toLowerCase().trim(),
+      });
+
+      if (error) {
+        console.error('Resend OTP error:', error);
+        
+        if (error.message.includes('rate') || error.message.includes('limit')) {
+          return { 
+            success: false, 
+            message: 'Please wait a few minutes before requesting another code.' 
+          };
+        }
+        
+        return { success: false, message: error.message };
+      }
+
+      return { 
+        success: true, 
+        message: 'A new verification code has been sent to your email.' 
+      };
+    } catch (error: any) {
+      console.error('Resend OTP failed:', error);
+      return { 
+        success: false, 
+        message: error.message || 'Failed to resend verification code' 
+      };
+    }
+  },
+
+  // ============ Legacy methods for backward compatibility ============
+  // These can be removed once fully migrated to Supabase Auth
+
+  /**
+   * @deprecated Use Supabase Auth instead. Kept for backward compatibility.
+   */
   generateOTP(): string {
     return Math.floor(100000 + Math.random() * 900000).toString();
   },
 
-  // Generate expiration timestamp (5 minutes from now)
-  generateExpiration(): Date {
-    const now = new Date();
-    return new Date(now.getTime() + 5 * 60 * 1000); // 5 minutes
-  },
-
-  // Store OTP in database
+  /**
+   * @deprecated Use Supabase Auth instead. Kept for backward compatibility.
+   */
   async storeOTP(email: string, code: string): Promise<OTPRecord> {
-    const expires_at = this.generateExpiration();
+    const expires_at = new Date(Date.now() + 5 * 60 * 1000);
     
     const { data, error } = await supabase
       .from('otp_codes')
@@ -42,12 +317,11 @@ export const otpService = {
     return data;
   },
 
-  // Verify OTP code
-  async verifyOTP(email: string, code: string): Promise<boolean> {
+  /**
+   * @deprecated Use Supabase Auth instead. Kept for backward compatibility.
+   */
+  async verifyOTPLegacy(email: string, code: string): Promise<boolean> {
     try {
-      // First, clean up expired codes
-      await this.cleanupExpiredCodes();
-      
       const { data, error } = await supabase
         .from('otp_codes')
         .select('*')
@@ -57,145 +331,19 @@ export const otpService = {
         .gt('expires_at', new Date().toISOString())
         .limit(1);
 
-      if (error) {
-        console.error('OTP verification error:', error);
-        return false;
-      }
-
-      if (!data || data.length === 0) {
+      if (error || !data || data.length === 0) {
         return false;
       }
 
       // Mark OTP as used
-      const otpRecord = data[0];
       await supabase
         .from('otp_codes')
         .update({ used: true })
-        .eq('id', otpRecord.id);
+        .eq('id', data[0].id);
 
       return true;
     } catch (error) {
       console.error('OTP verification failed:', error);
-      return false;
-    }
-  },
-
-  // Mock send email (logs to console for now)
-  async sendOTPEmail(email: string, code: string): Promise<void> {
-    // In production, you would integrate with an email service like:
-    // - Nodemailer with SMTP
-    // - SendGrid
-    // - AWS SES
-    // - Firebase Email
-    
-    console.log('=== EMAIL OTP ===');
-    console.log('To:', email);
-    console.log('Subject: DentalCloud - Verify Your Email');
-    console.log('Body:');
-    console.log(`
-Dear Patient,
-
-Thank you for registering with DentalCloud. Please use the following verification code to complete your registration:
-
-Verification Code: ${code}
-
-This code will expire in 5 minutes.
-
-If you did not request this code, please ignore this email.
-
-Best regards,
-DentalCloud Team
-    `);
-    console.log('=== END EMAIL ===');
-    
-    // Simulate email sending delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-  },
-
-  // Request OTP for email verification
-  async requestOTP(email: string): Promise<{ success: boolean; message: string }> {
-    try {
-      // Validate email format
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) {
-        return { success: false, message: 'Please enter a valid email address' };
-      }
-
-      // Clean up any existing unused codes for this email
-      await this.cleanupUnusedCodes(email);
-      
-      // Generate new OTP
-      const code = this.generateOTP();
-      
-      // Store in database
-      await this.storeOTP(email, code);
-      
-      // Send email (mock)
-      await this.sendOTPEmail(email, code);
-      
-      return { 
-        success: true, 
-        message: 'Verification code sent to your email address' 
-      };
-    } catch (error: any) {
-      console.error('OTP request failed:', error);
-      return { 
-        success: false, 
-        message: error.message || 'Failed to send verification code' 
-      };
-    }
-  },
-
-  // Cleanup expired OTP codes
-  async cleanupExpiredCodes(): Promise<void> {
-    try {
-      const { error } = await supabase
-        .from('otp_codes')
-        .delete()
-        .lt('expires_at', new Date().toISOString());
-      
-      if (error) {
-        console.warn('Failed to cleanup expired OTP codes:', error);
-      }
-    } catch (error) {
-      console.warn('Error during OTP cleanup:', error);
-    }
-  },
-
-  // Cleanup unused codes for a specific email
-  async cleanupUnusedCodes(email: string): Promise<void> {
-    try {
-      const { error } = await supabase
-        .from('otp_codes')
-        .delete()
-        .eq('email', email.toLowerCase().trim())
-        .eq('used', false);
-      
-      if (error) {
-        console.warn('Failed to cleanup unused OTP codes:', error);
-      }
-    } catch (error) {
-      console.warn('Error during OTP cleanup for email:', error);
-    }
-  },
-
-  // Validate if email already has an account
-  async isEmailRegistered(email: string): Promise<boolean> {
-    try {
-      const { data, error } = await supabase
-        .from('patient_auth')
-        .select('id')
-        .eq('email', email.toLowerCase().trim())
-        .limit(1);
-      
-      if (error) {
-        console.error('Email check error:', error);
-        return false;
-      }
-      
-      return data && data.length > 0;
-    } catch (error) {
-      console.error('Email registration check failed:', error);
       return false;
     }
   }

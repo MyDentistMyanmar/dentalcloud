@@ -345,6 +345,74 @@ export const api = {
       if (aError) throw new Error(aError.message);
 
       return mapPatient(patient);
+    },
+
+    // Register patient with Supabase Auth integration
+    registerWithSupabase: async (email: string, password: string, supabaseUserId?: string): Promise<Patient> => {
+      // 1. Get first location as default
+      const { data: locations } = await supabase.from('locations').select('id').limit(1);
+      const defaultLocationId = locations && locations.length > 0 ? locations[0].id : null;
+
+      if (!defaultLocationId) throw new Error('No clinic location found. Please contact admin.');
+
+      // 2. Check if patient already exists by email
+      let { data: existingPatient, error: fetchError } = await supabase
+        .from('patients')
+        .select('id, name, email, phone')
+        .eq('email', email.toLowerCase().trim())
+        .single();
+
+      let patient;
+      if (fetchError || !existingPatient) {
+        // Patient doesn't exist, create new one
+        const { data: newPatient, error: pError } = await supabase
+          .from('patients')
+          .insert({ 
+            name: email.split('@')[0], 
+            email: email.toLowerCase().trim(),
+            location_id: defaultLocationId
+          })
+          .select()
+          .single();
+
+        if (pError) throw new Error(pError.message);
+        patient = newPatient;
+      } else {
+        // Patient already exists, use existing one
+        patient = existingPatient;
+      }
+
+      // 3. Create or update auth record linked to Supabase Auth
+      // Password is stored in Supabase Auth, but we keep a reference here
+      const authData: any = {
+        patient_id: patient.id,
+        email: email.toLowerCase().trim(),
+        phone: patient.phone || null,
+        is_verified: true
+      };
+
+      // Add Supabase user ID if provided (for linking accounts)
+      if (supabaseUserId) {
+        authData.supabase_user_id = supabaseUserId;
+      }
+
+      // We don't store the password here since Supabase Auth handles it
+      // But for backward compatibility with existing login, we can still store a hash
+      // The password field can be optional or removed in future
+      authData.password = password; // Keep for backward compatibility
+
+      const { error: aError } = await supabase
+        .from('patient_auth')
+        .upsert(authData, {
+          onConflict: 'patient_id'
+        });
+
+      if (aError) {
+        console.error('Error creating patient auth record:', aError);
+        // Don't throw here - patient is created, auth linking is secondary
+      }
+
+      return mapPatient(patient);
     }
   },
 

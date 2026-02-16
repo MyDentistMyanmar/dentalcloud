@@ -1,5 +1,6 @@
 import { User, Patient } from '../types';
 import { api } from './api';
+import { supabase } from './supabase';
 
 // Default admin credentials
 export const DEFAULT_ADMIN = {
@@ -18,6 +19,7 @@ export interface AuthSession {
   location_id: string | null;
   loginTime: number;
   patientId?: string; // For patient sessions
+  supabaseUserId?: string; // For Supabase Auth sessions
 }
 
 export const auth = {
@@ -90,6 +92,8 @@ export const auth = {
   logout(): void {
     localStorage.removeItem(SESSION_KEY);
     localStorage.removeItem(SESSION_USER_KEY);
+    // Also sign out from Supabase Auth
+    supabase.auth.signOut().catch(err => console.warn('Supabase signout error:', err));
   },
 
   // Get current session
@@ -135,6 +139,51 @@ export const auth = {
   // Patient login with phone or name + password
   async patientLogin(identifier: string, password: string): Promise<AuthSession> {
     try {
+      // First, try to login with Supabase Auth if it looks like an email
+      const isEmail = identifier.includes('@');
+      
+      if (isEmail) {
+        // Try Supabase Auth first
+        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+          email: identifier.toLowerCase().trim(),
+          password
+        });
+
+        if (!authError && authData.user) {
+          // Successfully authenticated with Supabase Auth
+          // Now find the associated patient
+          const { data: patientAuth } = await supabase
+            .from('patient_auth')
+            .select('patient_id')
+            .eq('email', identifier.toLowerCase().trim())
+            .single();
+
+          if (patientAuth?.patient_id) {
+            const { data: patient } = await supabase
+              .from('patients')
+              .select('*')
+              .eq('id', patientAuth.patient_id)
+              .single();
+
+            if (patient) {
+              const session: AuthSession = {
+                userId: patient.id,
+                username: patient.name,
+                role: 'patient',
+                location_id: patient.location_id || null,
+                loginTime: Date.now(),
+                patientId: patient.id,
+                supabaseUserId: authData.user.id
+              };
+              
+              this.setSession(session);
+              return session;
+            }
+          }
+        }
+      }
+
+      // Fallback to legacy authentication (phone/name + password against patient_auth table)
       const patient = await api.patients.authenticate(identifier, password);
       if (!patient) {
         throw new Error('Invalid credentials');
@@ -166,6 +215,79 @@ export const auth = {
   getCurrentPatientId(): string | null {
     const session = this.getSession();
     return session?.patientId || null;
+  },
+
+  // Check if there's an active Supabase Auth session
+  async getSupabaseSession() {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session;
+  },
+
+  // Restore session from Supabase Auth (for page refresh)
+  async restoreSupabaseSession(): Promise<AuthSession | null> {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session?.user) {
+        return null;
+      }
+
+      // Check if we have an existing local session that matches
+      const localSession = this.getSession();
+      if (localSession?.supabaseUserId === session.user.id) {
+        return localSession;
+      }
+
+      // Try to find the patient associated with this Supabase user
+      const { data: patientAuth } = await supabase
+        .from('patient_auth')
+        .select('patient_id')
+        .eq('email', session.user.email?.toLowerCase())
+        .single();
+
+      if (!patientAuth?.patient_id) {
+        return null;
+      }
+
+      const { data: patient } = await supabase
+        .from('patients')
+        .select('*')
+        .eq('id', patientAuth.patient_id)
+        .single();
+
+      if (!patient) {
+        return null;
+      }
+
+      const newSession: AuthSession = {
+        userId: patient.id,
+        username: patient.name,
+        role: 'patient',
+        location_id: patient.location_id || null,
+        loginTime: Date.now(),
+        patientId: patient.id,
+        supabaseUserId: session.user.id
+      };
+      
+      this.setSession(newSession);
+      return newSession;
+    } catch (error) {
+      console.error('Failed to restore Supabase session:', error);
+      return null;
+    }
+  },
+
+  // Listen for auth state changes
+  onAuthStateChange(callback: (session: AuthSession | null) => void) {
+    return supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_OUT') {
+        this.logout();
+        callback(null);
+      } else if (event === 'SIGNED_IN' && session?.user) {
+        const restoredSession = await this.restoreSupabaseSession();
+        callback(restoredSession);
+      }
+    });
   }
 };
 
