@@ -186,6 +186,93 @@ export const otpService = {
   },
 
   /**
+   * Sign up with email confirmation link (not OTP code)
+   * Uses Supabase's default email confirmation behavior
+   */
+  async signUpWithEmailConfirmation(email: string, password: string): Promise<{ 
+    success: boolean; 
+    userId?: string; 
+    message?: string 
+  }> {
+    try {
+      // Build the redirect URL - user will be redirected here after clicking the link
+      const redirectUrl = `${window.location.origin}?confirmed=true&email=${encodeURIComponent(email)}`;
+      
+      const { data, error } = await supabase.auth.signUp({
+        email: email.toLowerCase().trim(),
+        password,
+        options: {
+          emailRedirectTo: redirectUrl,
+        }
+      });
+
+      if (error) {
+        console.error('Sign up error:', error);
+        
+        if (error.message.includes('already registered')) {
+          return { success: false, message: 'This email is already registered. Please login instead.' };
+        }
+        
+        return { success: false, message: error.message };
+      }
+
+      // Supabase will send a confirmation email with a link
+      return { 
+        success: true, 
+        userId: data.user?.id,
+        message: 'Please check your email and click the confirmation link to verify your account.'
+      };
+    } catch (error: any) {
+      console.error('Sign up failed:', error);
+      return { 
+        success: false, 
+        message: error.message || 'Failed to create account' 
+      };
+    }
+  },
+
+  /**
+   * Resend confirmation email
+   */
+  async resendConfirmationEmail(email: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const redirectUrl = `${window.location.origin}?confirmed=true&email=${encodeURIComponent(email)}`;
+      
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: email.toLowerCase().trim(),
+        options: {
+          emailRedirectTo: redirectUrl,
+        }
+      });
+
+      if (error) {
+        console.error('Resend confirmation error:', error);
+        
+        if (error.message.includes('rate') || error.message.includes('limit')) {
+          return { 
+            success: false, 
+            message: 'Please wait a few minutes before requesting another email.' 
+          };
+        }
+        
+        return { success: false, message: error.message };
+      }
+
+      return { 
+        success: true, 
+        message: 'A new confirmation email has been sent. Please check your inbox.' 
+      };
+    } catch (error: any) {
+      console.error('Resend confirmation failed:', error);
+      return { 
+        success: false, 
+        message: error.message || 'Failed to resend confirmation email' 
+      };
+    }
+  },
+
+  /**
    * Update password for authenticated user
    */
   async updatePassword(newPassword: string): Promise<{ success: boolean; message?: string }> {

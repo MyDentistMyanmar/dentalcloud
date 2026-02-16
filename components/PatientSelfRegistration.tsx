@@ -1,26 +1,75 @@
-import React, { useState } from 'react';
-import { User, Mail, Phone, Lock, Shield, CheckCircle, XCircle, ArrowLeft, RefreshCw } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { User, Mail, Lock, CheckCircle, XCircle, ArrowLeft, RefreshCw, Inbox } from 'lucide-react';
 import { otpService } from '../services/otp';
 import { api } from '../services/api';
+import { supabase } from '../services/supabase';
 import { Input } from './Shared';
 
 interface PatientRegistrationProps {
   onBack: () => void;
   onRegistrationComplete: () => void;
+  // Optional: if user was redirected from email confirmation
+  emailConfirmed?: boolean;
+  confirmedEmail?: string;
 }
 
-const PatientSelfRegistration: React.FC<PatientRegistrationProps> = ({ onBack, onRegistrationComplete }) => {
-  // Changed flow: email + password first, then OTP verification
-  const [step, setStep] = useState<'signup' | 'otp' | 'complete'>('signup');
+const PatientSelfRegistration: React.FC<PatientRegistrationProps> = ({ 
+  onBack, 
+  onRegistrationComplete,
+  emailConfirmed,
+  confirmedEmail
+}) => {
+  // Flow: signup → waiting (check email) → complete
+  const [step, setStep] = useState<'signup' | 'waiting' | 'complete'>('signup');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [otp, setOtp] = useState('');
-  const [supabaseUserId, setSupabaseUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  // Handle email confirmation redirect
+  useEffect(() => {
+    if (emailConfirmed && confirmedEmail) {
+      setEmail(confirmedEmail);
+      handleEmailConfirmed(confirmedEmail);
+    }
+  }, [emailConfirmed, confirmedEmail]);
+
+  // Called when user's email has been confirmed via link click
+  const handleEmailConfirmed = async (confirmedEmail: string) => {
+    setLoading(true);
+    setError('');
+    
+    try {
+      // Get the current Supabase Auth user
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        setError('Session expired. Please try signing up again.');
+        setStep('signup');
+        setLoading(false);
+        return;
+      }
+
+      // Create patient record linked to Supabase Auth user
+      await (api.patients as any).registerWithSupabase(confirmedEmail, '', user.id);
+      
+      setSuccess('Email verified and account created successfully!');
+      setStep('complete');
+      
+      // Auto-redirect after 3 seconds
+      setTimeout(() => {
+        onRegistrationComplete();
+      }, 3000);
+    } catch (err: any) {
+      console.error('Error creating patient after email confirmation:', err);
+      setError(err.message || 'Failed to complete registration. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSignupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,15 +97,12 @@ const PatientSelfRegistration: React.FC<PatientRegistrationProps> = ({ onBack, o
         return;
       }
       
-      // Sign up with Supabase Auth (sends OTP email automatically)
-      const result = await otpService.signUpWithPassword(email, password);
+      // Sign up with Supabase Auth (sends confirmation email automatically)
+      const result = await otpService.signUpWithEmailConfirmation(email, password);
       
       if (result.success) {
-        if (result.userId) {
-          setSupabaseUserId(result.userId);
-        }
-        setSuccess(result.message || 'Please check your email for the verification code.');
-        setStep('otp');
+        setSuccess('Please check your email and click the confirmation link to verify your account.');
+        setStep('waiting');
       } else {
         setError(result.message || 'Failed to create account');
       }
@@ -67,63 +113,23 @@ const PatientSelfRegistration: React.FC<PatientRegistrationProps> = ({ onBack, o
     }
   };
 
-  const handleOTPSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setSuccess('');
-    setLoading(true);
-    
-    try {
-      // Verify OTP with Supabase Auth
-      const result = await otpService.verifySignupOTP(email, otp);
-      
-      if (result.success) {
-        // OTP verified - now create patient record
-        const userId = result.userId || supabaseUserId;
-        
-        // Create patient record linked to Supabase Auth user
-        await (api.patients as any).registerWithSupabase(email, password, userId);
-        
-        setSuccess('Account created successfully!');
-        setStep('complete');
-        
-        // Auto-redirect after 2 seconds
-        setTimeout(() => {
-          onRegistrationComplete();
-        }, 2000);
-      } else {
-        setError(result.message || 'Invalid or expired verification code. Please try again.');
-      }
-    } catch (err: any) {
-      setError(err.message || 'Failed to verify code');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleResendOTP = async () => {
+  const handleResendEmail = async () => {
     setError('');
     setSuccess('');
     setResending(true);
     
     try {
-      const result = await otpService.resendOTP(email);
+      const result = await otpService.resendConfirmationEmail(email);
       if (result.success) {
         setSuccess(result.message);
       } else {
         setError(result.message);
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to resend verification code');
+      setError(err.message || 'Failed to resend confirmation email');
     } finally {
       setResending(false);
     }
-  };
-
-  const handleOtpChange = (value: string) => {
-    // Only allow numbers and limit to 6 digits
-    const numericValue = value.replace(/[^0-9]/g, '').slice(0, 6);
-    setOtp(numericValue);
   };
 
   return (
@@ -138,7 +144,7 @@ const PatientSelfRegistration: React.FC<PatientRegistrationProps> = ({ onBack, o
             <h1 className="text-2xl font-bold text-gray-900 mb-2">Patient Registration</h1>
             <p className="text-gray-600">
               {step === 'signup' && 'Create your account'}
-              {step === 'otp' && 'Verify your email'}
+              {step === 'waiting' && 'Check your email'}
               {step === 'complete' && 'Registration Complete!'}
             </p>
           </div>
@@ -148,15 +154,15 @@ const PatientSelfRegistration: React.FC<PatientRegistrationProps> = ({ onBack, o
             <div className="flex items-center space-x-2">
               <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
                 step === 'signup' ? 'bg-indigo-600 text-white' : 
-                step === 'otp' || step === 'complete' ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-500'
+                step === 'waiting' || step === 'complete' ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-500'
               }`}>
                 {step === 'signup' ? '1' : <CheckCircle className="w-5 h-5" />}
               </div>
               <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                step === 'otp' ? 'bg-indigo-600 text-white' : 
+                step === 'waiting' ? 'bg-indigo-600 text-white' : 
                 step === 'complete' ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-500'
               }`}>
-                {step === 'otp' ? '2' : step === 'complete' ? <CheckCircle className="w-5 h-5" /> : '2'}
+                {step === 'waiting' ? '2' : step === 'complete' ? <CheckCircle className="w-5 h-5" /> : '2'}
               </div>
               <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
                 step === 'complete' ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-500'
@@ -269,45 +275,32 @@ const PatientSelfRegistration: React.FC<PatientRegistrationProps> = ({ onBack, o
             </form>
           )}
 
-          {/* OTP Step */}
-          {step === 'otp' && (
-            <form onSubmit={handleOTPSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
-                  <Shield className="w-4 h-4" />
-                  Verification Code
-                </label>
-                <p className="text-sm text-gray-600 mb-3">
-                  Enter the 6-digit code sent to <span className="font-medium">{email}</span>
+          {/* Waiting for Email Confirmation Step */}
+          {step === 'waiting' && (
+            <div className="space-y-6">
+              <div className="text-center">
+                <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Inbox className="w-10 h-10 text-blue-600" />
+                </div>
+                <h2 className="text-xl font-bold text-gray-900 mb-2">Check Your Email</h2>
+                <p className="text-gray-600">
+                  We've sent a confirmation link to:
                 </p>
-                <Input
-                  type="text"
-                  value={otp}
-                  onChange={(e) => handleOtpChange(e.target.value)}
-                  placeholder="123456"
-                  required
-                  maxLength={6}
-                  className="w-full text-center text-2xl tracking-widest"
-                />
+                <p className="font-medium text-indigo-600 mt-1">{email}</p>
               </div>
               
-              <div className="text-sm text-gray-600 text-center">
-                Didn't receive the code?{' '}
-                <button
-                  type="button"
-                  onClick={handleResendOTP}
-                  disabled={resending}
-                  className="text-indigo-600 hover:text-indigo-800 font-medium inline-flex items-center gap-1"
-                >
-                  {resending ? (
-                    <>
-                      <RefreshCw className="w-3 h-3 animate-spin" />
-                      Resending...
-                    </>
-                  ) : (
-                    'Resend Code'
-                  )}
-                </button>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-700">
+                <p className="font-medium mb-2">Next steps:</p>
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Open your email inbox</li>
+                  <li>Find the email from DentalCloud</li>
+                  <li>Click the "Confirm your email" link</li>
+                  <li>You'll be redirected back to complete registration</li>
+                </ol>
+              </div>
+
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-700">
+                <p><strong>Tip:</strong> If you don't see the email, check your spam or junk folder.</p>
               </div>
               
               {error && (
@@ -324,64 +317,98 @@ const PatientSelfRegistration: React.FC<PatientRegistrationProps> = ({ onBack, o
                 </div>
               )}
               
-              <div className="flex gap-3">
+              <div className="text-center space-y-3">
+                <p className="text-sm text-gray-600">
+                  Didn't receive the email?{' '}
+                  <button
+                    type="button"
+                    onClick={handleResendEmail}
+                    disabled={resending}
+                    className="text-indigo-600 hover:text-indigo-800 font-medium inline-flex items-center gap-1"
+                  >
+                    {resending ? (
+                      <>
+                        <RefreshCw className="w-3 h-3 animate-spin" />
+                        Resending...
+                      </>
+                    ) : (
+                      'Resend Email'
+                    )}
+                  </button>
+                </p>
+                
                 <button
                   type="button"
-                  onClick={() => setStep('signup')}
-                  className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+                  onClick={() => {
+                    setStep('signup');
+                    setError('');
+                    setSuccess('');
+                  }}
+                  className="text-gray-500 hover:text-gray-700 text-sm flex items-center justify-center gap-1 mx-auto"
                 >
                   <ArrowLeft className="w-4 h-4" />
-                  Back
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading || otp.length !== 6}
-                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  {loading ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      Verifying...
-                    </>
-                  ) : (
-                    <>
-                      <Shield className="w-4 h-4" />
-                      Verify & Complete
-                    </>
-                  )}
+                  Use a different email
                 </button>
               </div>
-            </form>
+            </div>
           )}
 
           {/* Complete Step */}
           {step === 'complete' && (
             <div className="text-center space-y-4">
-              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto">
-                <CheckCircle className="w-8 h-8 text-green-600" />
-              </div>
-              <h2 className="text-xl font-bold text-gray-900">Registration Complete!</h2>
-              <p className="text-gray-600">
-                Your account has been created successfully. You can now login to access your dashboard.
-              </p>
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-700">
-                <p className="font-medium mb-1">Your Login Credentials:</p>
-                <p><span className="font-medium">Email:</span> {email}</p>
-                <p><span className="font-medium">Password:</span> (The password you set)</p>
-              </div>
+              {loading ? (
+                <>
+                  <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto">
+                    <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                  </div>
+                  <h2 className="text-xl font-bold text-gray-900">Setting up your account...</h2>
+                  <p className="text-gray-600">Please wait while we complete your registration.</p>
+                </>
+              ) : (
+                <>
+                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto">
+                    <CheckCircle className="w-8 h-8 text-green-600" />
+                  </div>
+                  <h2 className="text-xl font-bold text-gray-900">Registration Complete!</h2>
+                  <p className="text-gray-600">
+                    Your account has been created successfully. You can now login to access your dashboard.
+                  </p>
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-700">
+                    <p className="font-medium mb-1">Your Login Credentials:</p>
+                    <p><span className="font-medium">Email:</span> {email || confirmedEmail}</p>
+                    <p><span className="font-medium">Password:</span> (The password you set)</p>
+                  </div>
+                  
+                  {error && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700 flex items-start gap-2">
+                      <XCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                      {error}
+                    </div>
+                  )}
+                  
+                  <button
+                    onClick={onRegistrationComplete}
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 rounded-lg transition-colors"
+                  >
+                    Go to Login
+                  </button>
+                </>
+              )}
             </div>
           )}
 
           {/* Back to Login */}
-          <div className="mt-6 text-center">
-            <button
-              onClick={onBack}
-              className="text-indigo-600 hover:text-indigo-800 font-medium text-sm flex items-center justify-center gap-1 mx-auto"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Back to Login
-            </button>
-          </div>
+          {step !== 'complete' && (
+            <div className="mt-6 text-center">
+              <button
+                onClick={onBack}
+                className="text-indigo-600 hover:text-indigo-800 font-medium text-sm flex items-center justify-center gap-1 mx-auto"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Back to Login
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -21,6 +21,10 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [showRegistration, setShowRegistration] = useState(false);
+  
+  // Email confirmation handling
+  const [emailConfirmed, setEmailConfirmed] = useState(false);
+  const [confirmedEmail, setConfirmedEmail] = useState('');
 
   // Generate new CAPTCHA
   const generateCaptcha = () => {
@@ -31,6 +35,22 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
 
   useEffect(() => {
     generateCaptcha();
+    
+    // Check for email confirmation redirect
+    const urlParams = new URLSearchParams(window.location.search);
+    const confirmed = urlParams.get('confirmed');
+    const email = urlParams.get('email');
+    
+    if (confirmed === 'true' && email) {
+      // User clicked the confirmation link and was redirected back
+      setEmailConfirmed(true);
+      setConfirmedEmail(decodeURIComponent(email));
+      setShowRegistration(true);
+      
+      // Clean up the URL to remove query parameters
+      const cleanUrl = window.location.origin + window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
+    }
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -74,6 +94,8 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   // Handle registration completion
   const handleRegistrationComplete = () => {
     setShowRegistration(false);
+    setEmailConfirmed(false);
+    setConfirmedEmail('');
     setLoginMode('patient');
     setError('');
   };
@@ -82,8 +104,14 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   if (showRegistration) {
     return (
       <PatientSelfRegistration 
-        onBack={() => setShowRegistration(false)}
+        onBack={() => {
+          setShowRegistration(false);
+          setEmailConfirmed(false);
+          setConfirmedEmail('');
+        }}
         onRegistrationComplete={handleRegistrationComplete}
+        emailConfirmed={emailConfirmed}
+        confirmedEmail={confirmedEmail}
       />
     );
   }
