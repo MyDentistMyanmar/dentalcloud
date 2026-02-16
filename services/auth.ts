@@ -141,29 +141,45 @@ export const auth = {
     try {
       // First, try to login with Supabase Auth if it looks like an email
       const isEmail = identifier.includes('@');
+      const normalizedEmail = identifier.toLowerCase().trim();
       
       if (isEmail) {
+        console.log('Attempting Supabase Auth login for:', normalizedEmail);
+        
         // Try Supabase Auth first
         const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-          email: identifier.toLowerCase().trim(),
+          email: normalizedEmail,
           password
         });
 
+        if (authError) {
+          console.log('Supabase Auth error:', authError.message);
+          // Common errors:
+          // - "Invalid login credentials" = wrong password or email not confirmed
+          // - "Email not confirmed" = user needs to verify email
+        }
+
         if (!authError && authData.user) {
+          console.log('Supabase Auth succeeded, user ID:', authData.user.id);
+          
           // Successfully authenticated with Supabase Auth
           // Now find the associated patient
-          const { data: patientAuth } = await supabase
+          const { data: patientAuth, error: paError } = await supabase
             .from('patient_auth')
             .select('patient_id')
-            .eq('email', identifier.toLowerCase().trim())
+            .eq('email', normalizedEmail)
             .single();
 
+          console.log('patient_auth lookup:', { found: !!patientAuth, error: paError?.message });
+
           if (patientAuth?.patient_id) {
-            const { data: patient } = await supabase
+            const { data: patient, error: pError } = await supabase
               .from('patients')
               .select('*')
               .eq('id', patientAuth.patient_id)
               .single();
+
+            console.log('patients lookup:', { found: !!patient, error: pError?.message });
 
             if (patient) {
               const session: AuthSession = {
@@ -179,14 +195,20 @@ export const auth = {
               this.setSession(session);
               return session;
             }
+          } else {
+            // Supabase Auth worked but no patient_auth record exists
+            // This means registration didn't complete properly
+            console.error('Supabase Auth succeeded but no patient_auth record found for:', normalizedEmail);
+            throw new Error('Account setup incomplete. Please contact support or try registering again.');
           }
         }
       }
 
       // Fallback to legacy authentication (phone/name + password against patient_auth table)
+      console.log('Falling back to legacy authentication for:', identifier);
       const patient = await api.patients.authenticate(identifier, password);
       if (!patient) {
-        throw new Error('Invalid credentials');
+        throw new Error('Invalid credentials. Please check your email/phone and password.');
       }
 
       const session: AuthSession = {
@@ -201,6 +223,7 @@ export const auth = {
       this.setSession(session);
       return session;
     } catch (error: any) {
+      console.error('Patient login error:', error);
       throw new Error(error.message || 'Invalid patient credentials');
     }
   },

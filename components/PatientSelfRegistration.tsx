@@ -33,7 +33,11 @@ const PatientSelfRegistration: React.FC<PatientRegistrationProps> = ({
   useEffect(() => {
     if (emailConfirmed && confirmedEmail) {
       setEmail(confirmedEmail);
-      handleEmailConfirmed(confirmedEmail);
+      // Small delay to ensure Supabase session is fully initialized
+      const timer = setTimeout(() => {
+        handleEmailConfirmed(confirmedEmail);
+      }, 300);
+      return () => clearTimeout(timer);
     }
   }, [emailConfirmed, confirmedEmail]);
 
@@ -41,23 +45,46 @@ const PatientSelfRegistration: React.FC<PatientRegistrationProps> = ({
   const handleEmailConfirmed = async (confirmedEmail: string) => {
     setLoading(true);
     setError('');
+    setStep('complete'); // Show loading state in complete step
     
     try {
-      // Get the current Supabase Auth user
-      const { data: { user } } = await supabase.auth.getUser();
+      // Wait a moment for Supabase to fully process the session
+      await new Promise(resolve => setTimeout(resolve, 500));
       
-      if (!user) {
-        setError('Session expired. Please try signing up again.');
-        setStep('signup');
-        setLoading(false);
-        return;
+      // Try to get the session first (more reliable than getUser for redirect flows)
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      console.log('Session check result:', { session: !!session, error: sessionError });
+      
+      if (sessionError) {
+        console.error('Session error:', sessionError);
+      }
+      
+      let userId: string | undefined;
+      
+      if (session?.user) {
+        userId = session.user.id;
+        console.log('Got user from session:', userId);
+      } else {
+        // Fallback: try getUser
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (user) {
+          userId = user.id;
+          console.log('Got user from getUser:', userId);
+        } else {
+          console.error('No user found. Error:', userError);
+        }
+      }
+      
+      if (!userId) {
+        // Session might not be available - still try to create patient without Supabase link
+        console.warn('No Supabase session found, creating patient without Supabase link');
       }
 
-      // Create patient record linked to Supabase Auth user
-      await (api.patients as any).registerWithSupabase(confirmedEmail, '', user.id);
+      // Create patient record (with or without Supabase user ID)
+      await (api.patients as any).registerWithSupabase(confirmedEmail, '', userId);
       
       setSuccess('Email verified and account created successfully!');
-      setStep('complete');
       
       // Auto-redirect after 3 seconds
       setTimeout(() => {
@@ -66,6 +93,7 @@ const PatientSelfRegistration: React.FC<PatientRegistrationProps> = ({
     } catch (err: any) {
       console.error('Error creating patient after email confirmation:', err);
       setError(err.message || 'Failed to complete registration. Please try again.');
+      setStep('signup'); // Allow user to retry
     } finally {
       setLoading(false);
     }

@@ -37,19 +37,33 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     generateCaptcha();
     
     // Check for email confirmation redirect
+    // Supabase redirects with: ?confirmed=true&email=xxx#access_token=xxx&refresh_token=xxx
     const urlParams = new URLSearchParams(window.location.search);
     const confirmed = urlParams.get('confirmed');
     const email = urlParams.get('email');
+    const hashParams = new URLSearchParams(window.location.hash.substring(1));
+    const hasAuthTokens = hashParams.has('access_token') || hashParams.has('refresh_token');
     
     if (confirmed === 'true' && email) {
       // User clicked the confirmation link and was redirected back
-      setEmailConfirmed(true);
-      setConfirmedEmail(decodeURIComponent(email));
-      setShowRegistration(true);
+      // Wait for Supabase to process the auth tokens from the URL hash
+      const initSession = async () => {
+        // If there are auth tokens in the hash, Supabase needs time to process them
+        if (hasAuthTokens) {
+          // Give Supabase client time to process the tokens
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+        
+        setEmailConfirmed(true);
+        setConfirmedEmail(decodeURIComponent(email));
+        setShowRegistration(true);
+        
+        // Clean up the URL AFTER Supabase has processed the tokens
+        const cleanUrl = window.location.origin + window.location.pathname;
+        window.history.replaceState({}, document.title, cleanUrl);
+      };
       
-      // Clean up the URL to remove query parameters
-      const cleanUrl = window.location.origin + window.location.pathname;
-      window.history.replaceState({}, document.title, cleanUrl);
+      initSession();
     }
   }, []);
 
