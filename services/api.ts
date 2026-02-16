@@ -355,11 +355,13 @@ export const api = {
 
       if (!defaultLocationId) throw new Error('No clinic location found. Please contact admin.');
 
+      const normalizedEmail = email.toLowerCase().trim();
+
       // 2. Check if patient already exists by email
       let { data: existingPatient, error: fetchError } = await supabase
         .from('patients')
         .select('id, name, email, phone')
-        .eq('email', email.toLowerCase().trim())
+        .eq('email', normalizedEmail)
         .single();
 
       let patient;
@@ -368,50 +370,74 @@ export const api = {
         const { data: newPatient, error: pError } = await supabase
           .from('patients')
           .insert({ 
-            name: email.split('@')[0], 
-            email: email.toLowerCase().trim(),
+            name: normalizedEmail.split('@')[0], 
+            email: normalizedEmail,
             location_id: defaultLocationId
           })
           .select()
           .single();
 
-        if (pError) throw new Error(pError.message);
+        if (pError) {
+          console.error('Error creating patient record:', pError);
+          throw new Error(`Failed to create patient: ${pError.message}`);
+        }
         patient = newPatient;
       } else {
         // Patient already exists, use existing one
         patient = existingPatient;
       }
 
-      // 3. Create or update auth record linked to Supabase Auth
-      // Password is stored in Supabase Auth, but we keep a reference here
-      const authData: any = {
-        patient_id: patient.id,
-        email: email.toLowerCase().trim(),
-        phone: patient.phone || null,
-        is_verified: true
-      };
-
-      // Add Supabase user ID if provided (for linking accounts)
-      if (supabaseUserId) {
-        authData.supabase_user_id = supabaseUserId;
-      }
-
-      // We don't store the password here since Supabase Auth handles it
-      // But for backward compatibility with existing login, we can still store a hash
-      // The password field can be optional or removed in future
-      authData.password = password; // Keep for backward compatibility
-
-      const { error: aError } = await supabase
+      // 3. Check if patient_auth record already exists
+      const { data: existingAuth } = await supabase
         .from('patient_auth')
-        .upsert(authData, {
-          onConflict: 'patient_id'
-        });
+        .select('id')
+        .eq('email', normalizedEmail)
+        .single();
 
-      if (aError) {
-        console.error('Error creating patient auth record:', aError);
-        // Don't throw here - patient is created, auth linking is secondary
+      if (existingAuth) {
+        // Update existing auth record
+        const updateData: any = {
+          patient_id: patient.id,
+          is_verified: true
+        };
+        if (supabaseUserId) {
+          updateData.supabase_user_id = supabaseUserId;
+        }
+
+        const { error: updateError } = await supabase
+          .from('patient_auth')
+          .update(updateData)
+          .eq('email', normalizedEmail);
+
+        if (updateError) {
+          console.error('Error updating patient auth record:', updateError);
+          throw new Error(`Failed to update authentication: ${updateError.message}`);
+        }
+      } else {
+        // Create new auth record
+        const authData: any = {
+          patient_id: patient.id,
+          email: normalizedEmail,
+          phone: patient.phone || null,
+          is_verified: true,
+          password: password || null // May be empty for Supabase Auth users
+        };
+
+        if (supabaseUserId) {
+          authData.supabase_user_id = supabaseUserId;
+        }
+
+        const { error: insertError } = await supabase
+          .from('patient_auth')
+          .insert(authData);
+
+        if (insertError) {
+          console.error('Error creating patient auth record:', insertError);
+          throw new Error(`Failed to create authentication record: ${insertError.message}`);
+        }
       }
 
+      console.log('Patient registration completed successfully:', { patientId: patient.id, email: normalizedEmail });
       return mapPatient(patient);
     }
   },
