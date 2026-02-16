@@ -990,7 +990,7 @@ const App: React.FC = () => {
           <Activity className="w-16 h-16 text-red-500 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Connection Error</h2>
           <p className="text-gray-600 mb-6">{error}</p>
-          <button onClick={fetchInitialData} className="w-full bg-indigo-600 text-white py-2 rounded-lg font-medium hover:bg-indigo-700">
+          <button onClick={() => fetchInitialData()} className="w-full bg-indigo-600 text-white py-2 rounded-lg font-medium hover:bg-indigo-700">
             Retry Connection
           </button>
         </div>
