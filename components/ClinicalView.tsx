@@ -117,11 +117,11 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
     if (quadrant === 3) return 'Lower Left';
     if (quadrant === 4) return 'Lower Right';
 
-    // FDI primary numbering (51-85) displayed in chart orientation (mirrored left/right)
-    if (quadrant === 5) return 'Upper Left';
-    if (quadrant === 6) return 'Upper Right';
-    if (quadrant === 7) return 'Lower Right';
-    if (quadrant === 8) return 'Lower Left';
+    // FDI primary numbering (51-85)
+    if (quadrant === 5) return 'Upper Right';
+    if (quadrant === 6) return 'Upper Left';
+    if (quadrant === 7) return 'Lower Left';
+    if (quadrant === 8) return 'Lower Right';
 
     return 'Unknown Position';
   };
@@ -129,6 +129,11 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
   const formatTeethWithPosition = (teeth: number[]) => {
     if (!teeth || teeth.length === 0) return 'General';
     return teeth.map((tooth) => `${tooth} (${getToothPosition(tooth)})`).join(', ');
+  };
+
+  const formatDoctorName = (name?: string) => {
+    if (!name) return '—';
+    return /^dr\.?\s/i.test(name) ? name : `Dr. ${name}`;
   };
 
   const allowedFile = (file: File) => file.type.startsWith('image/') || file.type === 'application/pdf';
@@ -259,7 +264,7 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
                   treatmentHistory.map((rec) => (
                     <tr key={rec.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 text-gray-500">{rec.date}</td>
-                      <td className="px-4 py-3 text-gray-700 font-medium">{rec.doctor_name ? `Dr. ${rec.doctor_name}` : '—'}</td>
+                      <td className="px-4 py-3 text-gray-700 font-medium">{formatDoctorName(rec.doctor_name)}</td>
                       <td className="px-4 py-3">
                         <span className="text-xs bg-gray-100 px-1.5 py-0.5 rounded leading-relaxed inline-block">
                           {formatTeethWithPosition(rec.teeth)}
