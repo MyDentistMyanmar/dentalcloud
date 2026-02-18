@@ -24,7 +24,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 
-import { Modal, Input, NavItem } from './components/Shared';
+import { Modal, Input, NavItem, Toast } from './components/Shared';
 import { 
   Patient, 
   Appointment, 
@@ -137,6 +137,7 @@ const App: React.FC = () => {
   const [showUserModal, setShowUserModal] = useState(false);
   const [showMedicineModal, setShowMedicineModal] = useState(false);
   const [showMedicineSelectionModal, setShowMedicineSelectionModal] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info'; show: boolean }>({ message: '', type: 'success', show: false });
   const [lastPaymentAmount, setLastPaymentAmount] = useState<number>(0);
   const [selectedTreatmentsForReceipt, setSelectedTreatmentsForReceipt] = useState<ClinicalRecord[]>([]);
   const [availableTimes, setAvailableTimes] = useState<string[]>([]);
@@ -878,7 +879,11 @@ const App: React.FC = () => {
       await fetchMedicines();
       
       // Show success message
-      alert(`Successfully added ${selectedMedicines.length} medicine(s) to patient's bill. Total: ${formatCurrency(medicineCost, currency)}`);
+      setToast({
+        message: `Successfully added ${selectedMedicines.length} medicine(s) to patient's bill. Total: ${formatCurrency(medicineCost, currency)}`,
+        type: 'success',
+        show: true
+      });
     } catch (err: any) {
       alert(err.message);
     }
@@ -1010,6 +1015,15 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex bg-gray-50 flex-col md:flex-row">
+      {/* Toast Notification */}
+      {toast.show && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast({ ...toast, show: false })}
+        />
+      )}
+      
       {/* Mobile Header */}
       <header className="md:hidden bg-gray-900 text-white p-4 flex items-center justify-between sticky top-0 z-50">
         <span className="text-lg font-black tracking-tight">DentalCloud<span className="text-indigo-400">Pro</span></span>

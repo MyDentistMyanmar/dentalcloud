@@ -1,5 +1,5 @@
-import React from 'react';
-import { X } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { X, CheckCircle, AlertCircle, Info } from 'lucide-react';
 
 export const Modal = ({ title, children, onClose }: { title: string, children?: React.ReactNode, onClose: () => void }) => (
   <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-md z-50 flex items-center justify-center p-6 animate-fade-in">
@@ -50,6 +50,50 @@ export const StatsCard = ({ title, value, icon, trend }: { title: string, value:
       </div>
       <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-1">{title}</p>
       <h3 className="text-3xl font-black text-gray-900 tracking-tight">{value}</h3>
+    </div>
+  );
+};
+
+// Toast Notification Component
+interface ToastProps {
+  message: string;
+  type?: 'success' | 'error' | 'info';
+  onClose: () => void;
+  duration?: number;
+}
+
+export const Toast: React.FC<ToastProps> = ({ message, type = 'success', onClose, duration = 3000 }) => {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onClose();
+    }, duration);
+    return () => clearTimeout(timer);
+  }, [duration, onClose]);
+
+  const icons = {
+    success: <CheckCircle className="w-5 h-5 text-green-500" />,
+    error: <AlertCircle className="w-5 h-5 text-red-500" />,
+    info: <Info className="w-5 h-5 text-blue-500" />
+  };
+
+  const bgColors = {
+    success: 'bg-green-50 border-green-200',
+    error: 'bg-red-50 border-red-200',
+    info: 'bg-blue-50 border-blue-200'
+  };
+
+  return (
+    <div className={`fixed top-4 right-4 z-[100] animate-fade-in-up`}>
+      <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border shadow-lg ${bgColors[type]}`}>
+        {icons[type]}
+        <p className="text-sm font-medium text-gray-800">{message}</p>
+        <button 
+          onClick={onClose}
+          className="ml-2 text-gray-400 hover:text-gray-600 transition-colors"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
     </div>
   );
 };
