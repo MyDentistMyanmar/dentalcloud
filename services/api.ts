@@ -1,4 +1,5 @@
-import { supabase } from './supabase';
+import { supabase, supabaseUrl } from './supabase';
+import * as tus from 'tus-js-client';
 import { Patient, Appointment, ClinicalRecord, TreatmentType, PatientFile, Doctor, DoctorSchedule, User, Medicine, MedicineSale, Location, LoyaltyRule, LoyaltyTransaction, Expense, Message, Conversation, Recall } from '../types';
 
 // Utility: map DB snake_case fields to app camelCase
@@ -1289,6 +1290,87 @@ export const api = {
         uploaded_at: new Date().toISOString(),
         url: publicData?.publicUrl || ''
       };
+    },
+
+    /**
+     * Upload a file using TUS resumable upload protocol with chunking support.
+     * This is ideal for large files and unreliable network connections.
+     * 
+     * @param patientId - The patient ID to associate the file with
+     * @param file - The file to upload
+     * @param onProgress - Callback for upload progress (bytesUploaded, bytesTotal)
+     * @param onChunkComplete - Callback when a chunk is successfully uploaded
+     * @returns Promise that resolves with the PatientFile when upload is complete
+     */
+    uploadWithTus: async (
+      patientId: string, 
+      file: File, 
+      onProgress?: (bytesUploaded: number, bytesTotal: number) => void,
+      onChunkComplete?: (chunkSize: number, bytesAccepted: number, bytesTotal: number) => void
+    ): Promise<PatientFile> => {
+      const path = `${patientId}/${Date.now()}-${file.name}`;
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session?.access_token) {
+        throw new Error('Authentication required for file upload');
+      }
+
+      return new Promise((resolve, reject) => {
+        const upload = new tus.Upload(file, {
+          endpoint: `${supabaseUrl}/storage/v1/upload/resumable`,
+          retryDelays: [0, 3000, 5000, 10000, 20000],
+          headers: {
+            authorization: `Bearer ${session.access_token}`,
+            'x-upsert': 'false',
+          },
+          uploadDataDuringCreation: true,
+          removeFingerprintOnSuccess: true,
+          metadata: {
+            bucketName: PATIENT_FILES_BUCKET,
+            objectName: path,
+            contentType: file.type,
+            cacheControl: '3600',
+          },
+          chunkSize: 6 * 1024 * 1024, // 6MB chunks (Supabase recommended)
+          onError: (error) => {
+            console.error('TUS upload error:', error);
+            reject(new Error(`Upload failed: ${error.message}`));
+          },
+          onProgress: (bytesUploaded, bytesTotal) => {
+            if (onProgress) {
+              onProgress(bytesUploaded, bytesTotal);
+            }
+          },
+          onChunkComplete: (chunkSize, bytesAccepted, bytesTotal) => {
+            if (onChunkComplete) {
+              onChunkComplete(chunkSize, bytesAccepted, bytesTotal);
+            }
+          },
+          onSuccess: () => {
+            const { data: publicData } = supabase.storage.from(PATIENT_FILES_BUCKET).getPublicUrl(path);
+            
+            resolve({
+              path,
+              name: file.name,
+              size: file.size,
+              type: file.type,
+              uploaded_at: new Date().toISOString(),
+              url: publicData?.publicUrl || ''
+            });
+          },
+        });
+
+        // Check for previous uploads to resume
+        upload.findPreviousUploads().then((previousUploads) => {
+          if (previousUploads.length > 0) {
+            upload.resumeFromPreviousUpload(previousUploads[0]);
+          }
+          upload.start();
+        }).catch((err) => {
+          console.warn('Failed to find previous uploads:', err);
+          upload.start();
+        });
+      });
     },
     remove: async (path: string): Promise<void> => {
       const { error } = await supabase.storage

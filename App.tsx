@@ -985,6 +985,43 @@ const App: React.FC = () => {
     }
   };
 
+  const handleUploadFilesWithProgress = async (
+    files: File[], 
+    onProgress: (progress: { fileName: string; bytesUploaded: number; bytesTotal: number; percentage: number }) => void
+  ): Promise<void> => {
+    if (!selectedPatient) return;
+    if (files.length === 0) return;
+
+    setUploading(true);
+    try {
+      // Upload files sequentially to show proper progress for each
+      for (const file of files) {
+        await api.files.uploadWithTus(
+          selectedPatient.id,
+          file,
+          (bytesUploaded, bytesTotal) => {
+            const percentage = Math.round((bytesUploaded / bytesTotal) * 100);
+            onProgress({
+              fileName: file.name,
+              bytesUploaded,
+              bytesTotal,
+              percentage
+            });
+          }
+        );
+      }
+      
+      // Refresh the file list after upload
+      const updatedFiles = await api.files.list(selectedPatient.id);
+      setPatientFiles(updatedFiles);
+    } catch (err: any) {
+      alert(err.message || 'Upload failed');
+      throw err;
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleDeleteFile = async (path: string) => {
     if (!selectedPatient) return;
     try {
@@ -1276,6 +1313,7 @@ const App: React.FC = () => {
                 useFlatRate={useFlatRate}
                 currency={currency}
                 onUploadFiles={handleUploadFiles}
+                onUploadFilesWithProgress={handleUploadFilesWithProgress}
                 onDeleteFile={handleDeleteFile}
                 onToggleTooth={(id) => setSelectedTeeth(prev => prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id])}
                 onDoctorChange={setSelectedDoctorId}

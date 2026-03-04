@@ -5,6 +5,13 @@ import { Patient, TreatmentType, ClinicalRecord, PatientFile, LoyaltyTransaction
 import { formatCurrency, getCurrencySymbol, Currency } from '../utils/currency';
 import { Modal, Input } from './Shared';
 
+export interface UploadProgress {
+  fileName: string;
+  bytesUploaded: number;
+  bytesTotal: number;
+  percentage: number;
+}
+
 interface ClinicalViewProps {
   selectedPatient: Patient | null;
   doctors: Doctor[];
@@ -24,6 +31,7 @@ interface ClinicalViewProps {
   onClosePatient: () => void;
   onOpenDirectory: () => void;
   onUploadFiles: (files: FileList | File[]) => void;
+  onUploadFilesWithProgress?: (files: File[], onProgress: (progress: UploadProgress) => void) => Promise<void>;
   onDeleteFile: (path: string) => void;
   onGenerateReceipt: () => void;
   onAddMedicines?: () => void;
@@ -56,6 +64,7 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
   onClosePatient,
   onOpenDirectory,
   onUploadFiles,
+  onUploadFilesWithProgress,
   onDeleteFile,
   onGenerateReceipt,
   onAddMedicines,
@@ -77,6 +86,8 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
   const [editData, setEditData] = React.useState({ name: '', email: '', phone: '', medicalHistory: '' });
   const [newPassword, setNewPassword] = React.useState('');
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [uploadProgress, setUploadProgress] = React.useState<UploadProgress | null>(null);
+  const [isUploadingWithProgress, setIsUploadingWithProgress] = React.useState(false);
 
   const canRedeem = (selectedPatient?.loyalty_points || 0) > 0;
 
@@ -138,17 +149,40 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
 
   const allowedFile = (file: File) => file.type.startsWith('image/') || file.type === 'application/pdf';
 
+  const handleUpload = async (files: File[]) => {
+    const filtered = files.filter(allowedFile);
+    if (filtered.length === 0) return;
+
+    // Use chunked upload with progress if available
+    if (onUploadFilesWithProgress) {
+      setIsUploadingWithProgress(true);
+      setUploadProgress(null);
+      try {
+        await onUploadFilesWithProgress(filtered, (progress) => {
+          setUploadProgress(progress);
+        });
+      } catch (err: any) {
+        alert(err.message || 'Upload failed');
+      } finally {
+        setIsUploadingWithProgress(false);
+        setUploadProgress(null);
+      }
+    } else {
+      // Fallback to regular upload
+      onUploadFiles(filtered);
+    }
+  };
+
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    const files = Array.from(e.dataTransfer.files || []).filter(allowedFile);
-    if (files.length) onUploadFiles(files);
+    const files = Array.from(e.dataTransfer.files || []);
+    if (files.length) handleUpload(files);
   };
 
   const handleBrowse = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length) {
-      const filtered = Array.from(files).filter(allowedFile);
-      onUploadFiles(filtered);
+      handleUpload(Array.from(files));
     }
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -614,19 +648,48 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
           <div
             onDragOver={(e) => e.preventDefault()}
             onDrop={handleDrop}
-            className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center bg-gray-50 hover:border-indigo-300 transition-colors"
+            className={`border-2 border-dashed rounded-xl p-4 text-center bg-gray-50 transition-colors ${
+              isUploadingWithProgress ? 'border-indigo-400 bg-indigo-50/50' : 'border-gray-200 hover:border-indigo-300'
+            }`}
           >
             <Upload className="w-8 h-8 text-indigo-500 mx-auto mb-2" />
             <p className="text-sm font-medium text-gray-800">Drag & drop X-rays, PDFs, or documents</p>
             <p className="text-xs text-gray-500 mb-3">Accepted: images, PDF. Max 10 files at once.</p>
+            
+            {/* Upload Progress Bar */}
+            {isUploadingWithProgress && uploadProgress && (
+              <div className="mb-3 mx-auto max-w-xs">
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-gray-600 truncate max-w-[200px]">{uploadProgress.fileName}</span>
+                  <span className="font-semibold text-indigo-600">{uploadProgress.percentage}%</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${uploadProgress.percentage}%` }}
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  {formatBytes(uploadProgress.bytesUploaded)} / {formatBytes(uploadProgress.bytesTotal)}
+                </p>
+                <p className="text-xs text-indigo-600 font-medium mt-1">Chunked upload in progress...</p>
+              </div>
+            )}
+            
             <div className="flex justify-center gap-3">
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="px-3 py-1.5 text-xs font-bold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+                disabled={isUploadingWithProgress}
+                className="px-3 py-1.5 text-xs font-bold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Browse files
               </button>
-              {uploadingFiles && <span className="text-xs text-indigo-600 font-semibold">Uploading...</span>}
+              {(uploadingFiles || isUploadingWithProgress) && (
+                <span className="text-xs text-indigo-600 font-semibold flex items-center gap-1">
+                  <span className="animate-spin inline-block w-3 h-3 border-2 border-indigo-600 border-t-transparent rounded-full" />
+                  Uploading...
+                </span>
+              )}
             </div>
             <input
               type="file"
@@ -634,6 +697,7 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
               accept="image/*,application/pdf"
               ref={fileInputRef}
               onChange={handleBrowse}
+              disabled={isUploadingWithProgress}
               className="hidden"
             />
           </div>
