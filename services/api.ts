@@ -1321,7 +1321,7 @@ export const api = {
       return new Promise((resolve, reject) => {
         const upload = new tus.Upload(file, {
           endpoint: `${supabaseUrl}/storage/v1/upload/resumable`,
-          retryDelays: [0, 3000, 5000, 10000, 20000],
+          retryDelays: [0, 5000, 10000, 20000, 30000, 60000], // Extended retries for Cloudflare timeout
           headers: {
             authorization: `Bearer ${authToken}`,
             'x-upsert': 'false',
@@ -1334,7 +1334,7 @@ export const api = {
             contentType: file.type,
             cacheControl: '3600',
           },
-          chunkSize: 6 * 1024 * 1024, // 6MB chunks (Supabase recommended)
+          chunkSize: 25 * 1024 * 1024, // 25MB chunks - under Cloudflare 100MB limit
           onError: (error) => {
             console.error('TUS upload error:', error);
             reject(new Error(`Upload failed: ${error.message}`));
