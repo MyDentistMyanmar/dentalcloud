@@ -6,6 +6,19 @@ import { Patient, ClinicalRecord, Appointment, Doctor, TreatmentType, User as Us
 import { api } from '../services/api';
 import { Currency } from '../utils/currency';
 import { buildFinancialReport, renderFinancialReportMarkdown, buildInsightsNoNumbers, runReportUpgradeCheck, buildAIReportPayload, payloadToReport, validateAIReportPayload, AIReportPayload } from '../utils/aiReport';
+import {
+  AssistantMemoryProfile,
+  buildMemoryMarkdown,
+  buildMemoryPromptSummary,
+  clearAssistantMemory,
+  forgetMemoryItem,
+  loadAssistantMemory,
+  parseMemoryCommand,
+  rememberFact,
+  rememberPreference,
+  saveAssistantMemory,
+  updateMemoryFromUserMessage
+} from '../utils/assistantMemory';
 
 // Custom CSS for animations
 const customStyles = `
@@ -342,6 +355,14 @@ How can I assist you today?
   // Help modal state
   const [showHelpModal, setShowHelpModal] = useState<boolean>(false);
   const [helpContent, setHelpContent] = useState<string>('');
+  const [assistantMemory, setAssistantMemory] = useState<AssistantMemoryProfile>(() => loadAssistantMemory());
+  const [showMemoryPanel, setShowMemoryPanel] = useState<boolean>(false);
+  const [memoryMarkdown, setMemoryMarkdown] = useState<string>(() => buildMemoryMarkdown(loadAssistantMemory()));
+
+  useEffect(() => {
+    saveAssistantMemory(assistantMemory);
+    setMemoryMarkdown(buildMemoryMarkdown(assistantMemory));
+  }, [assistantMemory]);
 
   // Enhanced context summary generator for better continuity
   const generateContextSummary = (userMessage: string, assistantResponse: string): string => {
@@ -1301,6 +1322,7 @@ Examples:
 
   const callAICompletionAPI = async (userMessage: string, history: Message[] = []): Promise<string> => {
     const apiKey = process.env.AI_API_KEY || MOCK_API_KEY;
+    const memorySummary = buildMemoryPromptSummary(assistantMemory);
     
     // Check if message implies an action
     const actionKeywords = ['create', 'book', 'schedule', 'add', 'delete', 'remove', 'update', 'modify', 'change', 'edit', 'new', 'make'];
@@ -1476,6 +1498,7 @@ When users ask complex questions, think through this framework:
 
 Today: ${contextData.td}
 Current Mode: ${isAgentMode ? 'AGENT (Full CRUD access)' : 'ASK (Read-only analysis)'}
+Persistent Memory: ${memorySummary}
 Practice Data: ${JSON.stringify(contextData)}
 ${isAgentMode ? API_DOCS : 'Limited to analysis mode - switch to Agent for actions'}
 
