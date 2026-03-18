@@ -139,14 +139,17 @@ export const auth = {
   // Patient login with email, phone, username, or name + password
   async patientLogin(identifier: string, password: string): Promise<AuthSession> {
     try {
-      // First, try to login with Supabase Auth if it looks like an email
-      const isEmail = identifier.includes('@');
-      const normalizedEmail = identifier.toLowerCase().trim();
-      
-      if (isEmail) {
+      const trimmedIdentifier = identifier.trim();
+      const normalizedIdentifier = trimmedIdentifier.toLowerCase();
+      const safeIdentifier = trimmedIdentifier.replace(/\"/g, '');
+      const safeNormalized = normalizedIdentifier.replace(/\"/g, '');
+
+      const trySupabaseLogin = async (email: string): Promise<AuthSession | null> => {
+        const normalizedEmail = email.toLowerCase().trim();
+        if (!normalizedEmail) return null;
+
         console.log('Attempting Supabase Auth login for:', normalizedEmail);
-        
-        // Try Supabase Auth first
+
         const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
           email: normalizedEmail,
           password
@@ -157,56 +160,75 @@ export const auth = {
           // Common errors:
           // - "Invalid login credentials" = wrong password or email not confirmed
           // - "Email not confirmed" = user needs to verify email
+          return null;
         }
 
-        if (!authError && authData.user) {
-          console.log('Supabase Auth succeeded, user ID:', authData.user.id);
-          
-          // Successfully authenticated with Supabase Auth
-          // Now find the associated patient
-          const { data: patientAuth, error: paError } = await supabase
-            .from('patient_auth')
-            .select('patient_id')
-            .eq('email', normalizedEmail)
-            .single();
+        if (!authData.user) return null;
 
-          console.log('patient_auth lookup:', { found: !!patientAuth, error: paError?.message });
+        console.log('Supabase Auth succeeded, user ID:', authData.user.id);
 
-          if (patientAuth?.patient_id) {
-            const { data: patient, error: pError } = await supabase
-              .from('patients')
-              .select('*')
-              .eq('id', patientAuth.patient_id)
-              .single();
+        const { data: patientAuth, error: paError } = await supabase
+          .from('patient_auth')
+          .select('patient_id')
+          .eq('email', normalizedEmail)
+          .single();
 
-            console.log('patients lookup:', { found: !!patient, error: pError?.message });
+        console.log('patient_auth lookup:', { found: !!patientAuth, error: paError?.message });
 
-            if (patient) {
-              const session: AuthSession = {
-                userId: patient.id,
-                username: patient.name,
-                role: 'patient',
-                location_id: patient.location_id || null,
-                loginTime: Date.now(),
-                patientId: patient.id,
-                supabaseUserId: authData.user.id
-              };
-              
-              this.setSession(session);
-              return session;
-            }
-          } else {
-            // Supabase Auth worked but no patient_auth record exists
-            // This means registration didn't complete properly
-            console.error('Supabase Auth succeeded but no patient_auth record found for:', normalizedEmail);
-            throw new Error('Account setup incomplete. Please contact support or try registering again.');
-          }
+        if (!patientAuth?.patient_id) {
+          console.error('Supabase Auth succeeded but no patient_auth record found for:', normalizedEmail);
+          throw new Error('Account setup incomplete. Please contact support or try registering again.');
+        }
+
+        const { data: patient, error: pError } = await supabase
+          .from('patients')
+          .select('*')
+          .eq('id', patientAuth.patient_id)
+          .single();
+
+        console.log('patients lookup:', { found: !!patient, error: pError?.message });
+
+        if (!patient) return null;
+
+        const session: AuthSession = {
+          userId: patient.id,
+          username: patient.name,
+          role: 'patient',
+          location_id: patient.location_id || null,
+          loginTime: Date.now(),
+          patientId: patient.id,
+          supabaseUserId: authData.user.id
+        };
+
+        this.setSession(session);
+        return session;
+      };
+
+      // 1) Supabase Auth: email login OR map phone/username -> email and login
+      const isEmail = normalizedIdentifier.includes('@');
+      if (isEmail) {
+        const session = await trySupabaseLogin(normalizedIdentifier);
+        if (session) return session;
+      } else {
+        const { data: identifierAuth, error: identifierAuthError } = await supabase
+          .from('patient_auth')
+          .select('email')
+          .or(`phone.eq.\"${safeIdentifier}\",username.eq.\"${safeNormalized}\"`)
+          .maybeSingle();
+
+        if (identifierAuthError) {
+          console.warn('Patient auth lookup error (phone/username):', identifierAuthError.message);
+        }
+
+        if (identifierAuth?.email) {
+          const session = await trySupabaseLogin(identifierAuth.email);
+          if (session) return session;
         }
       }
 
       // Fallback to legacy authentication (email/phone/username/name + password against patient_auth table)
       console.log('Falling back to legacy authentication for:', identifier);
-      const patient = await api.patients.authenticate(identifier, password);
+      const patient = await api.patients.authenticate(trimmedIdentifier, password);
       if (!patient) {
         throw new Error('Invalid credentials. Please check your email, phone, or username and password.');
       }
