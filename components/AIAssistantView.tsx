@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Bot, Send, Loader2, Sparkles, AlertCircle, User, Copy, Check, Plus, Trash2, MessageCircle, Zap, ShieldQuestion, Mic, HelpCircle, X } from 'lucide-react';
+import { Bot, Send, Loader2, Sparkles, AlertCircle, User, Copy, Check, Plus, Trash2, MessageCircle, Zap, ShieldQuestion, Mic, HelpCircle, X, Brain } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Patient, ClinicalRecord, Appointment, Doctor, TreatmentType, User as UserType, Medicine, Expense, Recall } from '../types';
@@ -544,6 +544,32 @@ How can I assist you today?
     saveAssistantMemory(assistantMemory);
     setMemoryMarkdown(buildMemoryMarkdown(assistantMemory));
   }, [assistantMemory]);
+
+  const applyMemoryCommand = (
+    profile: AssistantMemoryProfile,
+    command: ReturnType<typeof parseMemoryCommand>
+  ): { profile: AssistantMemoryProfile; response: string } => {
+    switch (command.type) {
+      case 'remember': {
+        const updated = rememberFact(profile, command.content);
+        return { profile: updated, response: `✅ Got it. I’ll remember: "${command.content}".` };
+      }
+      case 'prefer': {
+        const updated = rememberPreference(profile, command.content);
+        return { profile: updated, response: `✅ Preference saved: "${command.content}".` };
+      }
+      case 'forget': {
+        const updated = forgetMemoryItem(profile, command.content);
+        return { profile: updated, response: `✅ I’ve forgotten anything related to: "${command.content}".` };
+      }
+      case 'clear': {
+        const updated = clearAssistantMemory();
+        return { profile: updated, response: `✅ Memory cleared.` };
+      }
+      default:
+        return { profile, response: '' };
+    }
+  };
 
   // Enhanced context summary generator for better continuity
   const generateContextSummary = (userMessage: string, assistantResponse: string): string => {
@@ -2605,6 +2631,35 @@ Thank you for using Loli! 🦷✨`,
     setIsLoading(true);
 
     try {
+      // Update memory from this user message
+      const memoryCommand = parseMemoryCommand(userMessage.content);
+      const updatedProfile = updateMemoryFromUserMessage(assistantMemory, userMessage.content);
+      const memoryResult = applyMemoryCommand(updatedProfile, memoryCommand);
+      setAssistantMemory(memoryResult.profile);
+
+      // Handle explicit memory commands locally (no AI call)
+      if (memoryCommand.type !== 'none') {
+        const assistantMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: memoryResult.response || '✅ Memory updated.',
+          timestamp: new Date()
+        };
+
+        const finalMessages = [...updatedMessages, assistantMessage];
+        setMessages(finalMessages);
+        saveSession(finalMessages);
+
+        // Increment usage count
+        const newCount = dailyUsageCount + 1;
+        setDailyUsageCount(newCount);
+        const today = new Date().toDateString();
+        localStorage.setItem('loli_usage', JSON.stringify({ date: today, count: newCount }));
+
+        setIsLoading(false);
+        return;
+      }
+
       const aiResponse = await callAICompletionAPI(userMessage.content, messages);
           
       // Parse for multiple action JSON blocks with improved validation
@@ -3752,6 +3807,16 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
           </button>
 
           <button
+            onClick={() => setShowMemoryPanel(true)}
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white rounded-xl font-medium transition-all duration-300 text-sm shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:translate-y-0 w-full sm:w-auto"
+            title="View assistant memory"
+          >
+            <Brain className="w-4 h-4" />
+            <span className="hidden sm:inline">Memory</span>
+            <span className="sm:hidden">Memory</span>
+          </button>
+
+          <button
             onClick={createNewSession}
             className="flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl font-medium transition-all duration-300 text-sm shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:translate-y-0 w-full sm:w-auto"
             title="Start new conversation"
@@ -4103,6 +4168,44 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
               >
                 Close
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Memory Panel */}
+      {showMemoryPanel && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
+                <Brain className="w-7 h-7 text-indigo-600" />
+                Assistant Memory
+              </h2>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setAssistantMemory(clearAssistantMemory())}
+                  className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
+                  title="Clear memory"
+                >
+                  Clear
+                </button>
+                <button
+                  onClick={() => setShowMemoryPanel(false)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  title="Close memory panel"
+                >
+                  <X className="w-6 h-6 text-gray-500" />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="prose max-w-none">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {memoryMarkdown}
+                </ReactMarkdown>
+              </div>
             </div>
           </div>
         </div>
