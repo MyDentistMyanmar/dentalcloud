@@ -3010,10 +3010,16 @@ I can provide guidance on:
       timestamp: new Date()
     };
 
-    const updatedMessages = [...messages, userMessage];
-    setMessages(updatedMessages);
-    setInputMessage('');
-    setIsLoading(true);
+      const updatedMessages = [...messages, userMessage];
+      setMessages(updatedMessages);
+      setInputMessage('');
+      setIsLoading(true);
+      const lowerUserContent = userMessage.content.toLowerCase();
+      const actionIntentDetected = [
+        'create', 'book', 'schedule', 'add', 'delete', 'remove', 'update', 'modify',
+        'change', 'edit', 'new', 'make', 'email', 'send', 'notify', 'message',
+        'status', 'complete', 'cancel', 'reschedule', 'move', 'follow-up', 'follow up'
+      ].some(keyword => lowerUserContent.includes(keyword));
 
     try {
       // Update memory from this user message (LLM-assisted routing)
@@ -4167,6 +4173,8 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
       }
 
       const actionResultText = actionResults.join('\n\n---\n\n');
+      const hasSuccessfulAction = actionResults.some(result => result.includes('✅'));
+      const hasActionAttempt = allActionMatches.length > 0;
       // Clean the AI response to remove internal processing artifacts
       let cleanedAiResponse = cleanAIResponse(aiResponse);
       // Remove all JSON blocks from the AI response to clean it up
@@ -4174,10 +4182,18 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
         cleanedAiResponse = cleanedAiResponse.replace(match, '');
       });
       
+      const assistantContent = actionIntentDetected && !hasActionAttempt
+        ? `⚠️ I did not execute any real system action for that request, so no appointment or database record was created.\n\nPlease try again in Agent Mode, and I will only confirm completion after the system action succeeds.`
+        : actionIntentDetected && hasActionAttempt && !hasSuccessfulAction
+          ? `${cleanedAiResponse.trim()}\n\n${actionResultText || '⚠️ I could not complete the requested system action.'}`.trim()
+          : actionResultText
+            ? `${cleanedAiResponse.trim()}\n\n${actionResultText}`.trim()
+            : cleanedAiResponse.trim() || aiResponse;
+
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: actionResultText ? `${cleanedAiResponse.trim()}\n\n${actionResultText}` : aiResponse,
+        content: assistantContent,
         timestamp: new Date()
       };
 
