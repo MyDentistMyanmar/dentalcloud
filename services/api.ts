@@ -1,6 +1,6 @@
 import { supabase, supabaseUrl, supabaseAnonKey } from './supabase';
 import * as tus from 'tus-js-client';
-import { Patient, Appointment, ClinicalRecord, TreatmentType, PatientFile, Doctor, DoctorSchedule, User, Medicine, MedicineSale, Location, LoyaltyRule, LoyaltyTransaction, Expense, Message, Conversation, Recall } from '../types';
+import { Patient, Appointment, ClinicalRecord, TreatmentType, PatientFile, Doctor, DoctorSchedule, User, Medicine, MedicineSale, Location, LoyaltyRule, LoyaltyTransaction, Expense, Message, Conversation, Recall, ScheduledTask } from '../types';
 
 // Utility: map DB snake_case fields to app camelCase
 const mapPatient = (row: any): Patient => ({
@@ -2710,6 +2710,125 @@ export const api = {
         throw new Error(data.error);
       }
       return data || {};
+    }
+  },
+  scheduledTasks: {
+    getAll: async (locationId?: string, adminId?: string): Promise<ScheduledTask[]> => {
+      try {
+        let query = supabase
+          .from('scheduled_tasks')
+          .select('*')
+          .order('run_at', { ascending: true });
+
+        if (locationId) {
+          query = query.eq('location_id', locationId);
+        }
+        if (adminId) {
+          query = query.eq('admin_id', adminId);
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+        return data || [];
+      } catch (err) {
+        console.warn('Error fetching scheduled tasks:', err);
+        return [];
+      }
+    },
+    getDue: async (beforeIso: string, locationId?: string): Promise<ScheduledTask[]> => {
+      try {
+        let query = supabase
+          .from('scheduled_tasks')
+          .select('*')
+          .eq('status', 'PENDING')
+          .lte('run_at', beforeIso)
+          .order('run_at', { ascending: true });
+
+        if (locationId) {
+          query = query.eq('location_id', locationId);
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+        return data || [];
+      } catch (err) {
+        console.warn('Error fetching due scheduled tasks:', err);
+        return [];
+      }
+    },
+    create: async (data: Partial<ScheduledTask>): Promise<ScheduledTask> => {
+      const payload = {
+        location_id: data.location_id,
+        admin_id: data.admin_id || null,
+        task_type: data.task_type,
+        status: data.status || 'PENDING',
+        run_at: data.run_at,
+        payload: data.payload || {},
+        last_error: data.last_error || null,
+        sent_at: data.sent_at || null
+      };
+
+      const { data: result, error } = await supabase
+        .from('scheduled_tasks')
+        .insert(payload)
+        .select()
+        .single();
+
+      if (error) throw new Error(error.message);
+      return result;
+    },
+    update: async (id: string, data: Partial<ScheduledTask>): Promise<ScheduledTask> => {
+      const { data: result, error } = await supabase
+        .from('scheduled_tasks')
+        .update(data)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw new Error(error.message);
+      return result;
+    },
+    markProcessing: async (id: string): Promise<void> => {
+      const { error } = await supabase
+        .from('scheduled_tasks')
+        .update({ status: 'PROCESSING', updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .eq('status', 'PENDING');
+
+      if (error) throw new Error(error.message);
+    },
+    markCompleted: async (id: string): Promise<void> => {
+      const { error } = await supabase
+        .from('scheduled_tasks')
+        .update({
+          status: 'COMPLETED',
+          sent_at: new Date().toISOString(),
+          last_error: null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id);
+
+      if (error) throw new Error(error.message);
+    },
+    markFailed: async (id: string, message: string): Promise<void> => {
+      const { error } = await supabase
+        .from('scheduled_tasks')
+        .update({
+          status: 'FAILED',
+          last_error: message,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id);
+
+      if (error) throw new Error(error.message);
+    },
+    cancel: async (id: string): Promise<void> => {
+      const { error } = await supabase
+        .from('scheduled_tasks')
+        .update({ status: 'CANCELLED', updated_at: new Date().toISOString() })
+        .eq('id', id);
+
+      if (error) throw new Error(error.message);
     }
   },
   assistantMemory: {

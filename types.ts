@@ -225,3 +225,17 @@ export interface Recall {
   created_at?: string;
   updated_at?: string;
 }
+
+export interface ScheduledTask {
+  id: string;
+  location_id: string;
+  admin_id?: string | null;
+  task_type: 'EMAIL' | 'DAILY_REPORT_EMAIL';
+  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+  run_at: string;
+  payload: Record<string, any>;
+  last_error?: string | null;
+  sent_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}

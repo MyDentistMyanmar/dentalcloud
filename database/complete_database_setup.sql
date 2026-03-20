@@ -20,6 +20,7 @@ DROP TABLE IF EXISTS messages CASCADE;
 DROP TABLE IF EXISTS conversations CASCADE;
 DROP TABLE IF EXISTS medicine_sales CASCADE;
 DROP TABLE IF EXISTS medicines CASCADE;
+DROP TABLE IF EXISTS scheduled_tasks CASCADE;
 DROP TABLE IF EXISTS assistant_memory CASCADE;
 DROP TABLE IF EXISTS otp_codes CASCADE;
 DROP TABLE IF EXISTS patient_auth CASCADE;
@@ -255,6 +256,21 @@ CREATE TABLE assistant_memory (
   UNIQUE(admin_id)
 );
 
+-- Scheduled Tasks
+CREATE TABLE scheduled_tasks (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  location_id UUID REFERENCES locations(id),
+  admin_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  task_type VARCHAR(40) NOT NULL CHECK (task_type IN ('EMAIL', 'DAILY_REPORT_EMAIL')),
+  status VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', 'CANCELLED')),
+  run_at TIMESTAMP WITH TIME ZONE NOT NULL,
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  last_error TEXT,
+  sent_at TIMESTAMP WITH TIME ZONE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- ============================================================================
 -- 4. INDEXES FOR PERFORMANCE
 -- ============================================================================
@@ -301,6 +317,8 @@ CREATE INDEX idx_messages_timestamp ON messages(timestamp);
 CREATE INDEX idx_messages_recipient ON messages(recipient_id, recipient_type, read);
 CREATE INDEX idx_assistant_memory_admin ON assistant_memory(admin_id);
 CREATE INDEX idx_assistant_memory_location ON assistant_memory(location_id);
+CREATE INDEX idx_scheduled_tasks_location ON scheduled_tasks(location_id);
+CREATE INDEX idx_scheduled_tasks_status_run_at ON scheduled_tasks(status, run_at);
 
 -- ============================================================================
 -- 5. FUNCTIONS AND TRIGGERS
@@ -343,6 +361,11 @@ CREATE TRIGGER update_conversations_updated_at
 -- Trigger: Update assistant_memory.updated_at
 CREATE TRIGGER update_assistant_memory_updated_at
     BEFORE UPDATE ON assistant_memory
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Trigger: Update scheduled_tasks.updated_at
+CREATE TRIGGER update_scheduled_tasks_updated_at
+    BEFORE UPDATE ON scheduled_tasks
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Function: Update conversation timestamp when new message is added

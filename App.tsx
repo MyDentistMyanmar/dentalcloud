@@ -43,11 +43,13 @@ import {
   LoyaltyRule, 
   LoyaltyTransaction,
   Expense,
-  Recall
+  Recall,
+  ScheduledTask
 } from './types';
 import { TREATMENT_CATEGORIES } from './constants';
 import { api } from './services/api';
 import { formatCurrency, getCurrencySymbol, Currency } from './utils/currency';
+import { buildFinancialReport, renderFinancialReportMarkdown } from './utils/aiReport';
 import { auth } from './services/auth';
 import { supabase } from './services/supabase';
 
@@ -71,6 +73,8 @@ const AIAssistantView = React.lazy(() => import('./components/AIAssistantView'))
 const MessagingView = React.lazy(() => import('./components/MessagingView'));
 const PatientMessagingView = React.lazy(() => import('./components/PatientMessagingView'));
 const RecallsView = React.lazy(() => import('./components/RecallsView'));
+
+const EMAIL_SETTINGS_KEY = 'dc_email_settings';
 
 type ViewState = 'dashboard' | 'patients' | 'appointments' | 'doctors' | 'finance' | 'treatments' | 'records' | 'settings' | 'users' | 'inventory' | 'ai-assistant' | 'messaging' | 'recalls';
 
@@ -115,6 +119,7 @@ const App: React.FC = () => {
   const [loyaltyTransactions, setLoyaltyTransactions] = useState<LoyaltyTransaction[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [recalls, setRecalls] = useState<Recall[]>([]);
+  const scheduledTaskProcessorRef = React.useRef<boolean>(false);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -407,6 +412,89 @@ const App: React.FC = () => {
     }
   };
 
+  const loadEmailSettings = () => {
+    const fallback = {
+      enabled: false,
+      senderName: 'DentalCloud',
+      senderEmail: ''
+    };
+
+    try {
+      const raw = localStorage.getItem(EMAIL_SETTINGS_KEY);
+      if (!raw) return fallback;
+      const parsed = JSON.parse(raw);
+      return {
+        enabled: parsed?.enabled ?? fallback.enabled,
+        senderName: parsed?.senderName ?? fallback.senderName,
+        senderEmail: parsed?.senderEmail ?? fallback.senderEmail
+      };
+    } catch (error) {
+      return fallback;
+    }
+  };
+
+  const buildDailyReportEmailBody = async (task: ScheduledTask) => {
+    const locationId = task.location_id || currentLocationId || undefined;
+    const [reportTreatments, reportExpenses, reportMedicines] = await Promise.all([
+      api.treatments.getAllRecords(locationId),
+      api.expenses.getAll(locationId),
+      api.medicines.getAll(locationId)
+    ]);
+
+    const taskCurrency = (task.payload?.currency === 'MMK' || task.payload?.currency === 'USD')
+      ? task.payload.currency
+      : currency;
+
+    const report = buildFinancialReport(reportTreatments, reportExpenses, reportMedicines, taskCurrency);
+    const reportMarkdown = renderFinancialReportMarkdown(report, taskCurrency);
+    const clinicLabel = locations.find(loc => loc.id === locationId)?.name || 'Dental Clinic';
+
+    return `Daily clinic report for ${clinicLabel}\n\n${reportMarkdown}`;
+  };
+
+  const processScheduledTask = async (task: ScheduledTask) => {
+    const payload = task.payload || {};
+    const to = payload.to;
+    const subject = payload.subject || (task.task_type === 'DAILY_REPORT_EMAIL' ? 'Daily Clinic Report' : 'Scheduled Email');
+    const body = task.task_type === 'DAILY_REPORT_EMAIL'
+      ? await buildDailyReportEmailBody(task)
+      : (payload.body || '');
+
+    if (!to) {
+      throw new Error('Scheduled task is missing recipient email.');
+    }
+
+    await api.email.sendManagerEmail({
+      to,
+      subject,
+      body,
+      fromName: payload.fromName,
+      fromEmail: payload.fromEmail,
+      replyTo: payload.replyTo
+    });
+  };
+
+  const processDueScheduledTasks = async () => {
+    if (!isAuthenticated || !currentLocationId || scheduledTaskProcessorRef.current) return;
+
+    scheduledTaskProcessorRef.current = true;
+    try {
+      const dueTasks = await api.scheduledTasks.getDue(new Date().toISOString(), currentLocationId);
+      for (const task of dueTasks) {
+        try {
+          await api.scheduledTasks.markProcessing(task.id);
+          await processScheduledTask(task);
+          await api.scheduledTasks.markCompleted(task.id);
+        } catch (error: any) {
+          console.error('Scheduled task processing failed:', error);
+          await api.scheduledTasks.markFailed(task.id, error?.message || 'Failed to process scheduled task.');
+        }
+      }
+    } finally {
+      scheduledTaskProcessorRef.current = false;
+    }
+  };
+
   useEffect(() => {
     if (currentView === 'users' && isAdmin) {
       fetchUsers();
@@ -415,6 +503,17 @@ const App: React.FC = () => {
       fetchMedicines();
     }
   }, [currentView, isAdmin]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !currentLocationId) return;
+
+    void processDueScheduledTasks();
+    const interval = window.setInterval(() => {
+      void processDueScheduledTasks();
+    }, 30000);
+
+    return () => window.clearInterval(interval);
+  }, [isAuthenticated, currentLocationId, currency, locations]);
 
   const fetchMedicines = async () => {
     try {

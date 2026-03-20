@@ -1783,6 +1783,8 @@ MANAGER EMAIL:
 - mgr_email_list(): List saved manager emails.
 - mgr_email_remove(query): Remove by email, name, or role.
 - mgr_email_send(to, subject, body): Email the manager. "to" can be email, name, or role; if omitted, uses primary or only saved manager.
+- email_schedule(to, subject, body, run_at): Schedule an email for later. run_at must be ISO datetime.
+- report_schedule(to, run_at, subject): Schedule an end-of-day profit report email.
 
 LOYALTY SYSTEM:
 - loyalty_rules_get(): Get all loyalty rules.
@@ -2856,6 +2858,60 @@ I can provide guidance on:
               };
             }
             break;
+          case 'email_schedule':
+            {
+              const recipient = resolveManagerRecipient(pendingAction.params);
+              const emailSettings = loadEmailSettings();
+              if (!emailSettings.enabled) {
+                throw new Error("Email delivery is disabled. Enable it in Settings first.");
+              }
+              if (!emailSettings.senderEmail) {
+                throw new Error("Sender email is required. Please set it in Settings first.");
+              }
+              result = await api.scheduledTasks.create({
+                location_id: locationId,
+                admin_id: currentAdminId || null,
+                task_type: 'EMAIL',
+                status: 'PENDING',
+                run_at: pendingAction.params.run_at || pendingAction.params.scheduled_at,
+                payload: {
+                  to: recipient.email,
+                  subject: pendingAction.params.subject || pendingAction.params.sub || '',
+                  body: pendingAction.params.body || pendingAction.params.message || pendingAction.params.text || '',
+                  fromName: emailSettings.senderName || undefined,
+                  fromEmail: emailSettings.senderEmail
+                }
+              });
+              result.recipientLabel = recipient.label;
+            }
+            break;
+          case 'report_schedule':
+            {
+              const recipient = resolveManagerRecipient(pendingAction.params);
+              const emailSettings = loadEmailSettings();
+              if (!emailSettings.enabled) {
+                throw new Error("Email delivery is disabled. Enable it in Settings first.");
+              }
+              if (!emailSettings.senderEmail) {
+                throw new Error("Sender email is required. Please set it in Settings first.");
+              }
+              result = await api.scheduledTasks.create({
+                location_id: locationId,
+                admin_id: currentAdminId || null,
+                task_type: 'DAILY_REPORT_EMAIL',
+                status: 'PENDING',
+                run_at: pendingAction.params.run_at || pendingAction.params.scheduled_at,
+                payload: {
+                  to: recipient.email,
+                  subject: pendingAction.params.subject || 'Daily Clinic Report',
+                  fromName: emailSettings.senderName || undefined,
+                  fromEmail: emailSettings.senderEmail,
+                  currency
+                }
+              });
+              result.recipientLabel = recipient.label;
+            }
+            break;
           case 'recall_create':
             {
               const patient = resolvePatient(pendingAction.params.patient_name || pendingAction.params.name || pendingAction.params.n);
@@ -2931,6 +2987,12 @@ I can provide guidance on:
             break;
           case 'mgr_email_send':
             successMessage = `✅ Email sent to ${result.recipientLabel || result.recipientEmail}.${result.messageId ? ` Message ID: ${result.messageId}.` : ''}`;
+            break;
+          case 'email_schedule':
+            successMessage = `✅ Email scheduled for ${result.recipientLabel || 'recipient'} at ${new Date(result.run_at).toLocaleString()}.`;
+            break;
+          case 'report_schedule':
+            successMessage = `✅ Daily report email scheduled for ${result.recipientLabel || 'recipient'} at ${new Date(result.run_at).toLocaleString()}.`;
             break;
           case 'recall_create':
             successMessage = `✅ Recall created for ${result.patient_name || 'the patient'} on ${result.due_date}.`;
@@ -3128,7 +3190,8 @@ I can provide guidance on:
             'm_c', 'm_u', 'm_restock', 'tr_create', 'tr_undo', 'fin_pay', 'apt_reschedule', 
             'apt_status', 'bulk_appointments', 'exp_c', 'exp_u', 'exp_d', 'msg_reply',
             'mgr_email_add', 'mgr_email_list', 'mgr_email_remove', 'mgr_email_send',
-            'recall_create', 'recall_status', 'recall_delete', 'patient_followup'
+            'recall_create', 'recall_status', 'recall_delete', 'patient_followup',
+            'email_schedule', 'report_schedule'
           ];
           
           if (crudActions.includes(action) && mode !== 'agent') {
@@ -3541,6 +3604,70 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
               } catch (err: any) {
                 console.error('Manager email prepare error:', err);
                 currentActionResult = `❌ Failed to prepare manager email: ${err.message}`;
+              }
+              break;
+            case 'email_schedule':
+              try {
+                const recipient = resolveManagerRecipient(params);
+                const emailSettings = loadEmailSettings();
+                if (!emailSettings.enabled) {
+                  throw new Error("Email delivery is disabled. Enable it in Settings first.");
+                }
+                if (!emailSettings.senderEmail) {
+                  throw new Error("Sender email is required. Please set it in Settings first.");
+                }
+                const runAt = params.run_at || params.scheduled_at;
+                if (!runAt) throw new Error("run_at is required for scheduled email.");
+
+                result = await api.scheduledTasks.create({
+                  location_id: locationId,
+                  admin_id: currentAdminId || null,
+                  task_type: 'EMAIL',
+                  status: 'PENDING',
+                  run_at: runAt,
+                  payload: {
+                    to: recipient.email,
+                    subject: params.subject || params.sub || '',
+                    body: params.body || params.message || params.text || '',
+                    fromName: emailSettings.senderName || undefined,
+                    fromEmail: emailSettings.senderEmail
+                  }
+                });
+                currentActionResult = `✅ Email scheduled for ${recipient.label} at ${new Date(result.run_at).toLocaleString()}.`;
+              } catch (err: any) {
+                currentActionResult = `❌ Failed to schedule email: ${err.message}`;
+              }
+              break;
+            case 'report_schedule':
+              try {
+                const recipient = resolveManagerRecipient(params);
+                const emailSettings = loadEmailSettings();
+                if (!emailSettings.enabled) {
+                  throw new Error("Email delivery is disabled. Enable it in Settings first.");
+                }
+                if (!emailSettings.senderEmail) {
+                  throw new Error("Sender email is required. Please set it in Settings first.");
+                }
+                const runAt = params.run_at || params.scheduled_at;
+                if (!runAt) throw new Error("run_at is required for scheduled report email.");
+
+                result = await api.scheduledTasks.create({
+                  location_id: locationId,
+                  admin_id: currentAdminId || null,
+                  task_type: 'DAILY_REPORT_EMAIL',
+                  status: 'PENDING',
+                  run_at: runAt,
+                  payload: {
+                    to: recipient.email,
+                    subject: params.subject || 'Daily Clinic Report',
+                    fromName: emailSettings.senderName || undefined,
+                    fromEmail: emailSettings.senderEmail,
+                    currency
+                  }
+                });
+                currentActionResult = `✅ Daily report email scheduled for ${recipient.label} at ${new Date(result.run_at).toLocaleString()}.`;
+              } catch (err: any) {
+                currentActionResult = `❌ Failed to schedule report email: ${err.message}`;
               }
               break;
 
