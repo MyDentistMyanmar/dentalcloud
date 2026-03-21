@@ -1,8 +1,8 @@
 import React, { useMemo } from 'react';
-import { DollarSign, Activity, Users, Calendar as CalendarIcon, PieChart as PieIcon } from 'lucide-react';
+import { DollarSign, Activity, Users, Calendar as CalendarIcon, PieChart as PieIcon, MapPin } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, Legend, PieChart, Pie, Cell } from 'recharts';
 import { StatsCard } from './Shared';
-import { Patient, Appointment, ClinicalRecord } from '../types';
+import { Patient, Appointment, ClinicalRecord, Location } from '../types';
 import { formatCurrency, Currency } from '../utils/currency';
 
 interface DashboardViewProps {
@@ -10,9 +10,31 @@ interface DashboardViewProps {
   appointments: Appointment[];
   treatmentRecords: ClinicalRecord[];
   currency: Currency;
+  locations: Location[];
+  selectedLocationId: string;
+  allBranchesValue: string;
+  canViewAllBranches: boolean;
+  onLocationChange: (locationId: string) => void;
+  loading?: boolean;
 }
 
-const DashboardView: React.FC<DashboardViewProps> = ({ patients, appointments, treatmentRecords, currency }) => {
+const DashboardView: React.FC<DashboardViewProps> = ({
+  patients,
+  appointments,
+  treatmentRecords,
+  currency,
+  locations,
+  selectedLocationId,
+  allBranchesValue,
+  canViewAllBranches,
+  onLocationChange,
+  loading = false
+}) => {
+  const selectedLocationName = useMemo(() => {
+    if (selectedLocationId === allBranchesValue) return 'All Branches';
+    return locations.find(location => location.id === selectedLocationId)?.name || 'Current Branch';
+  }, [allBranchesValue, locations, selectedLocationId]);
+
   // Calculate Daily Revenue (today's treatments)
   const dailyRevenue = useMemo(() => {
     const today = new Date().toISOString().split('T')[0];
@@ -233,6 +255,47 @@ const DashboardView: React.FC<DashboardViewProps> = ({ patients, appointments, t
 
   return (
     <div className="space-y-6 animate-fade-in">
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-gray-400 mb-2">Dashboard Reporting</p>
+            <h2 className="text-2xl font-bold text-gray-900">Branch Performance Overview</h2>
+            <p className="text-sm text-gray-500 mt-1">
+              Viewing metrics for <span className="font-semibold text-gray-700">{selectedLocationName}</span>.
+            </p>
+          </div>
+
+          <div className="w-full md:w-72">
+            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-2">
+              <span className="inline-flex items-center gap-2">
+                <MapPin className="w-3.5 h-3.5" />
+                Report Scope
+              </span>
+            </label>
+            {canViewAllBranches ? (
+              <select
+                value={selectedLocationId}
+                onChange={(e) => onLocationChange(e.target.value)}
+                disabled={loading}
+                className="w-full bg-white text-gray-800 text-sm border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              >
+                <option value={allBranchesValue}>All Branches</option>
+                {locations.map(location => (
+                  <option key={location.id} value={location.id}>
+                    {location.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm font-medium text-gray-700">
+                {selectedLocationName}
+              </div>
+            )}
+            {loading && <p className="mt-2 text-xs text-indigo-600">Refreshing dashboard data...</p>}
+          </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <StatsCard title="Daily Revenue" value={formatCurrency(dailyRevenue, currency)} icon={<DollarSign className="text-green-600" />} trend={dailyTrend} />
         <StatsCard title="Monthly Revenue" value={formatCurrency(monthlyRevenue, currency)} icon={<Activity className="text-blue-600" />} trend={monthlyTrend} />

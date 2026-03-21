@@ -75,6 +75,7 @@ const PatientMessagingView = React.lazy(() => import('./components/PatientMessag
 const RecallsView = React.lazy(() => import('./components/RecallsView'));
 
 const EMAIL_SETTINGS_KEY = 'dc_email_settings';
+const ALL_BRANCHES_VALUE = '__all_branches__';
 
 type ViewState = 'dashboard' | 'patients' | 'appointments' | 'doctors' | 'finance' | 'treatments' | 'records' | 'settings' | 'users' | 'inventory' | 'ai-assistant' | 'messaging' | 'recalls';
 
@@ -110,6 +111,12 @@ const App: React.FC = () => {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [treatmentHistory, setTreatmentHistory] = useState<ClinicalRecord[]>([]); 
   const [globalRecords, setGlobalRecords] = useState<ClinicalRecord[]>([]); 
+  const [dashboardPatients, setDashboardPatients] = useState<Patient[]>([]);
+  const [dashboardAppointments, setDashboardAppointments] = useState<Appointment[]>([]);
+  const [dashboardRecords, setDashboardRecords] = useState<ClinicalRecord[]>([]);
+  const [dashboardLocationId, setDashboardLocationId] = useState<string>(() => {
+    return localStorage.getItem('dashboardLocationId') || ALL_BRANCHES_VALUE;
+  });
   const [treatmentTypes, setTreatmentTypes] = useState<TreatmentType[]>([]);
   const [patientFiles, setPatientFiles] = useState<PatientFile[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -124,6 +131,7 @@ const App: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const dashboardFetchRequestRef = React.useRef(0);
   
   // -- Selection State --
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
@@ -250,6 +258,10 @@ const App: React.FC = () => {
       setIsAuthenticated(true);
       setIsAdmin(session.role === 'admin');
       setCurrentUser(session.username);
+
+      const initialDashboardScope = session.location_id || ALL_BRANCHES_VALUE;
+      setDashboardLocationId(initialDashboardScope);
+      localStorage.setItem('dashboardLocationId', initialDashboardScope);
       
       // If user is restricted to a location, set it
       if (session.location_id) {
@@ -285,6 +297,11 @@ const App: React.FC = () => {
     setLoyaltyTransactions([]);
     setExpenses([]);
     setRecalls([]);
+    setDashboardPatients([]);
+    setDashboardAppointments([]);
+    setDashboardRecords([]);
+    setDashboardLocationId(ALL_BRANCHES_VALUE);
+    localStorage.removeItem('dashboardLocationId');
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -325,6 +342,33 @@ const App: React.FC = () => {
     }
   };
 
+  const fetchDashboardData = async (scopeLocationId?: string, knownLocations?: Location[]) => {
+    const requestId = ++dashboardFetchRequestRef.current;
+    const session = auth.getSession();
+    const restrictedLocationId = session?.location_id || '';
+    const availableLocations = knownLocations || locations;
+    const requestedScope = restrictedLocationId || scopeLocationId || dashboardLocationId || ALL_BRANCHES_VALUE;
+    const hasMatchingLocation = requestedScope === ALL_BRANCHES_VALUE || availableLocations.some(loc => loc.id === requestedScope);
+    const sanitizedScope = restrictedLocationId || (hasMatchingLocation ? requestedScope : ALL_BRANCHES_VALUE);
+    const queryLocationId = sanitizedScope === ALL_BRANCHES_VALUE ? undefined : sanitizedScope;
+
+    const [patData, aptData, recordsData] = await Promise.all([
+      api.patients.getAll(queryLocationId),
+      api.appointments.getAll(queryLocationId),
+      api.treatments.getAllRecords(queryLocationId)
+    ]);
+
+    if (requestId !== dashboardFetchRequestRef.current) {
+      return;
+    }
+
+    setDashboardPatients(patData);
+    setDashboardAppointments(aptData);
+    setDashboardRecords(recordsData);
+    setDashboardLocationId(sanitizedScope);
+    localStorage.setItem('dashboardLocationId', sanitizedScope);
+  };
+
   const fetchInitialData = async (overrideLocationId?: string) => {
     try {
       setLoading(true);
@@ -342,9 +386,16 @@ const App: React.FC = () => {
       
       const locData = await api.locations.getAll();
       setLocations(locData);
+      const session = auth.getSession();
+      const restrictedLocationId = session?.location_id || '';
+
+      if (restrictedLocationId && currentLocationId !== restrictedLocationId) {
+        setCurrentLocationId(restrictedLocationId);
+        localStorage.setItem('currentLocationId', restrictedLocationId);
+      }
       
       // If no location selected but locations exist, select first one
-      let locId = overrideLocationId || currentLocationId;
+      let locId = restrictedLocationId || overrideLocationId || currentLocationId;
       if (!locId && locData.length > 0) {
         locId = locData[0].id;
         setCurrentLocationId(locId);
@@ -391,6 +442,8 @@ const App: React.FC = () => {
         setExpenses(expenseData);
         setRecalls(recallData);
       }
+
+      await fetchDashboardData(undefined, locData);
     } catch (err: any) {
       console.error('Error fetching initial data:', err);
       setError(err.message || "Failed to connect to database. Please check your network.");
@@ -403,6 +456,24 @@ const App: React.FC = () => {
     setCurrentLocationId(locId);
     localStorage.setItem('currentLocationId', locId);
     fetchInitialData(locId);
+  };
+
+  const handleDashboardLocationChange = async (locId: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+      setDashboardLocationId(locId);
+      localStorage.setItem('dashboardLocationId', locId);
+      setDashboardPatients([]);
+      setDashboardAppointments([]);
+      setDashboardRecords([]);
+      await fetchDashboardData(locId);
+    } catch (err: any) {
+      console.error('Error fetching dashboard data:', err);
+      setError(err.message || 'Failed to update dashboard reporting.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const refreshAssistantData = async () => {
@@ -1340,7 +1411,18 @@ const App: React.FC = () => {
       <main className="flex-1 min-w-0 p-4 md:p-10">
         <div className="max-w-6xl mx-auto">
           <Suspense fallback={<div className="flex justify-center p-20"><Loader2 className="animate-spin text-indigo-600 w-10 h-10" /></div>}>
-            {currentView === 'dashboard' && <DashboardView patients={patients} appointments={appointments} treatmentRecords={globalRecords} currency={currency} />}
+            {currentView === 'dashboard' && <DashboardView
+                patients={dashboardPatients}
+                appointments={dashboardAppointments}
+                treatmentRecords={dashboardRecords}
+                currency={currency}
+                locations={locations}
+                selectedLocationId={dashboardLocationId}
+                allBranchesValue={ALL_BRANCHES_VALUE}
+                canViewAllBranches={isAdmin && !auth.getSession()?.location_id}
+                onLocationChange={handleDashboardLocationChange}
+                loading={loading}
+              />}
             {currentView === 'patients' && <PatientsView 
                 patients={patients} 
                 loading={loading} 
