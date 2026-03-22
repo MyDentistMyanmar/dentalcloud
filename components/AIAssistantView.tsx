@@ -4756,7 +4756,8 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
             )}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="flex flex-col gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <button
                 onClick={() => setShowHelpModal(true)}
                 className="flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white rounded-xl font-medium transition-all duration-300 text-sm shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:translate-y-0 w-full"
@@ -4783,6 +4784,60 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                 <Plus className="w-4 h-4" />
                 <span>New Chat</span>
               </button>
+            </div>
+
+            <div className={`rounded-2xl border px-3 py-2 shadow-sm backdrop-blur-sm transition-all duration-300 ${modeDetails.panelClass}`}>
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-black uppercase tracking-[0.24em] text-indigo-500">Assistant Mode</p>
+                  <div className="mt-1 flex items-start gap-2">
+                    <div className={`mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-lg border ${modeDetails.badgeClass}`}>
+                      {modeDetails.icon}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[13px] font-semibold leading-4 text-gray-800">{modeDetails.title}</p>
+                      <p className="text-[10px] leading-3.5 text-gray-600">{modeDetails.description}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 rounded-2xl bg-slate-900 p-1.5 shadow-inner">
+                  <button
+                    onClick={() => setMode('ask')}
+                    className={`min-w-[124px] rounded-xl px-3.5 py-2 text-left transition-all duration-300 ${
+                      mode === 'ask'
+                        ? 'bg-gradient-to-br from-emerald-400 to-teal-500 text-white shadow-lg'
+                        : 'bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 text-[13px] font-semibold">
+                      <ShieldQuestion className="w-4 h-4" />
+                      <span>Ask</span>
+                    </div>
+                    <p className={`mt-0.5 text-[10px] leading-3.5 ${mode === 'ask' ? 'text-emerald-50/90' : 'text-slate-400'}`}>
+                      Safe answers and analysis
+                    </p>
+                  </button>
+
+                  <button
+                    onClick={() => setMode('agent')}
+                    className={`min-w-[124px] rounded-xl px-3.5 py-2 text-left transition-all duration-300 ${
+                      mode === 'agent'
+                        ? 'bg-gradient-to-br from-indigo-500 via-purple-500 to-fuchsia-500 text-white shadow-lg'
+                        : 'bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 text-[13px] font-semibold">
+                      <Zap className="w-4 h-4" />
+                      <span>Agent</span>
+                    </div>
+                    <p className={`mt-0.5 text-[10px] leading-3.5 ${mode === 'agent' ? 'text-indigo-50/90' : 'text-slate-400'}`}>
+                      Change records and run actions
+                    </p>
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
           </div>
         </div>
@@ -5079,59 +5134,6 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                 </div>
               </div>
 
-              <div className={`mt-4 rounded-2xl border px-3 py-2 shadow-sm backdrop-blur-sm transition-all duration-300 ${modeDetails.panelClass}`}>
-                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-black uppercase tracking-[0.24em] text-indigo-500">Assistant Mode</p>
-                    <div className="mt-1 flex items-start gap-2">
-                      <div className={`mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-lg border ${modeDetails.badgeClass}`}>
-                        {modeDetails.icon}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-[13px] font-semibold leading-4 text-gray-800">{modeDetails.title}</p>
-                        <p className="text-[10px] leading-3.5 text-gray-600">{modeDetails.description}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 rounded-2xl bg-slate-900 p-1.5 shadow-inner">
-                    <button
-                      onClick={() => setMode('ask')}
-                      className={`min-w-[124px] rounded-xl px-3.5 py-2 text-left transition-all duration-300 ${
-                        mode === 'ask'
-                          ? 'bg-gradient-to-br from-emerald-400 to-teal-500 text-white shadow-lg'
-                          : 'bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 text-[13px] font-semibold">
-                        <ShieldQuestion className="w-4 h-4" />
-                        <span>Ask</span>
-                      </div>
-                      <p className={`mt-0.5 text-[10px] leading-3.5 ${mode === 'ask' ? 'text-emerald-50/90' : 'text-slate-400'}`}>
-                        Safe answers and analysis
-                      </p>
-                    </button>
-
-                    <button
-                      onClick={() => setMode('agent')}
-                      className={`min-w-[124px] rounded-xl px-3.5 py-2 text-left transition-all duration-300 ${
-                        mode === 'agent'
-                          ? 'bg-gradient-to-br from-indigo-500 via-purple-500 to-fuchsia-500 text-white shadow-lg'
-                          : 'bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 text-[13px] font-semibold">
-                        <Zap className="w-4 h-4" />
-                        <span>Agent</span>
-                      </div>
-                      <p className={`mt-0.5 text-[10px] leading-3.5 ${mode === 'agent' ? 'text-indigo-50/90' : 'text-slate-400'}`}>
-                        Change records and run actions
-                      </p>
-                    </button>
-                  </div>
-                </div>
-              </div>
-              
               {/* Disclaimer and Status Messages - Positioned below input area */}
               <div className="mt-3 flex flex-col items-center gap-2">
                 {isProcessing && (
