@@ -4687,302 +4687,451 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
   const inputPlaceholder = mode === 'ask'
     ? 'Ask Loli anything about patient care, treatments, or dental procedures...'
     : 'Tell Loli what to update, schedule, record, or create in the system...';
+
+  const activeSession = chatSessions.find(session => session.id === currentSessionId) ?? null;
+  const showQuickPromptPanel = messages.length <= 1 && !isLoading;
   
   return (
-    <div className="relative bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 rounded-xl shadow-xl border border-indigo-100 overflow-hidden animate-fade-in">
-      {/* Animated background particles */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {particles.map(particle => (
+    <div className="relative overflow-hidden rounded-[28px] border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-indigo-50 shadow-[0_24px_70px_-32px_rgba(15,23,42,0.35)] animate-fade-in">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -left-16 top-0 h-48 w-48 rounded-full bg-indigo-200/35 blur-3xl" />
+        <div className="absolute right-0 top-0 h-56 w-56 rounded-full bg-cyan-100/60 blur-3xl" />
+        <div className="absolute bottom-0 left-1/3 h-40 w-40 rounded-full bg-fuchsia-100/50 blur-3xl" />
+        {particles.slice(0, 6).map(particle => (
           <div
             key={particle.id}
-            className="absolute rounded-full bg-gradient-to-r from-indigo-400/20 to-purple-400/20 animate-pulse"
+            className="absolute rounded-full bg-slate-300/30 blur-xl"
             style={{
               left: `${particle.x}%`,
               top: `${particle.y}%`,
-              width: `${particle.size}px`,
-              height: `${particle.size}px`,
-              animationDuration: `${Math.random() * 3 + 2}s`,
-              animationDelay: `${Math.random() * 2}s`
+              width: `${particle.size * 14}px`,
+              height: `${particle.size * 14}px`
             }}
           />
         ))}
       </div>
       
-      <div className="relative p-6 border-b border-indigo-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
-        <div>
-          <div className="flex items-center gap-3 mb-1">
-            <div className="relative p-1 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-full flex-shrink-0 shadow-lg transform hover:scale-105 transition-transform duration-300">
-              <img 
-                src="./assets/loli-logo.png" 
-                alt="Loli AI Assistant Logo" 
-                className="w-10 h-10 rounded-full"
-              />
-              <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-purple-400 to-indigo-500 opacity-0 hover:opacity-20 transition-opacity duration-300" />
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-gray-800 bg-gradient-to-r from-indigo-700 to-purple-700 bg-clip-text text-transparent">Loli AI Assistant</h2>
-              <p className="text-sm text-indigo-600 font-medium">Clinical decision support & dental guidance</p>
-            </div>
-          </div>
-          <p className="text-xs text-indigo-500 mt-1 font-medium">by WinterArc Myanmar</p>
-        </div>
-        
-        <div className="w-full md:w-auto md:max-w-[720px]">
-          <div className="grid w-full grid-cols-1 gap-3 md:grid-cols-[minmax(220px,260px)_auto] md:items-end">
-          <div className="w-full">
-            <label className="block text-[10px] font-black text-indigo-500 uppercase tracking-[0.2em] mb-1.5">
-              <span className="inline-flex items-center gap-1.5">
-                <MapPin className="w-3.5 h-3.5" />
-                AI Scope
-              </span>
-            </label>
-            {canAccessAllLocations ? (
-              <select
-                value={selectedLocationScope}
-                onChange={(e) => setSelectedLocationScope(e.target.value)}
-                className="w-full bg-white/90 text-sm text-gray-800 border border-indigo-200 rounded-xl px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value={ALL_BRANCHES_VALUE}>All Branches</option>
-                {locations.map(location => (
-                  <option key={location.id} value={location.id}>
-                    {location.name}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <div className="rounded-xl border border-indigo-200 bg-white/90 px-3 py-2 text-sm font-medium text-gray-700 shadow-sm">
-                {selectedLocationLabel}
+      <div className="relative border-b border-slate-200/80 bg-white/80 px-5 py-5 backdrop-blur-xl md:px-8 md:py-6">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+          <div className="space-y-4">
+            <div className="flex items-start gap-4">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/70 bg-gradient-to-br from-slate-900 via-indigo-900 to-indigo-700 shadow-lg shadow-indigo-950/15">
+                <img
+                  src="./assets/loli-logo.png"
+                  alt="Loli AI Assistant Logo"
+                  className="h-11 w-11 rounded-xl object-cover"
+                />
               </div>
-            )}
-          </div>
-
-          <div className="flex flex-col gap-3">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <button
-                onClick={() => setShowHelpModal(true)}
-                className="flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white rounded-xl font-medium transition-all duration-300 text-sm shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:translate-y-0 w-full"
-                title="Quick start guide and command reference"
-              >
-                <HelpCircle className="w-4 h-4" />
-                <span>Quick Help</span>
-              </button>
-
-              <button
-                onClick={() => setShowMemoryPanel(true)}
-                className="flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white rounded-xl font-medium transition-all duration-300 text-sm shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:translate-y-0 w-full"
-                title="View assistant memory"
-              >
-                <Brain className="w-4 h-4" />
-                <span>Memory</span>
-              </button>
-
-              <button
-                onClick={createNewSession}
-                className="flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl font-medium transition-all duration-300 text-sm shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:translate-y-0 w-full"
-                title="Start new conversation"
-              >
-                <Plus className="w-4 h-4" />
-                <span>New Chat</span>
-              </button>
+              <div className="space-y-2">
+                <div>
+                  <p className="text-[11px] font-black uppercase tracking-[0.28em] text-indigo-500">DentalCloud Assistant</p>
+                  <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-900">Loli AI Assistant</h2>
+                  <p className="mt-1 max-w-2xl text-sm text-slate-600">
+                    Clinical guidance, database actions, and follow-up workflows in one assistant workspace.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-600 shadow-sm">
+                    <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
+                    Ready for care coordination
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-600 shadow-sm">
+                    <MapPin className="h-3.5 w-3.5 text-indigo-500" />
+                    {selectedLocationLabel}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-600 shadow-sm">
+                    <MessageCircle className="h-3.5 w-3.5 text-indigo-500" />
+                    {chatSessions.length} saved chat{chatSessions.length === 1 ? '' : 's'}
+                  </span>
+                  <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 shadow-sm ${modeDetails.badgeClass}`}>
+                    {modeDetails.icon}
+                    {mode === 'ask' ? 'Ask Mode' : 'Agent Mode'}
+                  </span>
+                </div>
+              </div>
             </div>
+          </div>
+          
+          <div className="w-full max-w-3xl rounded-3xl border border-slate-200 bg-white/90 p-4 shadow-sm shadow-slate-950/5 backdrop-blur">
+            <div className="grid gap-4 xl:grid-cols-[minmax(240px,280px)_1fr]">
+              <div>
+                <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.24em] text-slate-500">
+                  <span className="inline-flex items-center gap-1.5">
+                    <MapPin className="h-3.5 w-3.5 text-indigo-500" />
+                    Practice Scope
+                  </span>
+                </label>
+                {canAccessAllLocations ? (
+                  <select
+                    value={selectedLocationScope}
+                    onChange={(e) => setSelectedLocationScope(e.target.value)}
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200"
+                  >
+                    <option value={ALL_BRANCHES_VALUE}>All Branches</option>
+                    {locations.map(location => (
+                      <option key={location.id} value={location.id}>
+                        {location.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 shadow-sm">
+                    {selectedLocationLabel}
+                  </div>
+                )}
+              </div>
 
-            <div className={`rounded-2xl border px-3 py-2 shadow-sm backdrop-blur-sm transition-all duration-300 ${modeDetails.panelClass}`}>
-              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                <div className="min-w-0">
-                  <p className="text-[10px] font-black uppercase tracking-[0.24em] text-indigo-500">Assistant Mode</p>
-                  <div className="mt-1 flex items-start gap-2">
-                    <div className={`mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-lg border ${modeDetails.badgeClass}`}>
-                      {modeDetails.icon}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-[13px] font-semibold leading-4 text-gray-800">{modeDetails.title}</p>
-                      <p className="text-[10px] leading-[0.875rem] text-gray-600">{modeDetails.description}</p>
-                    </div>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <button
+                    onClick={() => setShowHelpModal(true)}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100"
+                    title="Quick start guide and command reference"
+                  >
+                    <HelpCircle className="h-4 w-4" />
+                    <span>Quick Help</span>
+                  </button>
+
+                  <button
+                    onClick={() => setShowMemoryPanel(true)}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm font-semibold text-indigo-700 transition hover:border-indigo-300 hover:bg-indigo-100"
+                    title="View assistant memory"
+                  >
+                    <Brain className="h-4 w-4" />
+                    <span>Memory</span>
+                  </button>
+
+                  <button
+                    onClick={createNewSession}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+                    title="Start new conversation"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>New Chat</span>
+                  </button>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-slate-950 p-1.5 shadow-inner">
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      onClick={() => setMode('ask')}
+                      className={`rounded-[18px] px-4 py-3 text-left transition ${
+                        mode === 'ask'
+                          ? 'bg-white text-slate-900 shadow-sm'
+                          : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 text-sm font-semibold">
+                        <ShieldQuestion className="h-4 w-4" />
+                        <span>Ask Mode</span>
+                      </div>
+                      <p className={`mt-1 text-[11px] leading-4 ${mode === 'ask' ? 'text-slate-500' : 'text-slate-400'}`}>
+                        Read-only guidance and analysis
+                      </p>
+                    </button>
+
+                    <button
+                      onClick={() => setMode('agent')}
+                      className={`rounded-[18px] px-4 py-3 text-left transition ${
+                        mode === 'agent'
+                          ? 'bg-gradient-to-br from-indigo-500 via-indigo-600 to-violet-600 text-white shadow-sm'
+                          : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 text-sm font-semibold">
+                        <Zap className="h-4 w-4" />
+                        <span>Agent Mode</span>
+                      </div>
+                      <p className={`mt-1 text-[11px] leading-4 ${mode === 'agent' ? 'text-indigo-100/90' : 'text-slate-400'}`}>
+                        Executes updates and actions
+                      </p>
+                    </button>
                   </div>
                 </div>
-
-                <div className="grid grid-cols-2 gap-2 rounded-2xl bg-slate-900 p-1.5 shadow-inner">
-                  <button
-                    onClick={() => setMode('ask')}
-                    className={`min-w-[124px] rounded-xl px-3.5 py-2 text-left transition-all duration-300 ${
-                      mode === 'ask'
-                        ? 'bg-gradient-to-br from-emerald-400 to-teal-500 text-white shadow-lg'
-                        : 'bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 text-[13px] font-semibold">
-                      <ShieldQuestion className="w-4 h-4" />
-                      <span>Ask</span>
-                    </div>
-                    <p className={`mt-0.5 text-[10px] leading-[0.875rem] ${mode === 'ask' ? 'text-emerald-50/90' : 'text-slate-400'}`}>
-                      Safe answers and analysis
-                    </p>
-                  </button>
-
-                  <button
-                    onClick={() => setMode('agent')}
-                    className={`min-w-[124px] rounded-xl px-3.5 py-2 text-left transition-all duration-300 ${
-                      mode === 'agent'
-                        ? 'bg-gradient-to-br from-indigo-500 via-purple-500 to-fuchsia-500 text-white shadow-lg'
-                        : 'bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 text-[13px] font-semibold">
-                      <Zap className="w-4 h-4" />
-                      <span>Agent</span>
-                    </div>
-                    <p className={`mt-0.5 text-[10px] leading-[0.875rem] ${mode === 'agent' ? 'text-indigo-50/90' : 'text-slate-400'}`}>
-                      Change records and run actions
-                    </p>
-                  </button>
-                </div>
               </div>
             </div>
-          </div>
           </div>
         </div>
       </div>
 
-      <div className="flex flex-col md:flex-row h-[calc(100vh-200px)] relative">
-        {/* Chat History Sidebar - Hidden on mobile, visible on desktop */}
-        <aside className="hidden md:flex md:w-64 bg-gradient-to-b from-indigo-50/50 to-purple-50/50 border-r border-indigo-200 flex-col backdrop-blur-sm">
-          {/* Sessions List */}
-          <div className="flex-1 overflow-y-auto p-3">
+      <div className="relative grid h-[calc(100vh-220px)] grid-cols-1 lg:grid-cols-[290px,minmax(0,1fr)]">
+        <aside className="hidden border-r border-slate-200/80 bg-slate-950/[0.03] lg:flex lg:flex-col">
+          <div className="border-b border-slate-200/80 px-5 py-5">
+            <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-500">Workspace</p>
+              <h3 className="mt-2 text-base font-bold text-slate-900">{activeSession?.title || 'New conversation'}</h3>
+              <p className="mt-1 text-sm text-slate-500">
+                {mode === 'ask'
+                  ? 'Use this space for explanations, summaries, and treatment guidance.'
+                  : 'Use this space for operational tasks that update your clinic data.'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-4 py-4">
+            <div className="mb-3 flex items-center justify-between px-1">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-500">Conversations</p>
+                <p className="mt-1 text-xs text-slate-500">{chatSessions.length} saved thread{chatSessions.length === 1 ? '' : 's'}</p>
+              </div>
+            </div>
+
             {chatSessions.length === 0 ? (
-              <div className="p-4 text-center text-indigo-400 text-sm animate-pulse">
-                <MessageCircle className="w-8 h-8 mx-auto mb-2 opacity-60" />
-                <p>No conversations yet</p>
+              <div className="rounded-3xl border border-dashed border-slate-300 bg-white/70 p-6 text-center text-sm text-slate-500">
+                <MessageCircle className="mx-auto mb-3 h-8 w-8 text-slate-300" />
+                <p className="font-medium text-slate-600">No saved conversations yet</p>
+                <p className="mt-1 text-xs text-slate-400">Start a new chat to build a reusable history.</p>
               </div>
             ) : (
               <div className="space-y-2">
                 {chatSessions.map(session => (
                   <div
                     key={session.id}
-                    className={`group flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all duration-300 hover:bg-white/70 shadow-sm hover:shadow-md ${
+                    className={`group rounded-2xl border transition ${
                       currentSessionId === session.id
-                        ? 'bg-gradient-to-r from-indigo-100/80 to-purple-100/80 border-l-4 border-indigo-500 shadow-md'
-                        : 'border-l-4 border-transparent hover:border-indigo-300'
+                        ? 'border-indigo-200 bg-white shadow-sm'
+                        : 'border-transparent bg-white/65 hover:border-slate-200 hover:bg-white'
                     }`}
                   >
-                    <button
-                      onClick={() => switchSession(session.id)}
-                      className="flex-1 text-left truncate focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded px-1"
-                      title={session.title}
-                    >
-                      <div className="text-sm font-medium truncate text-indigo-900 group-hover:text-indigo-700">{session.title}</div>
-                      <div className="text-xs text-indigo-500">{session.messages.length} messages</div>
-                    </button>
-                    <button
-                      onClick={() => deleteSession(session.id)}
-                      className="opacity-0 group-hover:opacity-100 ml-2 p-2 hover:bg-red-100 rounded-lg text-red-600 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-red-500 transform hover:scale-110"
-                      title="Delete conversation"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-start gap-2 p-3">
+                      <button
+                        onClick={() => switchSession(session.id)}
+                        className="flex-1 rounded-xl text-left focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                        title={session.title}
+                      >
+                        <div className="truncate text-sm font-semibold text-slate-800">{session.title}</div>
+                        <div className="mt-1 text-xs text-slate-500">{session.messages.length} messages</div>
+                      </button>
+                      <button
+                        onClick={() => deleteSession(session.id)}
+                        className="rounded-xl p-2 text-slate-400 transition hover:bg-red-50 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-400"
+                        title="Delete conversation"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
             )}
           </div>
+
+          <div className="border-t border-slate-200/80 p-4">
+            <p className="mb-3 px-1 text-[10px] font-black uppercase tracking-[0.24em] text-slate-500">Prompt Starters</p>
+            <div className="space-y-2">
+              {quickPrompts.map(prompt => (
+                <button
+                  key={prompt}
+                  onClick={() => {
+                    setInputMessage(prompt);
+                    inputRef.current?.focus();
+                  }}
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-left text-sm text-slate-600 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+          </div>
         </aside>
 
-        {/* Main Chat Area */}
-        <div className="flex-1 flex flex-col border-l border-indigo-200 md:border-l-0 relative">
-          {/* Messages Container */}
-          <div className="flex-1 overflow-hidden flex flex-col min-h-0 relative">
-            <div className="flex-1 overflow-y-auto p-4 md:p-6 relative z-10">
-              <div className="max-w-4xl mx-auto space-y-4">
-                {/* API Status Banner */}
+        <div className="flex min-h-0 flex-col">
+          <div className="border-b border-slate-200/80 bg-white/70 px-4 py-3 backdrop-blur lg:px-6">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-500">Current Session</p>
+                <h3 className="mt-1 text-sm font-semibold text-slate-900">{activeSession?.title || 'Fresh conversation'}</h3>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold shadow-sm ${modeDetails.badgeClass}`}>
+                  {modeDetails.icon}
+                  {mode === 'ask' ? 'Read-only workspace' : 'Action workspace'}
+                </span>
                 {apiStatus === 'mock' && (
-                  <div className="p-4 bg-gradient-to-r from-yellow-50 to-amber-50 border border-yellow-200 rounded-xl shadow-sm animate-pulse">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 shadow-sm">
+                    <AlertCircle className="h-3.5 w-3.5" />
+                    Mock API connected
+                  </span>
+                )}
+                {apiStatus === 'error' && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700 shadow-sm">
+                    <AlertCircle className="h-3.5 w-3.5" />
+                    Connection issue
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-hidden">
+            <div className="h-full overflow-y-auto px-4 py-5 lg:px-6">
+              <div className="mx-auto max-w-4xl space-y-4">
+                <div className="lg:hidden">
+                  <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-500">Saved Conversations</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-800">{chatSessions.length} thread{chatSessions.length === 1 ? '' : 's'} available</p>
+                      </div>
+                      <button
+                        onClick={createNewSession}
+                        className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+                      >
+                        <Plus className="h-4 w-4" />
+                        New Chat
+                      </button>
+                    </div>
+                    {showQuickPromptPanel && (
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {quickPrompts.map(prompt => (
+                          <button
+                            key={prompt}
+                            onClick={() => {
+                              setInputMessage(prompt);
+                              inputRef.current?.focus();
+                            }}
+                            className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
+                          >
+                            {prompt}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {apiStatus === 'mock' && (
+                  <div className="rounded-3xl border border-amber-200 bg-amber-50/90 p-4 shadow-sm">
                     <div className="flex items-start gap-3">
-                      <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5 animate-bounce" />
-                      <div className="flex-1 text-sm">
-                        <h3 className="font-semibold text-yellow-800 mb-1">Mock Mode Active</h3>
-                        <p className="text-yellow-700">Connect to <code className="bg-yellow-100 px-1 rounded">apifree.ai</code> for real AI responses</p>
+                      <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600" />
+                      <div className="text-sm text-amber-800">
+                        <p className="font-semibold">Mock mode is active.</p>
+                        <p className="mt-1 text-amber-700">
+                          Connect to <code className="rounded bg-amber-100 px-1.5 py-0.5 text-[13px]">apifree.ai</code> to receive live AI responses.
+                        </p>
                       </div>
                     </div>
                   </div>
                 )}
 
                 {apiStatus === 'error' && (
-                  <div className="p-4 bg-gradient-to-r from-red-50 to-pink-50 border border-red-200 rounded-xl shadow-sm animate-shake">
-                    <div className="flex items-center gap-3">
-                      <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 animate-pulse" />
-                      <p className="text-sm text-red-700">API connection error. Check your configuration.</p>
+                  <div className="rounded-3xl border border-red-200 bg-red-50/90 p-4 shadow-sm">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-600" />
+                      <div className="text-sm text-red-800">
+                        <p className="font-semibold">AI connection problem.</p>
+                        <p className="mt-1 text-red-700">Check your configuration and try again.</p>
+                      </div>
                     </div>
                   </div>
                 )}
 
-                {/* Chat Messages */}
+                {showQuickPromptPanel && (
+                  <div className="rounded-3xl border border-dashed border-slate-300 bg-white/80 p-5 shadow-sm">
+                    <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-500">Suggested Starts</p>
+                    <h3 className="mt-2 text-lg font-bold text-slate-900">Start with a focused clinical or operational question</h3>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Pick a prompt to get moving, then switch to Agent Mode when you want Loli to perform real actions.
+                    </p>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {quickPrompts.map(prompt => (
+                        <button
+                          key={prompt}
+                          onClick={() => {
+                            setInputMessage(prompt);
+                            inputRef.current?.focus();
+                          }}
+                          className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
+                        >
+                          {prompt}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-4">
                   {messages.map((message, index) => (
-                    <div 
-                      key={message.id} 
+                    <div
+                      key={message.id}
                       className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in-up`}
-                      style={{ animationDelay: `${index * 50}ms` }}
+                      style={{ animationDelay: `${index * 45}ms` }}
                     >
                       {message.role === 'assistant' && (
-                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center shadow-lg transform hover:scale-110 transition-transform duration-300">
-                          <Bot className="w-4 h-4 text-white" />
+                        <div className="mt-1 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-sm">
+                          <Bot className="h-4 w-4" />
                         </div>
                       )}
                       
                       <div
-                        className={`max-w-xs md:max-w-2xl group relative transform transition-all duration-300 hover:scale-[1.02] ${
+                        className={`group max-w-[min(100%,52rem)] rounded-[24px] border px-4 py-4 shadow-sm transition ${
                           message.role === 'user'
-                            ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-2xl rounded-tr-sm px-4 py-3 shadow-lg'
-                            : 'bg-white/80 backdrop-blur-sm text-gray-900 rounded-2xl rounded-tl-sm px-4 py-3 shadow-md border border-indigo-100'
+                            ? 'border-slate-900 bg-slate-900 text-white'
+                            : 'border-slate-200 bg-white text-slate-900'
                         }`}
                       >
+                        {message.role === 'assistant' && (
+                          <div className="mb-3 flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex h-7 w-7 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                                <Sparkles className="h-3.5 w-3.5" />
+                              </span>
+                              <div>
+                                <p className="text-sm font-semibold text-slate-900">Loli</p>
+                                <p className="text-xs text-slate-500">Assistant response</p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
                         {message.role === 'assistant' ? (
                           <div className="ai-markdown">
                             <ReactMarkdown 
                               remarkPlugins={[remarkGfm]}
                               components={{
-                                // Custom component overrides for better styling
                                 p: ({node, ...props}) => <p className="mb-3" {...props} />,
-                                ul: ({node, ...props}) => <ul className="list-disc pl-5 mb-3 space-y-1" {...props} />,
-                                ol: ({node, ...props}) => <ol className="list-decimal pl-5 mb-3 space-y-1" {...props} />,
+                                ul: ({node, ...props}) => <ul className="list-disc space-y-1 pl-5 mb-3" {...props} />,
+                                ol: ({node, ...props}) => <ol className="list-decimal space-y-1 pl-5 mb-3" {...props} />,
                                 li: ({node, ...props}) => <li className="mb-1" {...props} />,
-                                h1: ({node, ...props}) => <h1 className="text-xl font-bold mt-4 mb-2 pb-2 border-b border-gray-200" {...props} />,
-                                h2: ({node, ...props}) => <h2 className="text-lg font-semibold mt-3 mb-2 pb-1 border-b border-gray-100" {...props} />,
-                                h3: ({node, ...props}) => <h3 className="text-base font-semibold mt-3 mb-2" {...props} />,
-                                h4: ({node, ...props}) => <h4 className="text-sm font-semibold mt-2 mb-1" {...props} />,
+                                h1: ({node, ...props}) => <h1 className="mt-4 mb-2 border-b border-slate-200 pb-2 text-xl font-bold" {...props} />,
+                                h2: ({node, ...props}) => <h2 className="mt-3 mb-2 border-b border-slate-100 pb-1 text-lg font-semibold" {...props} />,
+                                h3: ({node, ...props}) => <h3 className="mt-3 mb-2 text-base font-semibold" {...props} />,
+                                h4: ({node, ...props}) => <h4 className="mt-2 mb-1 text-sm font-semibold" {...props} />,
                                 code: ({node, className, children, ...props}) => {
                                   const match = /language-(\w+)/.exec(className || '');
                                   return match ? (
-                                    <code className="block bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm font-mono text-gray-700 overflow-x-auto" {...props}>
+                                    <code className="block overflow-x-auto rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm font-mono text-slate-700" {...props}>
                                       {children}
                                     </code>
                                   ) : (
-                                    <code className="bg-gray-100 px-1.5 py-0.5 rounded text-red-600 text-sm font-mono" {...props}>
+                                    <code className="rounded bg-slate-100 px-1.5 py-0.5 text-sm font-mono text-rose-600" {...props}>
                                       {children}
                                     </code>
                                   );
                                 },
-                                pre: ({node, ...props}) => <pre className="bg-gray-50 border border-gray-200 rounded-lg p-3 my-3 overflow-x-auto" {...props} />,
-                                blockquote: ({node, ...props}) => <blockquote className="border-l-4 border-gray-300 pl-4 my-3 text-gray-600 italic" {...props} />,
-                                table: ({node, ...props}) => <table className="min-w-full bg-white border border-gray-200 rounded-lg shadow-sm my-3 overflow-hidden" {...props} />,
-                                th: ({node, ...props}) => <th className="bg-gray-50 px-4 py-2 text-left text-sm font-semibold text-gray-900 border-b border-gray-200" {...props} />,
-                                td: ({node, ...props}) => <td className="px-4 py-2 text-sm text-gray-700 border-b border-gray-100" {...props} />,
-                                a: ({node, ...props}) => <a className="text-indigo-600 hover:text-indigo-800 underline font-medium" {...props} />,
-                                hr: ({node, ...props}) => <hr className="my-4 border-gray-200" {...props} />,
-                                strong: ({node, ...props}) => <strong className="font-semibold text-gray-900" {...props} />,
-                                em: ({node, ...props}) => <em className="italic text-gray-600" {...props} />
+                                pre: ({node, ...props}) => <pre className="my-3 overflow-x-auto rounded-2xl border border-slate-200 bg-slate-50 p-3" {...props} />,
+                                blockquote: ({node, ...props}) => <blockquote className="my-3 border-l-4 border-slate-300 pl-4 italic text-slate-600" {...props} />,
+                                table: ({node, ...props}) => <table className="my-3 min-w-full overflow-hidden rounded-2xl border border-slate-200 bg-white" {...props} />,
+                                th: ({node, ...props}) => <th className="border-b border-slate-200 bg-slate-50 px-4 py-2 text-left text-sm font-semibold text-slate-900" {...props} />,
+                                td: ({node, ...props}) => <td className="border-b border-slate-100 px-4 py-2 text-sm text-slate-700" {...props} />,
+                                a: ({node, ...props}) => <a className="font-medium text-indigo-600 underline hover:text-indigo-800" {...props} />,
+                                hr: ({node, ...props}) => <hr className="my-4 border-slate-200" {...props} />,
+                                strong: ({node, ...props}) => <strong className="font-semibold text-slate-900" {...props} />,
+                                em: ({node, ...props}) => <em className="italic text-slate-600" {...props} />
                               }}
                             >
                               {message.content}
                             </ReactMarkdown>
                           </div>
                         ) : (
-                          <div className="text-sm md:text-base whitespace-pre-wrap leading-relaxed break-words">{message.content}</div>
+                          <div className="whitespace-pre-wrap text-sm leading-relaxed text-white/95 md:text-[15px]">{message.content}</div>
                         )}
-                        <div className={`flex items-center gap-2 mt-2 pt-2 border-t ${
-                          message.role === 'user' ? 'border-indigo-400/50' : 'border-gray-200'
+
+                        <div className={`mt-4 flex items-center gap-2 border-t pt-3 ${
+                          message.role === 'user' ? 'border-white/10' : 'border-slate-100'
                         }`}>
                           <span className={`text-xs ${
-                            message.role === 'user' ? 'text-indigo-200' : 'text-indigo-500'
+                            message.role === 'user' ? 'text-slate-300' : 'text-slate-500'
                           }`}>
                             {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </span>
@@ -4991,58 +5140,58 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                             <div className="flex items-center gap-1">
                               <button
                                 onClick={() => handleFeedback(message.id, 'helpful')}
-                                className={`p-1.5 rounded-lg transition-all duration-300 focus:outline-none focus:ring-2 transform hover:scale-110 ${
+                                className={`rounded-xl p-1.5 transition focus:outline-none focus:ring-2 ${
                                   feedbackStatus[message.id] === 'helpful' 
-                                    ? 'text-green-600 bg-green-100 focus:ring-green-500' 
-                                    : 'text-gray-400 hover:text-green-600 hover:bg-green-100 focus:ring-green-400'
+                                    ? 'bg-emerald-100 text-emerald-700 focus:ring-emerald-400' 
+                                    : 'text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 focus:ring-emerald-300'
                                 }`}
                                 title="Rate as helpful"
                               >
-                                <ThumbsUp className="w-4 h-4" />
+                                <ThumbsUp className="h-4 w-4" />
                               </button>
                               <button
                                 onClick={() => handleFeedback(message.id, 'not-helpful')}
-                                className={`p-1.5 rounded-lg transition-all duration-300 focus:outline-none focus:ring-2 transform hover:scale-110 ${
+                                className={`rounded-xl p-1.5 transition focus:outline-none focus:ring-2 ${
                                   feedbackStatus[message.id] === 'not-helpful' 
-                                    ? 'text-red-600 bg-red-100 focus:ring-red-500' 
-                                    : 'text-gray-400 hover:text-red-600 hover:bg-red-100 focus:ring-red-400'
+                                    ? 'bg-rose-100 text-rose-700 focus:ring-rose-400' 
+                                    : 'text-slate-400 hover:bg-rose-50 hover:text-rose-600 focus:ring-rose-300'
                                 }`}
                                 title="Rate as not helpful"
                               >
-                                <ThumbsDown className="w-4 h-4" />
+                                <ThumbsDown className="h-4 w-4" />
                               </button>
                             </div>
                           )}
                           
                           <button
                             onClick={() => copyToClipboard(message.content, message.id)}
-                            className={`ml-auto p-1.5 rounded-lg hover:bg-opacity-20 transition-all duration-300 focus:outline-none focus:ring-2 transform hover:scale-110 ${
-                              message.role === 'user' ? 'text-indigo-200 hover:bg-indigo-900 focus:ring-indigo-500' : 'text-indigo-500 hover:bg-indigo-100 focus:ring-indigo-400'
+                            className={`ml-auto rounded-xl p-1.5 transition focus:outline-none focus:ring-2 ${
+                              message.role === 'user' ? 'text-slate-300 hover:bg-white/10 focus:ring-slate-300' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700 focus:ring-slate-300'
                             }`}
                             title="Copy message"
                           >
-                            {copiedId === message.id ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                            {copiedId === message.id ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                           </button>
                         </div>
                       </div>
 
                       {message.role === 'user' && (
-                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 flex items-center justify-center shadow-lg transform hover:scale-110 transition-transform duration-300">
-                          <User className="w-4 h-4 text-white" />
+                        <div className="mt-1 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-sm">
+                          <User className="h-4 w-4" />
                         </div>
                       )}
                     </div>
                   ))}
 
                   {isLoading && (
-                    <div className="flex gap-3 justify-start animate-pulse">
-                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center shadow-lg animate-bounce">
-                        <Bot className="w-4 h-4 text-white" />
+                    <div className="flex justify-start gap-3 animate-fade-in-up">
+                      <div className="mt-1 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-sm">
+                        <Bot className="h-4 w-4" />
                       </div>
-                      <div className="bg-white/80 backdrop-blur-sm rounded-2xl rounded-tl-sm px-4 py-3 shadow-md border border-indigo-100">
-                        <div className="flex items-center gap-2">
-                          <Loader2 className="w-4 h-4 text-indigo-600 animate-spin" />
-                          <span className="text-sm text-indigo-700 font-medium">Thinking...</span>
+                      <div className="rounded-[24px] border border-slate-200 bg-white px-4 py-4 shadow-sm">
+                        <div className="flex items-center gap-2 text-sm font-medium text-slate-600">
+                          <Loader2 className="h-4 w-4 animate-spin text-indigo-600" />
+                          Thinking through your request...
                         </div>
                       </div>
                     </div>
@@ -5055,21 +5204,22 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
           </div>
 
           {/* Input Area */}
-          <div className="border-t border-indigo-200 p-4 md:p-6 bg-white/80 backdrop-blur-sm relative z-10">
-            <div className="max-w-4xl mx-auto">
-              <div className="flex gap-3 flex-col md:flex-row">
-                <div className="flex flex-col md:flex-row gap-2 w-full">
+          <div className="border-t border-slate-200/80 bg-white/80 px-4 py-4 backdrop-blur-xl lg:px-6 lg:py-5">
+            <div className="mx-auto max-w-4xl">
+              <div className="rounded-[28px] border border-slate-200 bg-white p-3 shadow-sm">
+                <div className="flex flex-col gap-3 md:flex-row">
                   <textarea
                     ref={inputRef}
                     value={inputMessage}
                     onChange={(e) => setInputMessage(e.target.value)}
                     onKeyDown={handleKeyPress}
                     placeholder={inputPlaceholder}
-                    className="flex-1 border border-indigo-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none bg-white/70 backdrop-blur-sm transition-all duration-300 hover:bg-white/90 focus:bg-white shadow-sm min-h-[60px]"
-                    rows={2}
+                    className="min-h-[112px] flex-1 resize-none rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-200"
+                    rows={4}
                     disabled={isLoading || isListening}
                   />
-                  <div className="flex gap-2">
+
+                  <div className="flex w-full flex-col gap-3 md:w-[190px]">
                     {/* Speech-to-text button */}
                     {typeof window !== 'undefined' && 'webkitSpeechRecognition' in window && (
                       <button
@@ -5108,44 +5258,61 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                             }
                           }
                         }}
-                        className={`p-3 rounded-xl font-medium transition-all duration-300 flex items-center justify-center gap-2 text-sm focus:outline-none focus:ring-2 focus:ring-offset-2 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:translate-y-0 ${isProcessing ? 'bg-yellow-500 text-white animate-pulse' : isListening ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white'}`}
+                        className={`inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+                          isProcessing
+                            ? 'bg-amber-500 text-white focus:ring-amber-300'
+                            : isListening
+                              ? 'bg-rose-600 text-white focus:ring-rose-300'
+                              : 'border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 focus:ring-slate-300'
+                        }`}
                         title={isProcessing ? "Processing speech..." : isListening ? "Stop listening" : "Start voice input"}
                         disabled={isLoading}
                       >
                         {isProcessing ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <Loader2 className="h-4 w-4 animate-spin" />
                         ) : isListening ? (
-                          <div className="w-4 h-4 bg-white rounded-full animate-pulse" />
+                          <div className="h-3.5 w-3.5 rounded-full bg-white animate-pulse" />
                         ) : (
-                          <Mic className="w-4 h-4" />
+                          <Mic className="h-4 w-4" />
                         )}
+                        {isListening ? 'Listening' : 'Voice Input'}
                       </button>
                     )}
                     <button
                       onClick={handleSendMessage}
                       disabled={!inputMessage.trim() || isLoading}
-                      className="w-full md:w-auto px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 text-white rounded-xl font-medium transition-all duration-300 flex items-center justify-center gap-2 text-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:cursor-not-allowed disabled:bg-slate-300"
                       title="Send message"
                     >
-                      {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                      <span className="md:hidden">Send</span>
+                      {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                      <span>Send</span>
                     </button>
+
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Current Mode</p>
+                      <p className="mt-2 text-sm font-semibold text-slate-900">{mode === 'ask' ? 'Ask Mode' : 'Agent Mode'}</p>
+                      <p className="mt-1 text-xs leading-5 text-slate-500">{mode === 'ask' ? 'Answers, summaries, and safe analysis' : 'Real actions for appointments, records, and workflows'}</p>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Disclaimer and Status Messages - Positioned below input area */}
-              <div className="mt-3 flex flex-col items-center gap-2">
-                {isProcessing && (
-                  <p className="text-xs text-yellow-600 text-center font-medium animate-pulse">Processing your speech...</p>
-                )}
-                {pendingAction && (
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-100 border border-amber-300 rounded-full text-amber-800 text-xs font-medium animate-pulse">
-                    <AlertCircle className="w-3.5 h-3.5" />
-                    <span>Waiting for confirmation...</span>
+                <div className="mt-3 flex flex-col gap-2 border-t border-slate-100 pt-3 md:flex-row md:items-center md:justify-between">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {isProcessing && (
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Processing speech
+                      </span>
+                    )}
+                    {pendingAction && (
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                        <AlertCircle className="h-3.5 w-3.5" />
+                        Waiting for confirmation
+                      </span>
+                    )}
                   </div>
-                )}
-                <p className="text-xs text-indigo-500 text-center font-medium mt-1">AI guidance is for reference. Always verify with clinical judgment.</p>
+                  <p className="text-xs text-slate-500">AI guidance supports decisions, but final clinical judgment stays with your team.</p>
+                </div>
               </div>
             </div>
           </div>
