@@ -4667,6 +4667,26 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
     const interval = setInterval(generateParticles, 8000);
     return () => clearInterval(interval);
   }, []);
+
+  const modeDetails = mode === 'ask'
+    ? {
+        title: 'Ask Mode active',
+        description: 'Read-only guidance, quick answers, and analysis without changing records.',
+        badgeClass: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+        panelClass: 'border-emerald-200/80 bg-gradient-to-r from-emerald-50/90 via-white/95 to-teal-50/80',
+        icon: <ShieldQuestion className="w-4 h-4" />
+      }
+    : {
+        title: 'Agent Mode active',
+        description: 'Create, update, and manage clinic data when you need Loli to take action.',
+        badgeClass: 'bg-indigo-100 text-indigo-700 border-indigo-200',
+        panelClass: 'border-indigo-200/80 bg-gradient-to-r from-indigo-50/95 via-white/95 to-purple-50/85',
+        icon: <Zap className="w-4 h-4" />
+      };
+
+  const inputPlaceholder = mode === 'ask'
+    ? 'Ask Loli anything about patient care, treatments, or dental procedures...'
+    : 'Tell Loli what to update, schedule, record, or create in the system...';
   
   return (
     <div className="relative bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 rounded-xl shadow-xl border border-indigo-100 overflow-hidden animate-fade-in">
@@ -4736,33 +4756,7 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
             )}
           </div>
 
-          <div className="flex flex-col gap-3">
-            <div className="flex bg-indigo-50/50 p-1 rounded-xl border border-indigo-100 shadow-inner backdrop-blur-sm w-full sm:w-fit">
-              <button
-                onClick={() => setMode('ask')}
-                className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all duration-300 whitespace-nowrap ${
-                  mode === 'ask' 
-                  ? 'bg-white text-indigo-600 shadow-md transform scale-105' 
-                  : 'text-indigo-400 hover:text-indigo-600 hover:bg-white/50'
-                }`}
-              >
-                <ShieldQuestion className="w-3.5 h-3.5" />
-                <span>Ask Mode</span>
-              </button>
-              <button
-                onClick={() => setMode('agent')}
-                className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all duration-300 whitespace-nowrap ${
-                  mode === 'agent' 
-                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg transform scale-105' 
-                  : 'text-indigo-400 hover:text-indigo-600 hover:bg-white/50'
-                }`}
-              >
-                <Zap className="w-3.5 h-3.5" />
-                <span>Agent Mode</span>
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <button
                 onClick={() => setShowHelpModal(true)}
                 className="flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white rounded-xl font-medium transition-all duration-300 text-sm shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:translate-y-0 w-full"
@@ -4789,7 +4783,6 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                 <Plus className="w-4 h-4" />
                 <span>New Chat</span>
               </button>
-            </div>
           </div>
           </div>
         </div>
@@ -5016,7 +5009,7 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                     value={inputMessage}
                     onChange={(e) => setInputMessage(e.target.value)}
                     onKeyDown={handleKeyPress}
-                    placeholder="Ask Loli anything about patient care, treatments, or dental procedures..."
+                    placeholder={inputPlaceholder}
                     className="flex-1 border border-indigo-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none bg-white/70 backdrop-blur-sm transition-all duration-300 hover:bg-white/90 focus:bg-white shadow-sm min-h-[60px]"
                     rows={2}
                     disabled={isLoading || isListening}
@@ -5081,6 +5074,59 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                     >
                       {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                       <span className="md:hidden">Send</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className={`mt-4 rounded-2xl border p-3 shadow-sm backdrop-blur-sm transition-all duration-300 ${modeDetails.panelClass}`}>
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-black uppercase tracking-[0.24em] text-indigo-500">Assistant Mode</p>
+                    <div className="mt-2 flex items-start gap-3">
+                      <div className={`mt-0.5 inline-flex h-9 w-9 items-center justify-center rounded-xl border ${modeDetails.badgeClass}`}>
+                        {modeDetails.icon}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-gray-800">{modeDetails.title}</p>
+                        <p className="text-xs text-gray-600">{modeDetails.description}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 rounded-2xl bg-slate-900 p-2 shadow-inner">
+                    <button
+                      onClick={() => setMode('ask')}
+                      className={`min-w-[132px] rounded-xl px-4 py-3 text-left transition-all duration-300 ${
+                        mode === 'ask'
+                          ? 'bg-gradient-to-br from-emerald-400 to-teal-500 text-white shadow-lg'
+                          : 'bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 text-sm font-semibold">
+                        <ShieldQuestion className="w-4 h-4" />
+                        <span>Ask</span>
+                      </div>
+                      <p className={`mt-1 text-[11px] leading-4 ${mode === 'ask' ? 'text-emerald-50/90' : 'text-slate-400'}`}>
+                        Safe answers and analysis
+                      </p>
+                    </button>
+
+                    <button
+                      onClick={() => setMode('agent')}
+                      className={`min-w-[132px] rounded-xl px-4 py-3 text-left transition-all duration-300 ${
+                        mode === 'agent'
+                          ? 'bg-gradient-to-br from-indigo-500 via-purple-500 to-fuchsia-500 text-white shadow-lg'
+                          : 'bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 text-sm font-semibold">
+                        <Zap className="w-4 h-4" />
+                        <span>Agent</span>
+                      </div>
+                      <p className={`mt-1 text-[11px] leading-4 ${mode === 'agent' ? 'text-indigo-50/90' : 'text-slate-400'}`}>
+                        Change records and run actions
+                      </p>
                     </button>
                   </div>
                 </div>
