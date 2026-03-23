@@ -179,6 +179,7 @@ const App: React.FC = () => {
   const [showMedicineModal, setShowMedicineModal] = useState(false);
   const [showMedicineSelectionModal, setShowMedicineSelectionModal] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info'; show: boolean }>({ message: '', type: 'success', show: false });
+  const [userFormError, setUserFormError] = useState<string | null>(null);
   const [lastPaymentAmount, setLastPaymentAmount] = useState<number>(0);
   const [selectedTreatmentsForReceipt, setSelectedTreatmentsForReceipt] = useState<ClinicalRecord[]>([]);
   const [availableTimes, setAvailableTimes] = useState<string[]>([]);
@@ -270,6 +271,7 @@ const App: React.FC = () => {
   };
 
   const toggleUserTabAccess = (tab: ViewState) => {
+    setUserFormError(null);
     setNewUserData(prev => {
       const currentTabs = resolveAllowedTabs('normal', prev.allowed_tabs) as ViewState[];
       const nextTabs = currentTabs.includes(tab)
@@ -284,6 +286,7 @@ const App: React.FC = () => {
   };
 
   const handleUserRoleChange = (role: User['role']) => {
+    setUserFormError(null);
     setNewUserData(prev => ({
       ...prev,
       role,
@@ -1000,11 +1003,12 @@ const App: React.FC = () => {
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
+    setUserFormError(null);
     setIsSubmitting(true);
     try {
       const payload = buildUserPayload(newUserData);
       if (payload.role === 'normal' && (!payload.allowed_tabs || payload.allowed_tabs.length === 0)) {
-        alert('Select at least one tab for this normal account.');
+        setUserFormError('Select at least one tab for this normal account.');
         setIsSubmitting(false);
         return;
       }
@@ -1014,7 +1018,7 @@ const App: React.FC = () => {
         await syncCurrentSessionUser(updatedUser);
       } else {
         if (!newUserData.password || newUserData.password === '') {
-          alert('Password is required');
+          setUserFormError('Password is required for a new user account.');
           setIsSubmitting(false);
           return;
         }
@@ -1022,14 +1026,20 @@ const App: React.FC = () => {
       }
       setShowUserModal(false);
       setEditingUser(null);
+      setUserFormError(null);
       setNewUserData(getDefaultUserFormData());
       if (auth.getSession()?.role === 'admin') {
         fetchUsers();
       } else {
         setUsers([]);
       }
+      setToast({
+        message: editingUser ? 'User account updated successfully.' : 'User account created successfully.',
+        type: 'success',
+        show: true
+      });
     } catch (err: any) {
-      alert(err.message);
+      setUserFormError(err.message || 'Unable to save this user right now.');
     } finally {
       setIsSubmitting(false);
     }
@@ -1039,8 +1049,17 @@ const App: React.FC = () => {
     try {
       await api.users.delete(id);
       fetchUsers();
+      setToast({
+        message: 'User account deleted successfully.',
+        type: 'success',
+        show: true
+      });
     } catch (err: any) {
-      alert(err.message);
+      setToast({
+        message: err.message || 'Failed to delete this user account.',
+        type: 'error',
+        show: true
+      });
     }
   };
 
@@ -1649,7 +1668,7 @@ const App: React.FC = () => {
             {currentView === 'treatments' && canAccessView('treatments') && <TreatmentConfigView treatmentTypes={treatmentTypes} currency={currency} onAdd={() => {setEditingTreatmentType(null); setShowTreatmentTypeModal(true)}} onEdit={(t) => {setEditingTreatmentType(t); setNewTreatmentTypeData(t); setShowTreatmentTypeModal(true)}} onDelete={handleDeleteTreatmentType} />}
             {currentView === 'records' && canAccessView('records') && <RecordsView records={globalRecords} loading={loading} onRefresh={fetchGlobalRecords} onDeleteAll={handleDeleteAllRecords} currency={currency} />}
             {currentView === 'inventory' && canAccessView('inventory') && <InventoryView medicines={medicines} topSelling={topSellingMedicines} loading={loading} currency={currency} onAdd={() => {setEditingMedicine(null); setNewMedicineData({ name: '', description: '', unit: 'pack', price: 0, stock: 0, min_stock: 0, category: '' }); setShowMedicineModal(true)}} onEdit={(med) => {setEditingMedicine(med); setNewMedicineData(med); setShowMedicineModal(true)}} onDelete={handleDeleteMedicine} />}
-            {currentView === 'users' && canAccessView('users') && <UsersView users={users} loading={loading} isAdmin={isAdmin} onAdd={() => {setEditingUser(null); setNewUserData(getDefaultUserFormData()); setShowUserModal(true)}} onEdit={(user) => {setEditingUser(user); setNewUserData({ username: user.username, password: '', role: user.role, location_id: user.location_id, allowed_tabs: resolveAllowedTabs(user.role, user.allowed_tabs) }); setShowUserModal(true)}} onDelete={handleDeleteUser} />}
+            {currentView === 'users' && canAccessView('users') && <UsersView users={users} loading={loading} isAdmin={isAdmin} onAdd={() => {setEditingUser(null); setUserFormError(null); setNewUserData(getDefaultUserFormData()); setShowUserModal(true)}} onEdit={(user) => {setEditingUser(user); setUserFormError(null); setNewUserData({ username: user.username, password: '', role: user.role, location_id: user.location_id, allowed_tabs: resolveAllowedTabs(user.role, user.allowed_tabs) }); setShowUserModal(true)}} onDelete={handleDeleteUser} />}
             {currentView === 'settings' && canAccessView('settings') && <SettingsView 
                 currency={currency} 
                 onCurrencyChange={handleCurrencyChange} 
@@ -2023,13 +2042,13 @@ const App: React.FC = () => {
       )}
 
       {showUserModal && isAdmin && (
-        <Modal title={editingUser ? "Edit User" : "New User"} onClose={() => {setShowUserModal(false); setEditingUser(null); setNewUserData(getDefaultUserFormData());}}>
+        <Modal title={editingUser ? "Edit User" : "New User"} onClose={() => {setShowUserModal(false); setEditingUser(null); setUserFormError(null); setNewUserData(getDefaultUserFormData());}}>
           <form onSubmit={handleCreateUser} className="space-y-5">
             <Input 
               label="Username" 
               required 
               value={newUserData.username} 
-              onChange={(e: any) => setNewUserData({...newUserData, username: e.target.value})} 
+              onChange={(e: any) => {setUserFormError(null); setNewUserData({...newUserData, username: e.target.value});}} 
               placeholder="Enter username"
             />
             <Input 
@@ -2037,7 +2056,7 @@ const App: React.FC = () => {
               type="password"
               required={!editingUser}
               value={newUserData.password || ''} 
-              onChange={(e: any) => setNewUserData({...newUserData, password: e.target.value})} 
+              onChange={(e: any) => {setUserFormError(null); setNewUserData({...newUserData, password: e.target.value});}} 
               placeholder="Enter password"
             />
             <div>
@@ -2045,7 +2064,7 @@ const App: React.FC = () => {
               <select 
                 className="w-full border-gray-200 border rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500"
                 value={newUserData.location_id || ''} 
-                onChange={(e: any) => setNewUserData({...newUserData, location_id: e.target.value || null})}
+                onChange={(e: any) => {setUserFormError(null); setNewUserData({...newUserData, location_id: e.target.value || null});}}
               >
                 <option value="">{newUserData.role === 'admin' ? 'All Locations (Global Manager)' : 'All Assigned Locations'}</option>
                 {locations.map(loc => (
@@ -2107,6 +2126,12 @@ const App: React.FC = () => {
                 {editableAllowedTabs.length === 0 && (
                   <p className="mt-3 text-xs font-medium text-red-600">Select at least one tab for this account.</p>
                 )}
+              </div>
+            )}
+            {userFormError && (
+              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
+                <p className="text-sm font-semibold text-red-900">Couldn&apos;t save this user yet</p>
+                <p className="mt-1 text-xs text-red-700">{userFormError}</p>
               </div>
             )}
             <button type="submit" className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-indigo-600/20">

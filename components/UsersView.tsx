@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Plus, Edit2, Trash2, Loader2, User, Shield, UserCheck, FileDown } from 'lucide-react';
 import { User as UserType } from '../types';
-import { Modal, Input } from './Shared';
+import { Modal } from './Shared';
 import Pagination from './Pagination';
 import { FLEXIBLE_STAFF_TABS } from '../constants';
 import { resolveAllowedTabs } from '../utils/permissions';
@@ -26,6 +26,7 @@ const UsersView: React.FC<UsersViewProps> = ({
   const [currentPage, setCurrentPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [pendingDeleteUser, setPendingDeleteUser] = useState<UserType | null>(null);
   const itemsPerPage = 10;
 
   // Filtered data based on search term
@@ -205,11 +206,7 @@ const UsersView: React.FC<UsersViewProps> = ({
                             <Edit2 className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => {
-                              if (confirm(`Are you sure you want to delete user "${user.username}"?`)) {
-                                onDelete(user.id);
-                              }
-                            }}
+                            onClick={() => setPendingDeleteUser(user)}
                             className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                             title="Delete user"
                           >
@@ -234,6 +231,39 @@ const UsersView: React.FC<UsersViewProps> = ({
           showAll={showAll}
           onToggleShowAll={() => setShowAll(!showAll)}
         />
+      )}
+      {pendingDeleteUser && (
+        <Modal title="Delete User" onClose={() => setPendingDeleteUser(null)}>
+          <div className="space-y-5">
+            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-4">
+              <p className="text-sm font-semibold text-red-900">
+                Delete "{pendingDeleteUser.username}"?
+              </p>
+              <p className="mt-1 text-xs text-red-700">
+                This account will lose access immediately and this action cannot be undone.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setPendingDeleteUser(null)}
+                className="flex-1 rounded-xl border border-gray-200 px-4 py-3 text-sm font-semibold text-gray-700 transition hover:border-gray-300 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onDelete(pendingDeleteUser.id);
+                  setPendingDeleteUser(null);
+                }}
+                className="flex-1 rounded-xl bg-red-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-red-600/20 transition hover:bg-red-700"
+              >
+                Delete User
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   );
