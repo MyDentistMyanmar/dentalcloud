@@ -1345,7 +1345,7 @@ const App: React.FC = () => {
     );
   }
 
-  const isAssistantView = currentView === 'ai-assistant';
+  const isWorkspaceView = currentView === 'ai-assistant' || currentView === 'messaging';
 
   return (
     <div className="min-h-screen flex bg-gray-50 flex-col md:flex-row">
@@ -1453,8 +1453,8 @@ const App: React.FC = () => {
         />
       </aside>
 
-      <main className={isAssistantView ? "flex min-w-0 flex-1 flex-col p-0 md:h-screen" : "flex-1 min-w-0 p-4 md:p-10"}>
-        <div className={isAssistantView ? "flex min-h-0 flex-1 flex-col" : "max-w-6xl mx-auto"}>
+      <main className={isWorkspaceView ? "flex min-w-0 flex-1 flex-col p-0 md:h-screen" : "flex-1 min-w-0 p-4 md:p-10"}>
+        <div className={isWorkspaceView ? "flex min-h-0 flex-1 flex-col" : "max-w-6xl mx-auto"}>
           <Suspense fallback={<div className="flex justify-center p-20"><Loader2 className="animate-spin text-indigo-600 w-10 h-10" /></div>}>
             {currentView === 'dashboard' && <DashboardView
                 patients={dashboardPatients}

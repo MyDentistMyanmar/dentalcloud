@@ -304,7 +304,7 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, messagingEnable
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white">
       <div className="border-b border-gray-200 px-6 py-4">
         <h2 className="text-xl font-semibold text-gray-900">Patient Messages</h2>
         <p className="mt-1 text-sm text-gray-500">Live messaging between the front desk and patient portal.</p>
@@ -316,14 +316,14 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, messagingEnable
         </div>
       )}
 
-      <div className="grid h-[78vh] min-h-[680px] max-h-[820px] grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)]">
+      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)]">
         <aside className="flex min-h-0 flex-col border-r border-gray-200 bg-gray-50">
           <div className="border-b border-gray-200 px-4 py-4">
             <h3 className="text-sm font-semibold text-gray-900">Conversations</h3>
             <p className="mt-1 text-xs text-gray-500">Updates arrive automatically through Supabase realtime.</p>
           </div>
 
-          <div className="max-h-[360px] overflow-y-auto border-b border-gray-200 bg-white">
+          <div className="min-h-0 flex-1 overflow-y-auto border-b border-gray-200 bg-white">
             {conversations.length === 0 ? (
               <div className="p-6 text-center">
                 <MessageCircle className="mx-auto h-10 w-10 text-gray-300" />
@@ -366,7 +366,7 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, messagingEnable
             <p className="mt-1 text-xs text-gray-500">Choose any patient to open a direct conversation.</p>
           </div>
 
-          <div className="max-h-[260px] overflow-y-auto bg-white">
+          <div className="max-h-[280px] overflow-y-auto bg-white">
             {availablePatients.length === 0 ? (
               <div className="px-4 pb-6 text-xs text-gray-500">
                 Every patient already has an active conversation with this admin.
