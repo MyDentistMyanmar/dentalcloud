@@ -5190,11 +5190,6 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                       {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                       <span>Send</span>
                     </button>
-
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-                      <p className="text-xs font-medium text-slate-600">{mode === 'ask' ? 'Ask mode' : 'Agent mode'}</p>
-                      <p className="mt-1 text-xs text-slate-500">{mode === 'ask' ? 'Read-only analysis' : 'Can run actions'}</p>
-                    </div>
                   </div>
                 </div>
 
