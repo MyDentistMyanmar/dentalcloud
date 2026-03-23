@@ -4787,8 +4787,8 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
         </div>
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[280px,minmax(0,1fr)]">
-        <aside className="hidden min-h-0 flex-col border-r border-slate-800 bg-slate-950 text-slate-200 lg:flex">
+      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr),280px]">
+        <aside className="order-2 hidden min-h-0 flex-col border-l border-slate-800 bg-slate-950 text-slate-200 lg:flex">
           <div className="border-b border-slate-800 px-4 py-4">
             <button
               onClick={createNewSession}
@@ -4844,7 +4844,7 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
 
         </aside>
 
-        <div className="flex min-h-0 flex-col bg-white">
+        <div className="order-1 flex min-h-0 flex-col bg-white">
           <div className="border-b border-slate-200 px-4 py-3 lg:px-6">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="min-w-0">
