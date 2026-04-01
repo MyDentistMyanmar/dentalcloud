@@ -15,6 +15,14 @@ const SESSION_KEY = 'dental_auth_session';
 const SESSION_USER_KEY = 'dental_auth_user';
 const SESSION_MAX_AGE_MS = 365 * 24 * 60 * 60 * 1000;
 
+const isRecoveryFlowActive = (): boolean => {
+  if (typeof window === 'undefined') return false;
+
+  const searchParams = new URLSearchParams(window.location.search);
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  return searchParams.get('reset') === 'password' || hashParams.get('type') === 'recovery';
+};
+
 export interface AuthSession {
   userId: string;
   username: string;
@@ -276,6 +284,10 @@ export const auth = {
   // Restore session from Supabase Auth (for page refresh)
   async restoreSupabaseSession(): Promise<AuthSession | null> {
     try {
+      if (isRecoveryFlowActive()) {
+        return null;
+      }
+
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session?.user) {
@@ -333,7 +345,13 @@ export const auth = {
       if (event === 'SIGNED_OUT') {
         this.logout();
         callback(null);
+      } else if (event === 'PASSWORD_RECOVERY') {
+        callback(null);
       } else if (event === 'SIGNED_IN' && session?.user) {
+        if (isRecoveryFlowActive()) {
+          callback(null);
+          return;
+        }
         const restoredSession = await this.restoreSupabaseSession();
         callback(restoredSession);
       }
