@@ -113,6 +113,10 @@ export const auth = {
   // Get current session
   getSession(): AuthSession | null {
     try {
+      if (isRecoveryFlowActive()) {
+        return null;
+      }
+
       const sessionStr = localStorage.getItem(SESSION_KEY);
       if (!sessionStr) return null;
       
