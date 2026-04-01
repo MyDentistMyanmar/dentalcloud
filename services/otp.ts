@@ -10,7 +10,32 @@ export interface OTPRecord {
   created_at: string;
 }
 
+const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 export const otpService = {
+  async waitForRecoverySession(
+    attempts = 12,
+    delayMs = 250
+  ): Promise<{ success: boolean; message?: string }> {
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      const { data, error } = await supabase.auth.getSession();
+      if (error) {
+        console.error('Recovery session lookup error:', error);
+      }
+
+      if (data.session?.user?.email) {
+        return { success: true };
+      }
+
+      await wait(delayMs);
+    }
+
+    return {
+      success: false,
+      message: 'Your password reset session is not ready yet. Please wait a moment and try again.'
+    };
+  },
+
   /**
    * Request OTP for patient registration using Supabase Auth
    * This uses Supabase's built-in email verification
@@ -400,6 +425,14 @@ export const otpService = {
         };
       }
 
+      const recoverySessionReady = await this.waitForRecoverySession();
+      if (!recoverySessionReady.success) {
+        return {
+          success: false,
+          message: recoverySessionReady.message || 'Your password reset session is not ready yet.'
+        };
+      }
+
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       if (sessionError) {
         console.error('Password reset session error:', sessionError);
@@ -410,7 +443,7 @@ export const otpService = {
       if (!recoveryUser?.email) {
         return {
           success: false,
-          message: 'Your password reset session has expired. Please request a new reset email.'
+          message: 'The reset link is still loading or has expired. Please wait a moment and try again, or request a new reset email.'
         };
       }
 

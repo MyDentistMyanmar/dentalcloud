@@ -25,6 +25,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [forgotPasswordEmail, setForgotPasswordEmail] = useState('');
   const [isRecoveryMode, setIsRecoveryMode] = useState(false);
+  const [isPreparingRecovery, setIsPreparingRecovery] = useState(false);
   const [resetPassword, setResetPassword] = useState('');
   const [confirmResetPassword, setConfirmResetPassword] = useState('');
   
@@ -48,7 +49,11 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     const confirmed = urlParams.get('confirmed');
     const email = urlParams.get('email');
     const hashParams = new URLSearchParams(window.location.hash.substring(1));
-    const hasAuthTokens = hashParams.has('access_token') || hashParams.has('refresh_token');
+    const hasAuthTokens =
+      hashParams.has('access_token') ||
+      hashParams.has('refresh_token') ||
+      urlParams.has('code') ||
+      urlParams.has('token_hash');
     
     if (confirmed === 'true' && email) {
       // User clicked the confirmation link and was redirected back
@@ -73,11 +78,29 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     }
 
     if (urlParams.get('reset') === 'password' || hashParams.get('type') === 'recovery') {
-      setLoginMode('patient');
-      setShowForgotPassword(false);
-      setIsRecoveryMode(true);
-      setError('');
-      setInfoMessage('Set your new password below to finish resetting your patient account.');
+      const initRecoverySession = async () => {
+        setLoginMode('patient');
+        setShowForgotPassword(false);
+        setIsRecoveryMode(true);
+        setIsPreparingRecovery(true);
+        setError('');
+        setInfoMessage('Verifying your password reset link...');
+
+        if (hasAuthTokens) {
+          const recoveryResult = await otpService.waitForRecoverySession();
+          if (!recoveryResult.success) {
+            setError(recoveryResult.message || 'Unable to verify your reset link.');
+          } else {
+            setInfoMessage('Set your new password below to finish resetting your patient account.');
+          }
+        } else {
+          setInfoMessage('Set your new password below to finish resetting your patient account.');
+        }
+
+        setIsPreparingRecovery(false);
+      };
+
+      initRecoverySession();
     }
 
     const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
@@ -85,8 +108,15 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         setLoginMode('patient');
         setShowForgotPassword(false);
         setIsRecoveryMode(true);
+        setIsPreparingRecovery(false);
         setError('');
         setInfoMessage('Set your new password below to finish resetting your patient account.');
+      } else if (
+        event === 'SIGNED_IN' &&
+        (new URLSearchParams(window.location.search).get('reset') === 'password' ||
+          new URLSearchParams(window.location.hash.substring(1)).get('type') === 'recovery')
+      ) {
+        setIsPreparingRecovery(false);
       }
     });
 
@@ -450,13 +480,13 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
 
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={loading || isPreparingRecovery}
                   className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold py-3 rounded-lg transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/30 text-sm"
                 >
-                  {loading ? (
+                  {loading || isPreparingRecovery ? (
                     <>
                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      Resetting Password...
+                      {isPreparingRecovery ? 'Preparing Reset Session...' : 'Resetting Password...'}
                     </>
                   ) : (
                     <>
