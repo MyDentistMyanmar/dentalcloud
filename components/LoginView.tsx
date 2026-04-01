@@ -12,6 +12,7 @@ interface LoginViewProps {
 type LoginMode = 'admin' | 'patient';
 
 const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
+  const lastForgotPasswordSubmitRef = React.useRef(0);
   const [loginMode, setLoginMode] = useState<LoginMode>('patient');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -177,6 +178,13 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
 
   const handleForgotPasswordRequest = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const now = Date.now();
+    if (now - lastForgotPasswordSubmitRef.current < 1000) {
+      return;
+    }
+    lastForgotPasswordSubmitRef.current = now;
+
     setError('');
     setInfoMessage('');
     setLoading(true);
