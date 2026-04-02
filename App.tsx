@@ -158,7 +158,6 @@ const App: React.FC = () => {
   const [assistantMedicines, setAssistantMedicines] = useState<Medicine[]>([]);
   const [assistantExpenses, setAssistantExpenses] = useState<Expense[]>([]);
   const [assistantRecalls, setAssistantRecalls] = useState<Recall[]>([]);
-  const [assistantMedicineSales, setAssistantMedicineSales] = useState<MedicineSale[]>([]);
   const [treatmentTypes, setTreatmentTypes] = useState<TreatmentType[]>([]);
   const [patientFiles, setPatientFiles] = useState<PatientFile[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -459,7 +458,6 @@ const App: React.FC = () => {
     setAssistantMedicines([]);
     setAssistantExpenses([]);
     setAssistantRecalls([]);
-    setAssistantMedicineSales([]);
     localStorage.removeItem('dashboardLocationId');
   };
 
@@ -542,7 +540,7 @@ const App: React.FC = () => {
     const canAccessAllLocations = isAdmin && !restrictedLocationId;
     const assistantLocationId = canAccessAllLocations ? undefined : queryLocationId;
 
-    const [patData, aptData, docData, typeData, recordsData, medData, expenseData, recallData, salesData] = await Promise.all([
+    const [patData, aptData, docData, typeData, recordsData, medData, expenseData, recallData] = await Promise.all([
       api.patients.getAll(assistantLocationId),
       api.appointments.getAll(assistantLocationId),
       api.doctors.getAll(assistantLocationId),
@@ -550,8 +548,7 @@ const App: React.FC = () => {
       api.treatments.getAllRecords(assistantLocationId),
       api.medicines.getAll(assistantLocationId),
       api.expenses.getAll(assistantLocationId),
-      api.recalls.getAll(assistantLocationId),
-      api.medicines.getSales(assistantLocationId)
+      api.recalls.getAll(assistantLocationId)
     ]);
 
     setAssistantPatients(patData);
@@ -562,7 +559,6 @@ const App: React.FC = () => {
     setAssistantMedicines(medData);
     setAssistantExpenses(expenseData);
     setAssistantRecalls(recallData);
-    setAssistantMedicineSales(salesData);
   };
 
   const fetchInitialData = async (overrideLocationId?: string) => {
@@ -1811,7 +1807,6 @@ const App: React.FC = () => {
                 users={users}
                 medicines={assistantMedicines}
                 expenses={assistantExpenses}
-                medicineSales={assistantMedicineSales}
                 recalls={assistantRecalls}
                 locations={locations}
                 currentLocationId={currentLocationId}
