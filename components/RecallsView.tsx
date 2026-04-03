@@ -1,16 +1,18 @@
 import React, { useMemo, useState } from 'react';
-import { BellRing, Plus } from 'lucide-react';
+import { BellRing, Plus, Mail, Send } from 'lucide-react';
 import { Recall, Patient } from '../types';
 import { Modal, Input } from './Shared';
+import { loadEmailSettings } from '../utils/emailSettings';
 
 interface RecallsViewProps {
   recalls: Recall[];
   patients: Patient[];
   loading: boolean;
-  onCreateRecall: (data: Partial<Recall>) => Promise<void>;
+  onCreateRecall: (data: Partial<Recall>, sendEmail?: boolean) => Promise<void>;
   onUpdateStatus: (id: string, status: Recall['status']) => Promise<void>;
   onDeleteRecall: (id: string) => Promise<void>;
   onDeleteAllRecalls: () => Promise<void>;
+  onSendRecallEmail?: (recallId: string, patientEmail: string, patientName: string, recallTitle: string, dueDate: string) => Promise<void>;
 }
 
 const RecallsView: React.FC<RecallsViewProps> = ({
@@ -20,10 +22,13 @@ const RecallsView: React.FC<RecallsViewProps> = ({
   onCreateRecall,
   onUpdateStatus,
   onDeleteRecall,
-  onDeleteAllRecalls
+  onDeleteAllRecalls,
+  onSendRecallEmail
 }) => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState<string | null>(null);
+  const [sendEmailOnCreate, setSendEmailOnCreate] = useState(true);
   const [formData, setFormData] = useState<Partial<Recall>>({
     patient_id: '',
     title: '6-Month Checkup Recall',
@@ -32,6 +37,9 @@ const RecallsView: React.FC<RecallsViewProps> = ({
     status: 'PENDING',
     notes: ''
   });
+
+  const emailSettings = useMemo(() => loadEmailSettings(), []);
+  const isEmailEnabled = emailSettings.enabled && emailSettings.senderEmail;
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -67,7 +75,8 @@ const RecallsView: React.FC<RecallsViewProps> = ({
     if (!formData.patient_id || !formData.due_date || !formData.title) return;
     setSaving(true);
     try {
-      await onCreateRecall(formData);
+      const shouldSendEmail = Boolean(sendEmailOnCreate && isEmailEnabled);
+      await onCreateRecall(formData, shouldSendEmail);
       setShowCreateModal(false);
       setFormData({
         patient_id: '',
@@ -77,8 +86,29 @@ const RecallsView: React.FC<RecallsViewProps> = ({
         status: 'PENDING',
         notes: ''
       });
+      setSendEmailOnCreate(true);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSendRecallEmail = async (recall: Recall) => {
+    if (!onSendRecallEmail) return;
+    
+    const patient = patients.find(p => p.id === recall.patient_id);
+    if (!patient || !patient.email) {
+      alert(`Patient "${patient?.name || 'Unknown'}" does not have an email address on file.`);
+      return;
+    }
+
+    setSendingEmail(recall.id);
+    try {
+      await onSendRecallEmail(recall.id, patient.email, patient.name, recall.title, recall.due_date);
+      alert(`Recall email sent successfully to ${patient.name} (${patient.email})`);
+    } catch (error: any) {
+      alert(`Failed to send recall email: ${error.message || 'Unknown error'}`);
+    } finally {
+      setSendingEmail(null);
     }
   };
 
@@ -142,37 +172,67 @@ const RecallsView: React.FC<RecallsViewProps> = ({
           </div>
         ) : (
           <div className="divide-y divide-gray-100">
-            {sortedRecalls.map((r) => (
-              <div key={r.id} className="p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h4 className="font-bold text-gray-900">{r.title}</h4>
-                    <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${getStatusClass(r.status)}`}>{r.status}</span>
+            {sortedRecalls.map((r) => {
+              const patient = patients.find(p => p.id === r.patient_id);
+              const hasPatientEmail = patient?.email;
+              
+              return (
+                <div key={r.id} className="p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="font-bold text-gray-900">{r.title}</h4>
+                      <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${getStatusClass(r.status)}`}>{r.status}</span>
+                    </div>
+                    <p className="text-sm text-gray-600 mt-1">{r.patient_name || 'Unknown Patient'} • Due: {r.due_date}</p>
+                    {r.notes && <p className="text-xs text-gray-500 mt-1">{r.notes}</p>}
+                    <p className="text-xs text-gray-400 mt-1">Reminder lead time: {r.reminder_days_before} day(s)</p>
                   </div>
-                  <p className="text-sm text-gray-600 mt-1">{r.patient_name || 'Unknown Patient'} • Due: {r.due_date}</p>
-                  {r.notes && <p className="text-xs text-gray-500 mt-1">{r.notes}</p>}
-                  <p className="text-xs text-gray-400 mt-1">Reminder lead time: {r.reminder_days_before} day(s)</p>
-                </div>
 
-                <div className="flex gap-2 flex-wrap items-center">
-                  <span className="text-[11px] text-gray-500 font-medium">
-                    Status auto-updates from appointments
-                  </span>
-                  {(r.status === 'PENDING' || r.status === 'SCHEDULED') && (
-                    <button
-                      onClick={async () => {
-                        if (window.confirm('Cancel and delete this recall?')) {
-                          await onDeleteRecall(r.id);
-                        }
-                      }}
-                      className="px-3 py-2 rounded-lg bg-gray-100 text-gray-700 text-xs font-bold hover:bg-gray-200"
-                    >
-                      Cancel & Delete
-                    </button>
-                  )}
+                  <div className="flex gap-2 flex-wrap items-center">
+                    {onSendRecallEmail && hasPatientEmail && (r.status === 'PENDING' || r.status === 'SCHEDULED') && (
+                      <button
+                        onClick={() => handleSendRecallEmail(r)}
+                        disabled={sendingEmail === r.id}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-bold hover:bg-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed border border-emerald-200"
+                        title={`Send recall email to ${patient.name}`}
+                      >
+                        {sendingEmail === r.id ? (
+                          <>
+                            <span className="animate-spin inline-block w-3 h-3 border-2 border-emerald-600 border-t-transparent rounded-full" />
+                            Sending...
+                          </>
+                        ) : (
+                          <>
+                            <Mail size={14} />
+                            Send Email
+                          </>
+                        )}
+                      </button>
+                    )}
+                    {onSendRecallEmail && !hasPatientEmail && (r.status === 'PENDING' || r.status === 'SCHEDULED') && (
+                      <span className="text-[10px] text-gray-400 italic" title="Patient has no email on file">
+                        No email on file
+                      </span>
+                    )}
+                    <span className="text-[11px] text-gray-500 font-medium">
+                      Status auto-updates from appointments
+                    </span>
+                    {(r.status === 'PENDING' || r.status === 'SCHEDULED') && (
+                      <button
+                        onClick={async () => {
+                          if (window.confirm('Cancel and delete this recall?')) {
+                            await onDeleteRecall(r.id);
+                          }
+                        }}
+                        className="px-3 py-2 rounded-lg bg-gray-100 text-gray-700 text-xs font-bold hover:bg-gray-200"
+                      >
+                        Cancel & Delete
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -221,12 +281,51 @@ const RecallsView: React.FC<RecallsViewProps> = ({
                 className="w-full border-gray-200 border rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500"
               />
             </div>
+            
+            {isEmailEnabled && (
+              <label className="flex items-start gap-3 p-4 bg-emerald-50 border border-emerald-200 rounded-xl cursor-pointer hover:bg-emerald-100 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={sendEmailOnCreate}
+                  onChange={(e) => setSendEmailOnCreate(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <Mail size={14} className="text-emerald-600" />
+                    <span className="text-sm font-bold text-gray-900">Send recall email to patient</span>
+                  </div>
+                  <p className="text-xs text-gray-600 mt-1">
+                    An email notification will be sent to the patient with recall details.
+                  </p>
+                </div>
+              </label>
+            )}
+            
+            {!isEmailEnabled && (
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                <p className="text-xs text-amber-800">
+                  <strong>Note:</strong> Email delivery is not configured. Go to Settings → Email Delivery to enable recall email notifications.
+                </p>
+              </div>
+            )}
+            
             <button
               type="submit"
               disabled={saving}
-              className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold disabled:opacity-60"
+              className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold disabled:opacity-60 flex items-center justify-center gap-2"
             >
-              {saving ? 'Creating...' : 'Create Recall'}
+              {saving ? (
+                <>
+                  <span className="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <Plus size={16} />
+                  Create Recall
+                </>
+              )}
             </button>
           </form>
         </Modal>

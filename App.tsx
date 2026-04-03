@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, Suspense, useMemo } from 'react';
 import { 
   LayoutDashboard, 
   Users, 
@@ -262,6 +262,7 @@ const App: React.FC = () => {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [newMedicineData, setNewMedicineData] = useState<Partial<Medicine>>({ name: '', description: '', unit: 'pack', price: 0, stock: 0, min_stock: 0, category: '' });
   const [newExpenseData, setNewExpenseData] = useState<Partial<Expense>>(getDefaultExpenseFormData());
+  const emailSettings = useMemo(() => loadEmailSettings(), []);
 
   const applySessionState = (session: ReturnType<typeof auth.getSession>) => {
     if (!session) {
@@ -1196,14 +1197,106 @@ const App: React.FC = () => {
     }
   };
 
-  const handleCreateRecall = async (data: Partial<Recall>) => {
+  const handleCreateRecall = async (data: Partial<Recall>, sendEmail: boolean = false) => {
     try {
       await api.recalls.create({ ...data, location_id: currentLocationId });
       const updated = await api.recalls.getAll(currentLocationId);
       setRecalls(updated);
+      
+      // Send recall email if requested
+      if (sendEmail && data.patient_id) {
+        const patient = patients.find(p => p.id === data.patient_id);
+        if (patient && patient.email) {
+          try {
+            await handleSendRecallEmail(
+              updated[0]?.id || '', // Get the newly created recall ID
+              patient.email,
+              patient.name,
+              data.title || 'Recall',
+              data.due_date || ''
+            );
+            setToast({ message: `Recall created and email sent to ${patient.name}.`, type: 'success', show: true });
+          } catch (emailErr: any) {
+            console.error('Failed to send recall email:', emailErr);
+            setToast({ message: `Recall created but email failed: ${emailErr.message}`, type: 'info', show: true });
+          }
+        }
+      } else {
+        setToast({ message: 'Recall created successfully.', type: 'success', show: true });
+      }
     } catch (err: any) {
       alert(err.message);
       throw err;
+    }
+  };
+
+  const handleSendRecallEmail = async (
+    recallId: string,
+    patientEmail: string,
+    patientName: string,
+    recallTitle: string,
+    dueDate: string
+  ) => {
+    try {
+      // Format the due date for better readability
+      const formattedDate = new Date(dueDate).toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+
+      const emailHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;">
+            <h1 style="color: white; margin: 0; font-size: 28px;">🦷 Dental Recall Notice</h1>
+          </div>
+          
+          <div style="padding: 30px; background: #f9fafb;">
+            <p style="font-size: 16px; color: #374151; margin: 0 0 20px 0;">Dear <strong>${patientName}</strong>,</p>
+            
+            <p style="font-size: 15px; color: #4b5563; line-height: 1.6; margin: 0 0 20px 0;">
+              This is a friendly reminder from your dental clinic that you have an upcoming recall appointment scheduled.
+            </p>
+            
+            <div style="background: white; border-left: 4px solid #667eea; padding: 20px; margin: 20px 0; border-radius: 8px;">
+              <h2 style="color: #1f2937; margin: 0 0 15px 0; font-size: 20px;">📋 Recall Details</h2>
+              <p style="margin: 8px 0; color: #374151;"><strong>Type:</strong> ${recallTitle}</p>
+              <p style="margin: 8px 0; color: #374151;"><strong>Due Date:</strong> ${formattedDate}</p>
+            </div>
+            
+            <p style="font-size: 15px; color: #4b5563; line-height: 1.6; margin: 20px 0 0 0;">
+              Please contact our clinic to confirm your appointment or if you need to reschedule. We look forward to seeing you!
+            </p>
+          </div>
+          
+          <div style="background: #f3f4f6; padding: 20px; text-align: center; border-top: 1px solid #e5e7eb;">
+            <p style="color: #6b7280; font-size: 13px; margin: 0;">
+              This is an automated recall notification from DentalCloud Clinic Management System.
+            </p>
+          </div>
+        </div>
+      `;
+
+      await api.email.sendManagerEmail({
+        to: patientEmail,
+        subject: `🦷 Dental Recall Reminder: ${recallTitle}`,
+        html: emailHtml,
+        fromName: emailSettings.senderName || 'DentalCloud Clinic',
+        fromEmail: emailSettings.senderEmail
+      });
+
+      // Mark the recall as reminded
+      if (recallId) {
+        await api.recalls.markReminded(recallId);
+        const updated = await api.recalls.getAll(currentLocationId);
+        setRecalls(updated);
+      }
+
+      console.log(`[Recall Email] Sent to ${patientName} (${patientEmail})`);
+    } catch (error: any) {
+      console.error('[Recall Email] Failed to send:', error);
+      throw error;
     }
   };
 
@@ -1851,6 +1944,7 @@ const App: React.FC = () => {
               onUpdateStatus={handleUpdateRecallStatus}
               onDeleteRecall={handleDeleteRecall}
               onDeleteAllRecalls={handleDeleteAllRecalls}
+              onSendRecallEmail={handleSendRecallEmail}
             />}
             {currentView === 'finance' && <ClinicalView 
                 selectedPatient={selectedPatient} 
