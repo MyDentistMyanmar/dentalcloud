@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Plus, Edit2, Trash2, Loader2, FileText, FileDown, BarChart3, Eye } from 'lucide-react';
-import { ResponsiveContainer, BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip } from 'recharts';
+import { Plus, Edit2, Trash2, Loader2, FileText, FileDown, BarChart3, Eye, TrendingDown, TrendingUp, DollarSign, Calendar, Tag } from 'lucide-react';
+import { ResponsiveContainer, BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, Cell } from 'recharts';
 import { ClinicalRecord, Expense, MedicineSale } from '../types';
 import { formatCurrency, Currency } from '../utils/currency';
 import { exportExpensesToPDF } from '../utils/pdfExport';
@@ -181,30 +181,81 @@ const ExpensesView: React.FC<ExpensesViewProps> = ({
     setSelectedExpense(null);
   };
 
+  const getCategoryColor = (category: string) => {
+    const colors: Record<string, string> = {
+      'Equipment': 'bg-blue-100 text-blue-700 border-blue-200',
+      'Supplies': 'bg-green-100 text-green-700 border-green-200',
+      'Maintenance': 'bg-orange-100 text-orange-700 border-orange-200',
+      'Utilities': 'bg-purple-100 text-purple-700 border-purple-200',
+      'Rent': 'bg-red-100 text-red-700 border-red-200',
+      'Salary': 'bg-indigo-100 text-indigo-700 border-indigo-200',
+    };
+    return colors[category] || 'bg-gray-100 text-gray-700 border-gray-200';
+  };
+
+  const formatDisplayDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden animate-fade-in">
-      <div className="p-6 border-b border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white sticky top-0 z-10">
-        <div>
-          <h2 className="text-xl font-bold text-gray-800">Expense Management</h2>
-          <p className="text-sm text-gray-500">Track clinic operating expenses and categories</p>
+    <div className="space-y-6">
+      {/* Header Section */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200/60 p-6">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
+              <div className="p-2 bg-gradient-to-br from-red-500 to-orange-500 rounded-xl">
+                <TrendingDown className="w-6 h-6 text-white" />
+              </div>
+              Expense Management
+            </h2>
+            <p className="mt-1 text-sm text-gray-500 ml-14">Track and analyze clinic operating expenses</p>
+          </div>
+          
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={handleDownloadPDF}
+              disabled={expenses.length === 0}
+              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-50 text-emerald-700 rounded-xl text-sm font-semibold hover:bg-emerald-100 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed border border-emerald-200"
+            >
+              <FileDown className="w-4 h-4" />
+              <span className="hidden sm:inline">Export PDF</span>
+            </button>
+            <button
+              onClick={handleDownloadCSV}
+              disabled={expenses.length === 0}
+              className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-100 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed border border-gray-200"
+            >
+              <FileText className="w-4 h-4" />
+              <span className="hidden sm:inline">Export CSV</span>
+            </button>
+            <button
+              onClick={onAdd}
+              className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl text-sm font-semibold hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-sm hover:shadow-md"
+            >
+              <Plus className="w-4 h-4" />
+              Add Expense
+            </button>
+          </div>
         </div>
-        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-          <div className="relative flex-1 sm:flex-initial">
+
+        {/* Search and Filter */}
+        <div className="mt-5 flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
             <input
               type="text"
-              placeholder="Search expenses..."
+              placeholder="Search by description, category, or date..."
               value={searchTerm}
               onChange={(e) => {
                 setSearchTerm(e.target.value);
                 setCurrentPage(1);
               }}
-              className="pl-10 pr-4 h-10 border border-gray-200 rounded-lg text-sm leading-10 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:w-64"
+              className="w-full pl-11 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
             />
-            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2">
-              <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </span>
+            <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
           </div>
           <select
             value={categoryFilter}
@@ -212,280 +263,375 @@ const ExpensesView: React.FC<ExpensesViewProps> = ({
               setCategoryFilter(e.target.value);
               setCurrentPage(1);
             }}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-white min-w-[180px]"
           >
-            <option value="all">All categories</option>
+            <option value="all">All Categories</option>
             {categories.map(category => (
               <option key={category} value={category}>{category}</option>
             ))}
           </select>
-          <button
-            onClick={handleDownloadPDF}
-            disabled={expenses.length === 0}
-            className="flex items-center justify-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <FileDown className="w-4 h-4" /> Export PDF
-          </button>
-          <button
-            onClick={handleDownloadCSV}
-            disabled={expenses.length === 0}
-            className="flex items-center justify-center gap-2 bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <FileText className="w-4 h-4" /> Export CSV
-          </button>
-          <button
-            onClick={onAdd}
-            className="flex items-center justify-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
-          >
-            <Plus className="w-4 h-4" /> Add Expense
-          </button>
         </div>
       </div>
 
+      {/* Summary Cards */}
       {!loading && hasFinancialData && (
-        <div className="p-6 border-b border-gray-100 bg-gray-50/50">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-white rounded-xl border border-gray-100 p-4 flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-indigo-100 text-indigo-600">
-                <FileText className="w-4 h-4" />
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-5 border border-blue-200/60">
+              <div className="flex items-center justify-between mb-3">
+                <div className="p-2 bg-white rounded-lg shadow-sm">
+                  <Calendar className="w-5 h-5 text-blue-600" />
+                </div>
+                <span className="text-xs font-semibold text-blue-600 bg-white px-2.5 py-1 rounded-full">Today</span>
               </div>
-              <div>
-                <p className="text-xs text-gray-500 uppercase tracking-widest">Today</p>
-                <p className="text-lg font-bold text-gray-900">{formatCurrency(dailyTotal, currency)}</p>
-              </div>
+              <p className="text-2xl font-bold text-gray-900">{formatCurrency(dailyTotal, currency)}</p>
+              <p className="text-xs text-gray-600 mt-1">Daily expenses</p>
             </div>
-            <div className="bg-white rounded-xl border border-gray-100 p-4 flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-amber-100 text-amber-600">
-                <FileText className="w-4 h-4" />
+
+            <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl p-5 border border-purple-200/60">
+              <div className="flex items-center justify-between mb-3">
+                <div className="p-2 bg-white rounded-lg shadow-sm">
+                  <Calendar className="w-5 h-5 text-purple-600" />
+                </div>
+                <span className="text-xs font-semibold text-purple-600 bg-white px-2.5 py-1 rounded-full">This Month</span>
               </div>
-              <div>
-                <p className="text-xs text-gray-500 uppercase tracking-widest">This Month</p>
-                <p className="text-lg font-bold text-gray-900">{formatCurrency(monthlyTotal, currency)}</p>
-              </div>
+              <p className="text-2xl font-bold text-gray-900">{formatCurrency(monthlyTotal, currency)}</p>
+              <p className="text-xs text-gray-600 mt-1">Monthly expenses</p>
             </div>
-            <div className="bg-white rounded-xl border border-gray-100 p-4 flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-emerald-100 text-emerald-600">
-                <FileText className="w-4 h-4" />
+
+            <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-2xl p-5 border border-orange-200/60">
+              <div className="flex items-center justify-between mb-3">
+                <div className="p-2 bg-white rounded-lg shadow-sm">
+                  <DollarSign className="w-5 h-5 text-orange-600" />
+                </div>
+                <span className="text-xs font-semibold text-orange-600 bg-white px-2.5 py-1 rounded-full">All Time</span>
               </div>
-              <div>
-                <p className="text-xs text-gray-500 uppercase tracking-widest">All Time</p>
-                <p className="text-lg font-bold text-gray-900">{formatCurrency(totalAll, currency)}</p>
+              <p className="text-2xl font-bold text-gray-900">{formatCurrency(totalAll, currency)}</p>
+              <p className="text-xs text-gray-600 mt-1">Total expenses</p>
+            </div>
+
+            <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-5 border border-gray-200/60">
+              <div className="flex items-center justify-between mb-3">
+                <div className="p-2 bg-white rounded-lg shadow-sm">
+                  <Tag className="w-5 h-5 text-gray-600" />
+                </div>
+                <span className="text-xs font-semibold text-gray-600 bg-white px-2.5 py-1 rounded-full">Count</span>
               </div>
+              <p className="text-2xl font-bold text-gray-900">{expenses.length}</p>
+              <p className="text-xs text-gray-600 mt-1">Total records</p>
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-            <div className="bg-white rounded-xl border border-gray-100 p-4">
-              <p className="text-xs text-gray-500 uppercase tracking-widest">Monthly Revenue</p>
-              <p className="text-lg font-bold text-gray-900 mt-2">{formatCurrency(monthlyRevenue, currency)}</p>
-              <p className="text-xs text-gray-500 mt-1">Treatments + medicine sales</p>
+
+          {/* Profit & Revenue Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-white rounded-2xl p-5 border border-gray-200/60 shadow-sm">
+              <div className="flex items-center gap-2 mb-2">
+                <TrendingUp className="w-4 h-4 text-emerald-600" />
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Monthly Revenue</p>
+              </div>
+              <p className="text-2xl font-bold text-gray-900">{formatCurrency(monthlyRevenue, currency)}</p>
+              <p className="text-xs text-gray-500 mt-1">Treatments + medicine</p>
             </div>
-            <div className="bg-white rounded-xl border border-gray-100 p-4">
-              <p className="text-xs text-gray-500 uppercase tracking-widest">Monthly Expenses</p>
-              <p className="text-lg font-bold text-gray-900 mt-2">{formatCurrency(monthlyTotal, currency)}</p>
+
+            <div className="bg-white rounded-2xl p-5 border border-gray-200/60 shadow-sm">
+              <div className="flex items-center gap-2 mb-2">
+                <TrendingDown className="w-4 h-4 text-red-600" />
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Monthly Expenses</p>
+              </div>
+              <p className="text-2xl font-bold text-gray-900">{formatCurrency(monthlyTotal, currency)}</p>
               <p className="text-xs text-gray-500 mt-1">Operating costs</p>
             </div>
-            <div className="bg-white rounded-xl border border-gray-100 p-4">
-              <p className="text-xs text-gray-500 uppercase tracking-widest">Monthly Profit</p>
-              <p className={`text-lg font-bold mt-2 ${monthlyProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+
+            <div className="bg-white rounded-2xl p-5 border border-gray-200/60 shadow-sm">
+              <div className="flex items-center gap-2 mb-2">
+                <DollarSign className={`w-4 h-4 ${monthlyProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`} />
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Net Profit</p>
+              </div>
+              <p className={`text-2xl font-bold ${monthlyProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                 {formatCurrency(monthlyProfit, currency)}
               </p>
-              <p className="text-xs text-gray-500 mt-1">Revenue - expenses</p>
+              <p className="text-xs text-gray-500 mt-1">Revenue minus expenses</p>
             </div>
           </div>
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-gray-500">
-            <div className="bg-white border border-gray-100 rounded-lg px-4 py-3">
-              Today: Revenue {formatCurrency(dailyRevenue, currency)} • Expenses {formatCurrency(dailyTotal, currency)} • Profit{' '}
-              <span className={dailyProfit >= 0 ? 'text-emerald-600 font-semibold' : 'text-red-600 font-semibold'}>
-                {formatCurrency(dailyProfit, currency)}
-              </span>
-            </div>
-            <div className="bg-white border border-gray-100 rounded-lg px-4 py-3">
-              This Week: Revenue {formatCurrency(weeklyRevenue, currency)} • Expenses {formatCurrency(weeklyTotal, currency)} • Profit{' '}
-              <span className={weeklyProfit >= 0 ? 'text-emerald-600 font-semibold' : 'text-red-600 font-semibold'}>
-                {formatCurrency(weeklyProfit, currency)}
-              </span>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-            <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="p-2 bg-indigo-100 rounded-lg">
-                  <BarChart3 className="w-4 h-4 text-indigo-600" />
+
+          {/* Charts */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-white rounded-2xl p-6 border border-gray-200/60 shadow-sm">
+              <div className="flex items-center gap-3 mb-5">
+                <div className="p-2 bg-blue-50 rounded-lg">
+                  <BarChart3 className="w-5 h-5 text-blue-600" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-gray-800">Monthly Spend</h3>
-                  <p className="text-xs text-gray-500">Last 6 months</p>
+                  <h3 className="text-base font-bold text-gray-900">Monthly Expenses Trend</h3>
+                  <p className="text-xs text-gray-500">Last 6 months breakdown</p>
                 </div>
               </div>
-              <div className="h-[220px] w-full">
+              <div className="h-[260px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={monthlyChartData} margin={{ left: 10, right: 10, top: 10, bottom: 0 }}>
+                  <BarChart data={monthlyChartData} margin={{ left: 10, right: 20, top: 10, bottom: 10 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                    <XAxis dataKey="label" tick={{ fill: '#6B7280', fontSize: 11 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fill: '#6B7280', fontSize: 11 }} axisLine={false} tickLine={false} />
-                    <Tooltip formatter={(value: number) => formatCurrency(value, currency)} />
-                    <Bar dataKey="total" fill="#6366F1" radius={[6, 6, 0, 0]} />
+                    <XAxis 
+                      dataKey="label" 
+                      tick={{ fill: '#6B7280', fontSize: 11 }} 
+                      axisLine={{ stroke: '#E5E7EB' }} 
+                      tickLine={false}
+                    />
+                    <YAxis 
+                      tick={{ fill: '#6B7280', fontSize: 11 }} 
+                      axisLine={{ stroke: '#E5E7EB' }} 
+                      tickLine={false}
+                      tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
+                    />
+                    <Tooltip 
+                      formatter={(value: number) => formatCurrency(value, currency)}
+                      contentStyle={{ 
+                        backgroundColor: '#fff',
+                        border: '1px solid #E5E7EB',
+                        borderRadius: '12px',
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                      }}
+                    />
+                    <Bar dataKey="total" radius={[8, 8, 0, 0]} maxBarSize={60}>
+                      {monthlyChartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.total > 0 ? '#3B82F6' : '#E5E7EB'} />
+                      ))}
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
-            <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="p-2 bg-amber-100 rounded-lg">
-                  <BarChart3 className="w-4 h-4 text-amber-600" />
+
+            <div className="bg-white rounded-2xl p-6 border border-gray-200/60 shadow-sm">
+              <div className="flex items-center gap-3 mb-5">
+                <div className="p-2 bg-orange-50 rounded-lg">
+                  <BarChart3 className="w-5 h-5 text-orange-600" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-gray-800">Top Categories</h3>
-                  <p className="text-xs text-gray-500">Highest expense categories</p>
+                  <h3 className="text-base font-bold text-gray-900">Top Expense Categories</h3>
+                  <p className="text-xs text-gray-500">Highest spending categories</p>
                 </div>
               </div>
-              <div className="h-[220px] w-full">
+              <div className="h-[260px]">
                 {categoryChartData.length === 0 ? (
                   <div className="h-full flex items-center justify-center text-gray-400 text-sm">
                     No category data available
                   </div>
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={categoryChartData} layout="vertical" margin={{ left: 60, right: 10, top: 10, bottom: 0 }}>
+                    <BarChart data={categoryChartData} layout="vertical" margin={{ left: 100, right: 20, top: 10, bottom: 10 }}>
                       <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#E5E7EB" />
-                      <XAxis type="number" hide />
-                      <YAxis type="category" dataKey="category" axisLine={false} tickLine={false} tick={{ fill: '#6B7280', fontSize: 11 }} width={90} />
-                      <Tooltip formatter={(value: number) => formatCurrency(value, currency)} />
-                      <Bar dataKey="total" fill="#F59E0B" radius={[0, 6, 6, 0]} barSize={18} />
+                      <XAxis 
+                        type="number" 
+                        hide
+                      />
+                      <YAxis 
+                        type="category" 
+                        dataKey="category" 
+                        axisLine={false} 
+                        tickLine={false} 
+                        tick={{ fill: '#374151', fontSize: 12, fontWeight: 500 }}
+                        width={90}
+                      />
+                      <Tooltip 
+                        formatter={(value: number) => formatCurrency(value, currency)}
+                        contentStyle={{ 
+                          backgroundColor: '#fff',
+                          border: '1px solid #E5E7EB',
+                          borderRadius: '12px',
+                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                        }}
+                      />
+                      <Bar dataKey="total" radius={[0, 8, 8, 0]} barSize={24}>
+                        {categoryChartData.map((entry, index) => {
+                          const colors = ['#3B82F6', '#8B5CF6', '#F59E0B', '#EF4444', '#10B981', '#6366F1'];
+                          return <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />;
+                        })}
+                      </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 )}
               </div>
             </div>
           </div>
-        </div>
+        </>
       )}
 
-      {loading ? (
-        <div className="p-12 flex justify-center">
-          <Loader2 className="animate-spin text-indigo-600" />
-        </div>
-      ) : (
-        <table className="w-full">
-          <thead className="bg-gray-50 border-b border-gray-100">
-            <tr>
-              <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Date</th>
-              <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Description</th>
-              <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Category</th>
-              <th className="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-widest">Amount</th>
-              <th className="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-widest">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {filteredExpenses.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-6 py-8 text-center text-gray-400 italic">
-                  No expenses found.
-                </td>
-              </tr>
-            ) : (
-              paginatedExpenses.map(expense => (
-                <tr key={expense.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4 text-sm text-gray-500">{expense.date}</td>
-                  <td className="px-6 py-4 text-sm font-semibold text-gray-900">{expense.description}</td>
-                  <td className="px-6 py-4 text-sm text-gray-700">
-                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">
-                      {expense.category}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-right text-sm font-bold text-gray-900">{formatCurrency(expense.amount, currency)}</td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => openDetailModal(expense)}
-                        className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                        title="View details"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => onEdit(expense)}
-                        className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                        title="Edit expense"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (confirm('Are you sure you want to delete this expense?')) {
-                            onDelete(expense.id);
-                          }
-                        }}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Delete expense"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+      {/* Expenses Table */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200/60 overflow-hidden">
+        {loading ? (
+          <div className="p-16 flex flex-col items-center justify-center">
+            <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+            <p className="mt-3 text-sm text-gray-500">Loading expenses...</p>
+          </div>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
+                  <tr>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Date</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Description</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Category</th>
+                    <th className="px-6 py-4 text-right text-xs font-bold text-gray-600 uppercase tracking-wider">Amount</th>
+                    <th className="px-6 py-4 text-right text-xs font-bold text-gray-600 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {filteredExpenses.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-16 text-center">
+                        <div className="flex flex-col items-center justify-center">
+                          <div className="p-4 bg-gray-50 rounded-full mb-3">
+                            <TrendingDown className="w-8 h-8 text-gray-400" />
+                          </div>
+                          <p className="text-gray-500 font-medium">No expenses found</p>
+                          <p className="text-sm text-gray-400 mt-1">Add your first expense to get started</p>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    paginatedExpenses.map(expense => (
+                      <tr key={expense.id} className="hover:bg-gray-50/80 transition-colors duration-150">
+                        <td className="px-6 py-4">
+                          <p className="text-sm text-gray-600 font-medium">{formatDisplayDate(expense.date)}</p>
+                        </td>
+                        <td className="px-6 py-4">
+                          <p className="text-sm font-semibold text-gray-900 max-w-md truncate">{expense.description}</p>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold border ${getCategoryColor(expense.category)}`}>
+                            {expense.category || 'Uncategorized'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <p className="text-base font-bold text-gray-900">{formatCurrency(expense.amount, currency)}</p>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => openDetailModal(expense)}
+                              className="p-2 text-gray-600 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-all duration-150"
+                              title="View details"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => onEdit(expense)}
+                              className="p-2 text-gray-600 hover:bg-emerald-50 hover:text-emerald-600 rounded-lg transition-all duration-150"
+                              title="Edit expense"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (confirm('Are you sure you want to delete this expense?')) {
+                                  onDelete(expense.id);
+                                }
+                              }}
+                              className="p-2 text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-all duration-150"
+                              title="Delete expense"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {!showAll && filteredExpenses.length > itemsPerPage && (
+              <Pagination
+                totalItems={filteredExpenses.length}
+                itemsPerPage={itemsPerPage}
+                currentPage={currentPage}
+                onPageChange={setCurrentPage}
+                showAll={showAll}
+                onToggleShowAll={() => setShowAll(!showAll)}
+              />
             )}
-          </tbody>
-        </table>
-      )}
+          </>
+        )}
+      </div>
 
-      {!loading && filteredExpenses.length > 0 && (
-        <Pagination
-          totalItems={filteredExpenses.length}
-          itemsPerPage={itemsPerPage}
-          currentPage={currentPage}
-          onPageChange={setCurrentPage}
-          showAll={showAll}
-          onToggleShowAll={() => setShowAll(!showAll)}
-        />
-      )}
-
+      {/* Detail Modal */}
       {showDetailModal && selectedExpense && (
         <Modal title="Expense Details" onClose={closeDetailModal}>
-          <div className="space-y-4">
-            <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
-              <p className="text-xs text-gray-500 uppercase tracking-widest">Description</p>
-              <p className="mt-1 text-base font-semibold text-gray-900">{selectedExpense.description}</p>
+          <div className="space-y-5">
+            {/* Description */}
+            <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-2xl p-5">
+              <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-2">Description</p>
+              <p className="text-base font-bold text-gray-900">{selectedExpense.description}</p>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="bg-white border border-gray-100 rounded-2xl p-4">
-                <p className="text-xs text-gray-500 uppercase tracking-widest">Date</p>
-                <p className="mt-1 text-sm font-semibold text-gray-900">{selectedExpense.date}</p>
+
+            {/* Main Details Grid */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Calendar className="w-4 h-4 text-gray-500" />
+                  <p className="text-xs font-semibold text-gray-600 uppercase">Date</p>
+                </div>
+                <p className="text-sm font-bold text-gray-900 mt-1">{formatDisplayDate(selectedExpense.date)}</p>
               </div>
-              <div className="bg-white border border-gray-100 rounded-2xl p-4">
-                <p className="text-xs text-gray-500 uppercase tracking-widest">Category</p>
-                <p className="mt-1 text-sm font-semibold text-gray-900">{selectedExpense.category || 'Uncategorized'}</p>
+
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Tag className="w-4 h-4 text-gray-500" />
+                  <p className="text-xs font-semibold text-gray-600 uppercase">Category</p>
+                </div>
+                <p className="text-sm font-bold text-gray-900 mt-1">{selectedExpense.category || 'Uncategorized'}</p>
               </div>
-              <div className="bg-white border border-gray-100 rounded-2xl p-4">
-                <p className="text-xs text-gray-500 uppercase tracking-widest">Amount</p>
-                <p className="mt-1 text-sm font-semibold text-gray-900">{formatCurrency(selectedExpense.amount || 0, currency)}</p>
+
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <DollarSign className="w-4 h-4 text-gray-500" />
+                  <p className="text-xs font-semibold text-gray-600 uppercase">Amount</p>
+                </div>
+                <p className="text-lg font-bold text-gray-900 mt-1">{formatCurrency(selectedExpense.amount || 0, currency)}</p>
               </div>
-              <div className="bg-white border border-gray-100 rounded-2xl p-4">
-                <p className="text-xs text-gray-500 uppercase tracking-widest">Location ID</p>
-                <p className="mt-1 text-sm font-semibold text-gray-900">{selectedExpense.location_id}</p>
+
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                <p className="text-xs font-semibold text-gray-600 uppercase mb-2">Location</p>
+                <p className="text-xs font-mono font-bold text-gray-900 break-all">{selectedExpense.location_id}</p>
               </div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="bg-white border border-gray-100 rounded-2xl p-4">
-                <p className="text-xs text-gray-500 uppercase tracking-widest">Expense ID</p>
-                <p className="mt-1 text-xs font-semibold text-gray-700 break-all">{selectedExpense.id}</p>
+
+            {/* Metadata */}
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3">
+              <div>
+                <p className="text-xs font-semibold text-gray-600 uppercase mb-1">Expense ID</p>
+                <p className="text-xs font-mono text-gray-700 break-all">{selectedExpense.id}</p>
               </div>
-              <div className="bg-white border border-gray-100 rounded-2xl p-4">
-                <p className="text-xs text-gray-500 uppercase tracking-widest">Created At</p>
-                <p className="mt-1 text-xs font-semibold text-gray-700">{selectedExpense.created_at || 'N/A'}</p>
-              </div>
-              <div className="bg-white border border-gray-100 rounded-2xl p-4">
-                <p className="text-xs text-gray-500 uppercase tracking-widest">Updated At</p>
-                <p className="mt-1 text-xs font-semibold text-gray-700">{selectedExpense.updated_at || 'N/A'}</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-xs font-semibold text-gray-600 uppercase mb-1">Created</p>
+                  <p className="text-xs text-gray-700">{selectedExpense.created_at ? new Date(selectedExpense.created_at).toLocaleString() : 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-600 uppercase mb-1">Updated</p>
+                  <p className="text-xs text-gray-700">{selectedExpense.updated_at ? new Date(selectedExpense.updated_at).toLocaleString() : 'N/A'}</p>
+                </div>
               </div>
             </div>
-            <div className="flex justify-end">
+
+            {/* Actions */}
+            <div className="flex justify-end gap-3 pt-2">
               <button
                 onClick={closeDetailModal}
-                className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-800 transition-colors"
+                className="px-5 py-2.5 bg-gray-100 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-200 transition-all duration-150"
               >
                 Close
+              </button>
+              <button
+                onClick={() => {
+                  closeDetailModal();
+                  onEdit(selectedExpense);
+                }}
+                className="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-all duration-150"
+              >
+                Edit Expense
               </button>
             </div>
           </div>
