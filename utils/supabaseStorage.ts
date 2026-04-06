@@ -23,10 +23,29 @@ export const isSupabaseStorageReady = (
 };
 
 /**
- * Normalize Supabase Storage base URL
+ * Normalize Supabase Storage base URL.
+ * - Strips trailing slashes
+ * - Forces HTTPS (required when the app is served over HTTPS — browsers block
+ *   mixed HTTP/HTTPS requests and the self-hosted Supabase may return HTTP URLs)
  */
 export const normalizeSupabaseStorageUrl = (rawUrl: string) =>
-  rawUrl.trim().replace(/\/+$/, '');
+  rawUrl
+    .trim()
+    .replace(/\/+$/, '')              // strip trailing slashes
+    .replace(/^http:\/\//i, 'https://'); // force HTTPS
+
+/**
+ * Convert any URL (potentially HTTP + non-standard port from the self-hosted
+ * Supabase server) into the public HTTPS URL that goes through Cloudflare.
+ *
+ * Example:
+ *   http://s3api.example.com:54321/storage/v1/upload/resumable/abc
+ *   → https://s3api.example.com/storage/v1/upload/resumable/abc
+ */
+const toPublicHttpsUrl = (url: string): string =>
+  url
+    .replace(/^http:\/\//i, 'https://')            // http → https
+    .replace(/^(https:\/\/[^/:]+):\d+(\/)/i, '$1$2'); // strip non-standard port
 
 /**
  * Build public file URL for Supabase Storage
@@ -139,23 +158,28 @@ export const listSupabaseStorageFiles = async (
 
 /**
  * Upload a file to the self-hosted Supabase Storage using TUS resumable
- * chunked uploads.  Every chunk is kept well below 90 MB so it safely
- * passes through Cloudflare (100 MB per-request hard limit).
+ * chunked uploads.
  *
- * IMPORTANT: uploadDataDuringCreation must be FALSE.
- *   With it set to true the self-hosted Supabase treats the initial POST
- *   (which carries the first chunk) as a *completed* upload, so any file
- *   larger than one chunk (6 MB) silently stops after the first piece.
- *   With it set to false, the POST only registers the upload slot and ALL
- *   data — including the first chunk — flows through PATCH requests, which
- *   is the correct standard TUS flow.
+ * ## Why we do the TUS creation POST ourselves
  *
- * Other features:
- *  - 6 MB chunk size (smallest valid Supabase TUS chunk)
- *  - Auto-resume if the browser tab reloads mid-upload
+ * When we let tus-js-client do the initial POST, the self-hosted Supabase
+ * responds with a `Location` header that contains the server's *internal*
+ * HTTP URL (e.g. `http://host:54321/storage/v1/upload/resumable/<id>`).
+ * tus-js-client then tries to send PATCH requests to that HTTP URL — which
+ * the browser immediately blocks with a Mixed Content error because the
+ * app is served over HTTPS.
+ *
+ * Fix: we do the POST ourselves, grab the `Location` header, rewrite it to
+ * HTTPS and strip the non-standard port, then hand the clean URL to
+ * tus-js-client via the `uploadUrl` option.  With `uploadUrl` set, tus-js-
+ * client skips its own POST entirely and goes straight to PATCH requests
+ * against the URL we provide — which is the correct public HTTPS URL.
+ *
+ * Features:
+ *  - 6 MB chunk size (smallest valid Supabase TUS chunk; good for slow links)
  *  - Exponential-backoff retry on transient network errors
  *  - Abort on storage-settings change via `shouldAbort`
- *  - Progress reporting via `onProgress`
+ *  - Progress and chunk-complete callbacks
  */
 export const uploadSupabaseStorageFile = async (
   settings: SupabaseStorageSettings,
@@ -171,53 +195,86 @@ export const uploadSupabaseStorageFile = async (
 ): Promise<void> => {
   const storageUrl = normalizeSupabaseStorageUrl(settings.storageUrl);
   const bucket = settings.bucket;
-
-  // Supabase Storage TUS endpoint on the self-hosted instance
   const tusEndpoint = `${storageUrl}/storage/v1/upload/resumable`;
-
   const chunkSize = chooseTusChunkSize(file.size);
 
   console.log(
-    `[Supabase Storage TUS] Uploading "${file.name}" ` +
-      `(${(file.size / 1024 / 1024).toFixed(2)} MB) ` +
-      `via TUS chunks of ${(chunkSize / 1024 / 1024).toFixed(0)} MB ` +
-      `→ ${tusEndpoint}`
+    `[Supabase Storage TUS] Starting upload "${file.name}" ` +
+    `(${(file.size / 1024 / 1024).toFixed(2)} MB, ` +
+    `${(chunkSize / 1024 / 1024).toFixed(0)} MB chunks)`
   );
 
+  // ── Step 1: Create the TUS upload slot ─────────────────────────────────────
+  // We do this with our own fetch() so that we can intercept and fix the
+  // Location header before tus-js-client ever sees it.
+  const metadataHeader = [
+    `bucketName ${btoa(bucket)}`,
+    `objectName ${btoa(key)}`,
+    `contentType ${btoa(file.type || 'application/octet-stream')}`,
+    `cacheControl ${btoa('3600')}`
+  ].join(',');
+
+  const createResp = await fetch(tusEndpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Length': '0',
+      'Upload-Length': String(file.size),
+      'Tus-Resumable': '1.0.0',
+      'Upload-Metadata': metadataHeader,
+      apikey: settings.anonKey,
+      Authorization: `Bearer ${settings.anonKey}`,
+      'x-upsert': 'true'
+    }
+  });
+
+  if (createResp.status !== 201) {
+    const body = await createResp.text().catch(() => '');
+    throw new Error(
+      `TUS upload creation failed (${createResp.status}): ${body.substring(0, 300)}`
+    );
+  }
+
+  // ── Step 2: Normalise the Location URL to public HTTPS ─────────────────────
+  // The self-hosted server returns its internal HTTP URL with port, e.g.:
+  //   http://s3api.example.com:54321/storage/v1/upload/resumable/<id>
+  // We must rewrite it to HTTPS without the port so it routes through
+  // the Cloudflare tunnel — otherwise the browser blocks it (mixed content).
+  const rawLocation = createResp.headers.get('Location') ?? '';
+  if (!rawLocation) {
+    throw new Error(
+      'Supabase TUS server did not return a Location header after upload creation.'
+    );
+  }
+  const uploadUrl = toPublicHttpsUrl(rawLocation);
+
+  console.log(
+    `[Supabase Storage TUS] Upload slot created.\n` +
+    `  Raw Location : ${rawLocation}\n` +
+    `  Public HTTPS : ${uploadUrl}`
+  );
+
+  // ── Step 3: Stream all chunks via tus-js-client PATCH requests ─────────────
+  // Because we supply uploadUrl, tus-js-client skips its own POST and uses
+  // our pre-created, HTTPS-normalised URL for every PATCH request.
   await new Promise<void>((resolve, reject) => {
     let aborted = false;
 
     const upload = new tus.Upload(file, {
-      endpoint: tusEndpoint,
+      uploadUrl,   // ← pre-created & HTTPS-normalised; no POST from tus
       chunkSize,
-      // Exponential back-off: 0 s, 2 s, 4 s, 8 s, 16 s, 32 s, 60 s, 60 s …
       retryDelays: [0, 2000, 4000, 8000, 16000, 32000, 60000, 60000],
       headers: {
         apikey: settings.anonKey,
-        Authorization: `Bearer ${settings.anonKey}`,
-        'x-upsert': 'true'
+        Authorization: `Bearer ${settings.anonKey}`
       },
-      // Must be false — see the JSDoc above for a full explanation.
-      uploadDataDuringCreation: false,
       removeFingerprintOnSuccess: true,
-      metadata: {
-        bucketName: bucket,
-        objectName: key,
-        contentType: file.type || 'application/octet-stream',
-        cacheControl: '3600'
-      },
 
       onProgress: (bytesUploaded, bytesTotal) => {
-        // Honour abort requests triggered by settings changes
         if (shouldAbort && shouldAbort() && !aborted) {
           aborted = true;
-          upload.abort(true).finally(() => {
-            reject(
-              new Error(
-                'Storage settings changed during upload. Please retry.'
-              )
-            );
-          });
+          upload.abort(true).finally(() =>
+            reject(new Error('Storage settings changed during upload. Please retry.'))
+          );
           return;
         }
         if (onProgress) onProgress(bytesUploaded, bytesTotal);
@@ -226,30 +283,22 @@ export const uploadSupabaseStorageFile = async (
       onChunkComplete: (chunkSz, bytesAccepted, bytesTotal) => {
         if (shouldAbort && shouldAbort() && !aborted) {
           aborted = true;
-          upload.abort(true).finally(() => {
-            reject(
-              new Error(
-                'Storage settings changed during upload. Please retry.'
-              )
-            );
-          });
+          upload.abort(true).finally(() =>
+            reject(new Error('Storage settings changed during upload. Please retry.'))
+          );
           return;
         }
         console.log(
           `[Supabase Storage TUS] Chunk done – ` +
-            `${(bytesAccepted / 1024 / 1024).toFixed(1)} / ` +
-            `${(bytesTotal / 1024 / 1024).toFixed(1)} MB`
+          `${(bytesAccepted / 1024 / 1024).toFixed(1)} / ` +
+          `${(bytesTotal / 1024 / 1024).toFixed(1)} MB`
         );
         if (_onChunkComplete) _onChunkComplete(chunkSz, bytesAccepted, bytesTotal);
       },
 
       onSuccess: () => {
         if (shouldAbort && shouldAbort()) {
-          reject(
-            new Error(
-              'Storage settings changed during upload. Please retry.'
-            )
-          );
+          reject(new Error('Storage settings changed during upload. Please retry.'));
           return;
         }
         console.log(`[Supabase Storage TUS] Upload complete: "${key}"`);
@@ -262,60 +311,24 @@ export const uploadSupabaseStorageFile = async (
         console.error('[Supabase Storage TUS] Upload error:', msg);
 
         if (msg.includes('413') || msg.toLowerCase().includes('too large')) {
-          reject(
-            new Error(
-              'File chunk rejected as too large. The server or proxy limit may be lower than expected.'
-            )
-          );
-        } else if (
-          msg.includes('timeout') ||
-          msg.toLowerCase().includes('network')
-        ) {
-          reject(
-            new Error(
-              'Network timeout during upload. Please check your connection and try again.'
-            )
-          );
-        } else if (
-          msg.includes('403') ||
-          msg.toLowerCase().includes('permission')
-        ) {
-          reject(
-            new Error(
-              'Permission denied. Please check your storage bucket policies and keys.'
-            )
-          );
+          reject(new Error('File chunk rejected as too large.'));
+        } else if (msg.includes('timeout') || msg.toLowerCase().includes('network')) {
+          reject(new Error('Network timeout. Please check your connection and try again.'));
+        } else if (msg.includes('403') || msg.toLowerCase().includes('permission')) {
+          reject(new Error('Permission denied. Please check your storage bucket policies and keys.'));
         } else {
           reject(new Error(`Upload failed: ${msg}`));
         }
       }
     });
 
-    // Resume any previous interrupted upload automatically
-    upload
-      .findPreviousUploads()
-      .then((previous) => {
-        if (previous.length > 0) {
-          console.log(
-            `[Supabase Storage TUS] Resuming previous upload for "${key}"`
-          );
-          upload.resumeFromPreviousUpload(previous[0]);
-        }
-        upload.start();
-      })
-      .catch((err) => {
-        console.warn(
-          '[Supabase Storage TUS] Could not check for previous uploads:',
-          err
-        );
-        upload.start();
-      });
+    upload.start();
   });
 };
 
 /**
  * Delete file from Supabase Storage
- * Uses Supabase REST API (DELETE /storage/v1/object/{bucket}/{keys})
+ * Uses Supabase REST API (DELETE /storage/v1/object/{bucket})
  */
 export const deleteSupabaseStorageFile = async (
   settings: SupabaseStorageSettings,
