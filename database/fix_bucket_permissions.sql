@@ -53,7 +53,7 @@ SELECT
   id,
   bucket_id,
   name as file_path,
-  size,
+  metadata,
   created_at
 FROM storage.objects
 WHERE bucket_id = 'patient_files'
