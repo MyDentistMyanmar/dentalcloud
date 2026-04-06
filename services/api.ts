@@ -1773,6 +1773,30 @@ export const api = {
     ): Promise<PatientFile> => {
       const path = `${patientId}/${Date.now()}-${file.name}`;
       const startVersion = storageConfigVersion;
+
+      // Check Supabase Storage first
+      const supabaseStorage = await resolveActiveSupabaseStorage();
+      if (supabaseStorage) {
+        // Use simple upload for Supabase Storage REST API (no TUS support yet)
+        await uploadSupabaseStorageFile(
+          supabaseStorage,
+          path,
+          file,
+          onProgress,
+          onChunkComplete,
+          () => storageConfigVersion !== startVersion
+        );
+        return {
+          path,
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          uploaded_at: new Date().toISOString(),
+          url: buildSupabasePublicUrl(supabaseStorage.storageUrl, supabaseStorage.bucket, path)
+        };
+      }
+
+      // Check S3 settings second
       const s3Settings = await resolveActiveS3Settings();
       if (s3Settings) {
         await uploadS3Object(
@@ -1790,7 +1814,9 @@ export const api = {
           size: file.size,
           type: file.type,
           uploaded_at: new Date().toISOString(),
-          url: buildS3FileUrl(baseUrl, path)
+          url: isSupabaseS3Endpoint(baseUrl)
+            ? buildSupabaseS3PublicUrl(baseUrl, path)
+            : buildS3FileUrl(baseUrl, path)
         };
       }
 
