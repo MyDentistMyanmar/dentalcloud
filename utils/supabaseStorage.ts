@@ -323,7 +323,7 @@ export const deleteSupabaseStorageFile = async (
       apikey: settings.anonKey,
       Authorization: `Bearer ${settings.anonKey}`
     },
-    body: JSON.stringify([key])
+    body: JSON.stringify({ prefixes: [key] })
   });
 
   if (!response.ok) {
