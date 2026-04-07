@@ -2,6 +2,7 @@ import React from 'react';
 import { X, Printer } from 'lucide-react';
 import { Patient, ClinicalRecord } from '../types';
 import { formatCurrency, Currency } from '../utils/currency';
+import { formatTeethWithPosition } from '../utils/toothNumbering';
 
 interface ReceiptProps {
   patient: Patient;
@@ -114,8 +115,8 @@ const Receipt: React.FC<ReceiptProps> = ({ patient, treatments, paymentAmount, c
                       </td>
                       <td className="py-3 px-4 text-sm text-gray-900 font-medium">{treatment.description}</td>
                       <td className="py-3 px-4 text-sm text-gray-600">
-                        {treatment.teeth && treatment.teeth.length > 0 
-                          ? treatment.teeth.join(', ') 
+                        {treatment.teeth && treatment.teeth.length > 0
+                          ? formatTeethWithPosition(treatment.teeth)
                           : 'General'}
                       </td>
                       <td className="py-3 px-4 text-sm text-gray-900 text-right font-semibold">
@@ -254,8 +255,8 @@ const Receipt: React.FC<ReceiptProps> = ({ patient, treatments, paymentAmount, c
                       </td>
                       <td className="py-3 px-4 text-sm text-gray-900 font-medium" style={{ padding: '12px 16px' }}>{treatment.description}</td>
                       <td className="py-3 px-4 text-sm text-gray-600" style={{ padding: '12px 16px' }}>
-                        {treatment.teeth && treatment.teeth.length > 0 
-                          ? treatment.teeth.join(', ') 
+                        {treatment.teeth && treatment.teeth.length > 0
+                          ? formatTeethWithPosition(treatment.teeth)
                           : 'General'}
                       </td>
                       <td className="py-3 px-4 text-sm text-gray-900 text-right font-semibold" style={{ padding: '12px 16px' }}>

@@ -7,6 +7,7 @@ import { Patient, Appointment, ClinicalRecord, Doctor, PatientFile } from '../ty
 import { Modal, Input } from './Shared';
 import Receipt from './Receipt';
 import PatientMessagingView from './PatientMessagingView';
+import { formatTeethWithPosition } from '../utils/toothNumbering';
 
 interface PatientDashboardProps {
   onLogout: () => void;
@@ -687,7 +688,7 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ onLogout, messaging
                         </p>
                         {record.teeth && record.teeth.length > 0 && (
                           <p className="text-xs text-gray-500 mb-2">
-                            Teeth: {record.teeth.join(', ')}
+                            Teeth: {formatTeethWithPosition(record.teeth)}
                           </p>
                         )}
                         <div className="mt-3 pt-3 border-t border-gray-100">
@@ -1202,7 +1203,7 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ onLogout, messaging
               {selectedTreatmentDetails.teeth && selectedTreatmentDetails.teeth.length > 0 && (
                 <div className="bg-gray-50 rounded-xl p-4">
                   <h4 className="font-medium text-gray-700 mb-2">Teeth Treated</h4>
-                  <p className="text-gray-900">{selectedTreatmentDetails.teeth.join(', ')}</p>
+                  <p className="text-gray-900">{formatTeethWithPosition(selectedTreatmentDetails.teeth)}</p>
                 </div>
               )}
               

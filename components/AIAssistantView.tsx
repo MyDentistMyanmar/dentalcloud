@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm';
 import { Patient, ClinicalRecord, Appointment, Doctor, TreatmentType, User as UserType, Medicine, Expense, Recall, Location } from '../types';
 import { api } from '../services/api';
 import { Currency } from '../utils/currency';
+import { formatTeethWithPosition } from '../utils/toothNumbering';
 import { buildFinancialReport, renderFinancialReportMarkdown, buildInsightsNoNumbers, runReportUpgradeCheck, buildAIReportPayload, payloadToReport, validateAIReportPayload, AIReportPayload } from '../utils/aiReport';
 import {
   AssistantMemoryProfile,
@@ -4402,8 +4403,8 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                 if (history.length === 0) {
                   currentActionResult = `📜 No treatment history found for ${pName}.`;
                 } else {
-                  currentActionResult = `📜 Treatment History for ${pName}:\n\n${history.map(tr => 
-                    `• ${tr.date}: ${tr.description} (${tr.cost} MMK)${tr.teeth ? ` - Teeth: ${tr.teeth.join(', ')}` : ''}`
+                  currentActionResult = `📜 Treatment History for ${pName}:\n\n${history.map(tr =>
+                    `• ${tr.date}: ${tr.description} (${tr.cost} MMK)${tr.teeth ? ` - Teeth: ${formatTeethWithPosition(tr.teeth)}` : ''}`
                   ).join('\n')}`;
                 }
               } catch (err: any) {

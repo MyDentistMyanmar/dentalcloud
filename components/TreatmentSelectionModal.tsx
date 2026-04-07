@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Check } from 'lucide-react';
 import { ClinicalRecord } from '../types';
 import { formatCurrency, Currency } from '../utils/currency';
+import { formatTeethWithPosition } from '../utils/toothNumbering';
 
 interface TreatmentSelectionModalProps {
   treatments: ClinicalRecord[];
@@ -129,7 +130,7 @@ const TreatmentSelectionModal: React.FC<TreatmentSelectionModalProps> = ({
                             })}
                           </span>
                           {treatment.teeth && treatment.teeth.length > 0 && (
-                            <span>Teeth: {treatment.teeth.join(', ')}</span>
+                            <span>Teeth: {formatTeethWithPosition(treatment.teeth)}</span>
                           )}
                         </div>
                       </div>

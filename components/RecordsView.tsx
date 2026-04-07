@@ -3,6 +3,7 @@ import { Activity, Loader2, Download, Trash2, FileDown } from 'lucide-react';
 import { ClinicalRecord } from '../types';
 import { formatCurrency, Currency } from '../utils/currency';
 import { exportClinicalRecordsToPDF } from '../utils/pdfExport';
+import { formatTeethWithPosition } from '../utils/toothNumbering';
 import Pagination from './Pagination';
 
 interface RecordsViewProps {
@@ -140,9 +141,9 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, loading, onRefresh, 
                 <td className="px-6 py-4 text-sm text-gray-700">{rec.description}</td>
                 <td className="px-6 py-4 text-xs font-mono text-gray-500">
                   {rec.teeth && rec.teeth.length > 0 ? (
-                    <div className="flex gap-1 flex-wrap">
-                      {rec.teeth.map(t => <span key={t} className="bg-gray-100 px-1 rounded">{t}</span>)}
-                    </div>
+                    <span className="text-xs bg-gray-100 px-1.5 py-0.5 rounded leading-relaxed">
+                      {formatTeethWithPosition(rec.teeth)}
+                    </span>
                   ) : 'Gen.'}
                 </td>
                 <td className="px-6 py-4 text-right text-sm font-black text-gray-900">{formatCurrency(rec.cost || 0, currency)}</td>

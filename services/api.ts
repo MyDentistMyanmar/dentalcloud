@@ -6,6 +6,7 @@ import { resolveAllowedTabs } from '../utils/permissions';
 import { loadEmailSettings } from '../utils/emailSettings';
 import { buildS3FileUrl, buildSupabaseS3Url, buildSupabaseS3PublicUrl, deleteS3Object, isSupabaseS3Endpoint, isS3SettingsReady, listS3Objects, normalizeS3BaseUrl, uploadS3Object } from '../utils/s3Storage';
 import { buildSupabasePublicUrl, deleteSupabaseStorageFile, isSupabaseStorageReady, listSupabaseStorageFiles, normalizeSupabaseStorageUrl, uploadSupabaseStorageFile } from '../utils/supabaseStorage';
+import { findInvalidTeeth } from '../utils/toothNumbering';
 
 let usersAllowedTabsSupport: boolean | null = null;
 let storageConfigVersion = 0;
@@ -1042,34 +1043,21 @@ export const api = {
     },
     record: async (data: { 
       location_id: string; 
-      patient_id: string; 
+      patient_id: string;
       doctor_id?: string;
-      teeth: number[]; 
-      description: string; 
+      teeth: number[];
+      description: string;
       cost: number;
-      medications?: { id: string; qty: number }[] 
+      medications?: { id: string; qty: number }[]
     }) => {
       if (!data.location_id) throw new Error('location_id is required');
-      
-      // 1. Validate Tooth Numbers
-      // Supports:
-      // - Universal permanent teeth: 1-32
-      // - FDI primary teeth: 51-85 (used by react-teeth-selector for baby teeth)
-      const isValidToothNumber = (t: number) => {
-        const isUniversalPermanent = t >= 1 && t <= 32;
-        const isFDIPrimary =
-          (t >= 51 && t <= 55) ||
-          (t >= 61 && t <= 65) ||
-          (t >= 71 && t <= 75) ||
-          (t >= 81 && t <= 85);
 
-        return isUniversalPermanent || isFDIPrimary;
-      };
-
+      // 1. Validate Tooth Numbers using centralized utility
+      // Supports FDI/ISO permanent (11-48) and FDI primary (51-85)
       if (data.teeth && data.teeth.length > 0) {
-        const invalidTeeth = data.teeth.filter(t => !isValidToothNumber(t));
+        const invalidTeeth = findInvalidTeeth(data.teeth);
         if (invalidTeeth.length > 0) {
-          throw new Error(`Invalid tooth numbers: ${invalidTeeth.join(', ')}. Must be Universal 1-32 or primary 51-85.`);
+          throw new Error(`Invalid tooth numbers: ${invalidTeeth.join(', ')}. Must be FDI/ISO permanent (11-48) or primary (51-85).`);
         }
       }
 

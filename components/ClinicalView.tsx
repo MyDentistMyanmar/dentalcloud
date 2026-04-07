@@ -3,6 +3,7 @@ import { User, X, Upload, Trash2, FileText, Receipt as ReceiptIcon, Package, Rot
 import { ToothSelector } from './ToothSelector';
 import { Patient, TreatmentType, ClinicalRecord, PatientFile, LoyaltyTransaction, LoyaltyRule, Doctor } from '../types';
 import { formatCurrency, getCurrencySymbol, Currency } from '../utils/currency';
+import { formatTeethWithPosition } from '../utils/toothNumbering';
 import { Modal, Input } from './Shared';
 
 export interface UploadProgress {
@@ -133,34 +134,6 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
     const sizes = ['B', 'KB', 'MB', 'GB'];
     const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), sizes.length - 1);
     return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${sizes[i]}`;
-  };
-
-  const getToothPosition = (tooth: number) => {
-    // Universal permanent numbering (1-32)
-    if (tooth >= 1 && tooth <= 8) return 'Upper Right';
-    if (tooth >= 9 && tooth <= 16) return 'Upper Left';
-    if (tooth >= 17 && tooth <= 24) return 'Lower Left';
-    if (tooth >= 25 && tooth <= 32) return 'Lower Right';
-
-    // FDI permanent numbering (11-48)
-    const quadrant = Math.floor(tooth / 10);
-    if (quadrant === 1) return 'Upper Right';
-    if (quadrant === 2) return 'Upper Left';
-    if (quadrant === 3) return 'Lower Left';
-    if (quadrant === 4) return 'Lower Right';
-
-    // FDI primary numbering (51-85)
-    if (quadrant === 5) return 'Upper Right';
-    if (quadrant === 6) return 'Upper Left';
-    if (quadrant === 7) return 'Lower Left';
-    if (quadrant === 8) return 'Lower Right';
-
-    return 'Unknown Position';
-  };
-
-  const formatTeethWithPosition = (teeth: number[]) => {
-    if (!teeth || teeth.length === 0) return 'General';
-    return teeth.map((tooth) => `${tooth} (${getToothPosition(tooth)})`).join(', ');
   };
 
   const formatDoctorName = (name?: string) => {

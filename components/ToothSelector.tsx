@@ -1,5 +1,12 @@
 import React, { useMemo } from 'react';
 import { TeethDiagram } from 'react-teeth-selector';
+import { 
+  normalizeToFDI, 
+  normalizeToUniversal, 
+  isValidFDIPrimary,
+  isValidFDIPermanent,
+  isValidUniversalPermanent
+} from '../utils/toothNumbering';
 
 interface SelectorProps {
   selectedTeeth: number[];
@@ -7,34 +14,18 @@ interface SelectorProps {
   onDeselectAll: () => void;
 }
 
-// Mapping between Universal (1-32) and FDI/ISO permanent dentition numbering (11-48)
-const universalToISO = (n: number): number => {
-  if (n >= 1 && n <= 8) return 19 - n;
-  if (n >= 9 && n <= 16) return n + 12;
-  if (n >= 17 && n <= 24) return 55 - n;
-  if (n >= 25 && n <= 32) return n + 16;
-  return n;
-};
-
-const isoToUniversal = (n: number): number => {
-  if (n >= 11 && n <= 18) return 19 - n;
-  if (n >= 21 && n <= 28) return n - 12;
-  if (n >= 31 && n <= 38) return 55 - n;
-  if (n >= 41 && n <= 48) return n - 16;
-  return n;
-};
-
 export const ToothSelector: React.FC<SelectorProps> = ({ selectedTeeth, onToggleTooth, onDeselectAll }) => {
-  // react-teeth-selector emits FDI-style IDs from the SVG (11-48 permanent, 51-85 primary)
-  // Our app stores Universal numbering (1-32), so convert between systems.
-  const USE_ISO_CONVERSION = true;
-  
-  // Convert array of universal tooth numbers to ISO object map format (if needed)
+  // The app stores teeth in FDI/ISO format (11-48 permanent, 51-85 primary)
+  // react-teeth-selector emits FDI-style IDs from the SVG
+  // No conversion needed - we work natively in FDI/ISO
+
+  // Convert array of tooth numbers to the map format expected by the library
   const selectedTeethMap = useMemo(() => {
     const map: { [key: string]: boolean } = {};
     selectedTeeth.forEach(toothId => {
-      const displayId = USE_ISO_CONVERSION ? universalToISO(toothId) : toothId;
-      // The library might require 'tooth-' prefix for internal key matching
+      // Normalize to FDI/ISO for display
+      const displayId = normalizeToFDI(toothId);
+      // The library requires 'tooth-' prefix for internal key matching
       map[`tooth-${displayId}`] = true;
     });
     return map;
@@ -42,21 +33,23 @@ export const ToothSelector: React.FC<SelectorProps> = ({ selectedTeeth, onToggle
 
   // Handle tooth click/toggle from react-teeth-selector
   const handleTeethChange = (newMap: any, info: any) => {
-    // Prefer the raw numeric FDI tooth number from the library callback.
-    // `id` may be like "tooth-65" (primary tooth), which breaks backend validation (1-32).
+    // Get the raw numeric FDI tooth number from the library callback.
+    // `id` may be like "tooth-65" (primary tooth)
     const rawId = info?.number ?? info?.id ?? info;
-    
+
     if (rawId != null) {
       // Parse the ID to a number (supports both "65" and "tooth-65")
       const cleanId = rawId.toString().replace(/\D/g, '');
       const toothId = parseInt(cleanId, 10);
-      
-      if (!isNaN(toothId)) {
-        // Convert FDI -> Universal for permanent teeth.
-        // For primary teeth (51-85), conversion returns the same value.
-        const universalId = USE_ISO_CONVERSION ? isoToUniversal(toothId) : toothId;
 
-        onToggleTooth(universalId);
+      if (!isNaN(toothId)) {
+        // Validate the tooth number (accepts both permanent 11-48 and primary 51-85)
+        if (isValidFDIPermanent(toothId) || isValidFDIPrimary(toothId)) {
+          // Store in FDI/ISO format natively - no conversion needed
+          onToggleTooth(toothId);
+        } else {
+          console.warn(`[ToothSelector] Invalid tooth number from library: ${toothId}`);
+        }
       }
     }
   };
@@ -80,7 +73,7 @@ export const ToothSelector: React.FC<SelectorProps> = ({ selectedTeeth, onToggle
           </svg>
           Clinical Odontogram
         </h3>
-        <p className="text-[10px] text-slate-500">Universal Numbering System</p>
+        <p className="text-[10px] text-slate-500">FDI/ISO 3950 Standard</p>
       </div>
 
       {/* Orientation Labels - Dentist's perspective (facing patient) */}

@@ -2,6 +2,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Patient, Appointment, ClinicalRecord, Doctor, Medicine, Expense } from '../types';
 import { formatCurrency, Currency } from './currency';
+import { formatTeethWithPosition } from './toothNumbering';
 
 // Add type declaration for jsPDF with autoTable
 declare module 'jspdf' {
@@ -167,7 +168,7 @@ export const exportClinicalRecordsToPDF = (records: ClinicalRecord[], currency: 
       rec.date,
       rec.patient_name || 'Unknown',
       rec.description,
-      rec.teeth && rec.teeth.length > 0 ? rec.teeth.join(', ') : 'General',
+      rec.teeth && rec.teeth.length > 0 ? formatTeethWithPosition(rec.teeth) : 'General',
       formatCurrency(rec.cost || 0, currency)
     ]),
     theme: 'grid',
