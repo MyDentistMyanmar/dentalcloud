@@ -12,13 +12,21 @@
       "Bash(rmdir *)",
       "WebSearch",
       "Read(c:\\Users\\MGR\\.vscode\\extensions\\qwenlm.qwen-code-vscode-ide-companion-0.14.0-win32-x64\\dist\\qwen-cli\\bundled\\qc-helper\\docs\\features/**)",
-      "Bash(node *)"
+      "Bash(node *)",
+      "mcp__playwright-browser__browser_navigate",
+      "mcp__playwright-browser__browser_click",
+      "mcp__playwright-browser__browser_type",
+      "mcp__playwright-browser__browser_resize",
+      "Bash(dir *)"
     ]
   },
   "mcpServers": {
     "playwright-browser": {
       "command": "npx",
-      "args": ["@playwright/mcp@latest", "--headless"],
+      "args": [
+        "@playwright/mcp@latest",
+        "--headless"
+      ],
       "timeout": 60000
     }
   },
