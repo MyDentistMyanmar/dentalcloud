@@ -668,6 +668,11 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
               <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-1">Files & Imaging</p>
               <h3 className="text-lg font-bold text-gray-800">Patient Documents</h3>
             </div>
+            {patientFiles.length > 0 && (
+              <span className="px-3 py-1 bg-indigo-100 text-indigo-700 text-xs font-bold rounded-full">
+                {patientFiles.length} file{patientFiles.length !== 1 ? 's' : ''}
+              </span>
+            )}
           </div>
 
           <div
@@ -680,7 +685,7 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
             <Upload className="w-8 h-8 text-indigo-500 mx-auto mb-2" />
             <p className="text-sm font-medium text-gray-800">Drag & drop X-rays, documents, videos, or ZIP files</p>
             <p className="text-xs text-gray-500 mb-3">Accepted: images, PDF, videos, ZIP. Smart chunked upload enabled.</p>
-            
+
             {/* Upload Progress Bar */}
             {isUploadingWithProgress && uploadProgress && (
               <div className="mb-3 mx-auto max-w-md">
@@ -707,7 +712,7 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
                 </div>
               </div>
             )}
-            
+
             <div className="flex justify-center gap-3">
               <button
                 onClick={() => fileInputRef.current?.click()}
@@ -736,48 +741,63 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
 
           <div className="mt-5 space-y-3">
             {patientFiles.length === 0 ? (
-              <div className="text-xs text-gray-400 text-center italic">No files uploaded for this patient.</div>
+              <div className="text-center py-8">
+                <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                <p className="text-sm text-gray-500 font-medium">No files uploaded for this patient</p>
+                <p className="text-xs text-gray-400 mt-1">Upload documents using the area above</p>
+              </div>
             ) : (
-              patientFiles.map((file) => (
-                <div key={file.path} className="flex items-center justify-between px-4 py-3 border border-gray-100 rounded-lg hover:border-indigo-200 hover:bg-indigo-50/30 transition-all">
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <FileText className="w-5 h-5 text-indigo-500 flex-shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-gray-800 truncate">{file.name}</p>
-                      <p className="text-xs text-gray-500">{file.type || 'File'} · {formatBytes(file.size)}</p>
+              <div className="space-y-2">
+                {patientFiles.map((file) => (
+                  <div key={file.path} className="group border border-gray-100 rounded-xl p-4 hover:border-indigo-200 hover:bg-gradient-to-r hover:from-indigo-50/50 hover:to-purple-50/30 transition-all duration-200">
+                    <div className="flex items-start gap-3">
+                      {/* File Icon */}
+                      <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-lg flex items-center justify-center">
+                        <FileText className="w-5 h-5 text-indigo-600" />
+                      </div>
+                      
+                      {/* File Info */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-800 truncate mb-0.5">{file.name}</p>
+                        <p className="text-xs text-gray-500">
+                          {file.type?.split('/')[1]?.toUpperCase() || 'File'} · {formatBytes(file.size)}
+                        </p>
+                      </div>
+                      
+                      {/* Action Buttons */}
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <a
+                          href={file.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-all duration-200 hover:shadow-sm"
+                          title="View in new tab"
+                        >
+                          <Eye size={14} />
+                          <span className="hidden sm:inline">View</span>
+                        </a>
+                        <a
+                          href={file.url}
+                          download={file.name}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-green-700 bg-green-50 rounded-lg hover:bg-green-100 transition-all duration-200 hover:shadow-sm"
+                          title="Download file"
+                        >
+                          <Download size={14} />
+                          <span className="hidden sm:inline">Download</span>
+                        </a>
+                        <button
+                          onClick={() => onDeleteFile(file.path)}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-red-700 bg-red-50 rounded-lg hover:bg-red-100 transition-all duration-200 hover:shadow-sm"
+                          title="Remove file"
+                        >
+                          <Trash2 size={14} />
+                          <span className="hidden sm:inline">Remove</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <a
-                      href={file.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors"
-                      title="View in new tab"
-                    >
-                      <Eye size={14} />
-                      View
-                    </a>
-                    <a
-                      href={file.url}
-                      download={file.name}
-                      className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-green-600 bg-green-50 rounded-lg hover:bg-green-100 transition-colors"
-                      title="Download file"
-                    >
-                      <Download size={14} />
-                      Download
-                    </a>
-                    <button
-                      onClick={() => onDeleteFile(file.path)}
-                      className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
-                      title="Remove file"
-                    >
-                      <Trash2 size={14} />
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              ))
+                ))}
+              </div>
             )}
           </div>
         </div>
