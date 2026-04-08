@@ -5,6 +5,7 @@ import { Patient, TreatmentType, ClinicalRecord, PatientFile, LoyaltyTransaction
 import { formatCurrency, getCurrencySymbol, Currency } from '../utils/currency';
 import { formatTeethWithPosition } from '../utils/toothNumbering';
 import { Modal, Input } from './Shared';
+import { SearchableSelect } from './SearchableSelect';
 
 export interface UploadProgress {
   fileName: string;
@@ -280,18 +281,19 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
             </div>
             <div className="mb-4">
               <label className="block text-[10px] text-indigo-700 uppercase font-bold tracking-wider mb-1.5">Treating Doctor</label>
-              <select
+              <SearchableSelect
                 value={selectedDoctorId}
-                onChange={(e) => onDoctorChange(e.target.value)}
-                className="w-full border border-indigo-200 bg-white rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="">Select doctor (optional)</option>
-                {doctors.map((doctor) => (
-                  <option key={doctor.id} value={doctor.id}>
-                    Dr. {doctor.name}{doctor.specialization ? ` - ${doctor.specialization}` : ''}
-                  </option>
-                ))}
-              </select>
+                onChange={onDoctorChange}
+                options={[
+                  { value: '', label: 'Select doctor (optional)' },
+                  ...doctors.map((doctor) => ({
+                    value: doctor.id,
+                    label: `Dr. ${doctor.name}${doctor.specialization ? ` - ${doctor.specialization}` : ''}`
+                  }))
+                ]}
+                placeholder="Select doctor (optional)"
+                emptyMessage="No doctors found"
+              />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                {treatmentTypes.map(t => {
