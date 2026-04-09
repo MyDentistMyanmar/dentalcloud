@@ -112,7 +112,14 @@ const getDefaultExpenseFormData = (): Partial<Expense> => ({
 });
 
 const App: React.FC = () => {
-  const [currentView, setCurrentView] = useState<ViewState>('dashboard');
+  const [currentView, setCurrentView] = useState<ViewState>(() => {
+    // Restore last viewed page from localStorage on mount
+    const savedView = localStorage.getItem('currentView');
+    if (savedView) {
+      return savedView as ViewState;
+    }
+    return 'dashboard';
+  });
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [allowedViews, setAllowedViews] = useState<ViewState[]>([]);
@@ -449,6 +456,7 @@ const App: React.FC = () => {
     auth.logout();
     resetStaffSession();
     setCurrentView('dashboard');
+    localStorage.removeItem('currentView');
     // Reset all data state
     setPatients([]);
     setAppointments([]);
@@ -786,7 +794,11 @@ const App: React.FC = () => {
     }
 
     if (!canAccessView(currentView)) {
-      setCurrentView(allowedViews[0]);
+      const fallbackView = allowedViews.includes('dashboard' as ViewState) ? 'dashboard' as ViewState : allowedViews[0];
+      setCurrentView(fallbackView);
+    } else {
+      // Persist the current view to localStorage
+      localStorage.setItem('currentView', currentView);
     }
   }, [allowedViews, currentView, isAuthenticated]);
 
