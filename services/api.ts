@@ -2986,6 +2986,29 @@ export const api = {
       if (error) throw new Error(error.message);
     },
 
+    update: async (id: string, data: Partial<Recall>): Promise<Recall> => {
+      const { data: result, error } = await supabase
+        .from('recalls')
+        .update({
+          appointment_id: data.appointment_id || null,
+          title: data.title,
+          due_date: data.due_date,
+          reminder_days_before: data.reminder_days_before ?? 7,
+          status: data.status,
+          notes: data.notes || null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id)
+        .select('*, patients(name)')
+        .single();
+
+      if (error) throw new Error(error.message);
+      return {
+        ...result,
+        patient_name: result.patients?.name || 'Unknown'
+      };
+    },
+
     delete: async (id: string): Promise<void> => {
       const { error } = await supabase
         .from('recalls')

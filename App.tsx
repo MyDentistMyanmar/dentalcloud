@@ -1338,6 +1338,18 @@ const App: React.FC = () => {
     }
   };
 
+  const handleUpdateRecall = async (id: string, data: Partial<Recall>) => {
+    try {
+      await api.recalls.update(id, data);
+      const updated = await api.recalls.getAll(currentLocationId);
+      setRecalls(updated);
+      setToast({ message: 'Recall updated successfully.', type: 'success', show: true });
+    } catch (err: any) {
+      alert(err.message);
+      throw err;
+    }
+  };
+
   const handleDeleteRecall = async (id: string) => {
     try {
       await api.recalls.delete(id);
@@ -2022,6 +2034,11 @@ const App: React.FC = () => {
                     alert('Error: ' + err.message);
                   }
                 }}
+                recalls={recalls}
+                onCreateRecall={handleCreateRecall}
+                onUpdateRecall={handleUpdateRecall}
+                onUpdateRecallStatus={handleUpdateRecallStatus}
+                onDeleteRecall={handleDeleteRecall}
                 loyaltyEnabled={loyaltyEnabled}
                 loyaltyRules={loyaltyRules}
                 loyaltyTransactions={loyaltyTransactions}
