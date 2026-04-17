@@ -1,6 +1,6 @@
 import { supabase, supabaseUrl, supabaseAnonKey } from './supabase';
 import * as tus from 'tus-js-client';
-import { Patient, Appointment, ClinicalRecord, TreatmentType, PatientFile, Doctor, DoctorSchedule, User, Medicine, MedicineSale, Location, LoyaltyRule, LoyaltyTransaction, Expense, Message, Conversation, Recall, ScheduledTask, S3Settings } from '../types';
+import { Patient, Appointment, ClinicalRecord, TreatmentType, PatientFile, Doctor, DoctorSchedule, DoctorScheduleInput, User, Medicine, MedicineSale, Location, LoyaltyRule, LoyaltyTransaction, Expense, Message, Conversation, Recall, ScheduledTask, S3Settings } from '../types';
 import { FULL_ACCESS_TAB_PERMISSIONS } from '../constants';
 import { resolveAllowedTabs } from '../utils/permissions';
 import { loadEmailSettings } from '../utils/emailSettings';
@@ -1262,7 +1262,7 @@ export const api = {
       // Then create schedules if provided (filter and validate)
       if (data.schedules && data.schedules.length > 0) {
         const validSchedules = data.schedules
-          .filter(sched => {
+          .filter((sched: DoctorScheduleInput) => {
             // Filter out schedules with missing data
             if (!sched.start_time || !sched.end_time || sched.day_of_week === undefined) {
               return false;
@@ -1272,7 +1272,7 @@ export const api = {
             const end = new Date(`2000-01-01T${sched.end_time}`);
             return end > start;
           })
-          .map(sched => ({
+          .map((sched: DoctorScheduleInput) => ({
             doctor_id: doctorData.id,
             day_of_week: sched.day_of_week,
             start_time: sched.start_time,
