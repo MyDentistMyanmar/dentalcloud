@@ -1,21 +1,28 @@
 import React, { useEffect } from 'react';
 import { X, CheckCircle, AlertCircle, Info, AlertTriangle } from 'lucide-react';
+import { createPortal } from 'react-dom';
 
-export const Modal = ({ title, children, onClose }: { title: string, children?: React.ReactNode, onClose: () => void }) => (
-  <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-md z-50 flex items-center justify-center p-6 animate-fade-in">
-    <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-lg w-full max-h-[90vh] flex flex-col relative animate-scale-up">
-      <div className="flex-shrink-0 p-10 pb-6 border-b border-gray-100 relative">
-        <button onClick={onClose} className="absolute top-8 right-8 text-gray-300 hover:text-gray-900 transition-colors">
-          <X size={24} />
-        </button>
-        <h3 className="text-2xl font-black text-gray-900 tracking-tight pr-12">{title}</h3>
+export const Modal = ({ title, children, onClose }: { title: string, children?: React.ReactNode, onClose: () => void }) => {
+  // Use portal to render modal at document body level for full viewport coverage
+  if (typeof document === 'undefined') return null;
+  
+  return createPortal(
+    <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-md z-[9999] flex items-center justify-center p-6 animate-fade-in">
+      <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-lg w-full max-h-[90vh] flex flex-col relative animate-scale-up">
+        <div className="flex-shrink-0 p-10 pb-6 border-b border-gray-100 relative">
+          <button onClick={onClose} className="absolute top-8 right-8 text-gray-300 hover:text-gray-900 transition-colors">
+            <X size={24} />
+          </button>
+          <h3 className="text-2xl font-black text-gray-900 tracking-tight pr-12">{title}</h3>
+        </div>
+        <div className="flex-1 overflow-y-auto p-10 pt-6">
+          {children}
+        </div>
       </div>
-      <div className="flex-1 overflow-y-auto p-10 pt-6">
-        {children}
-      </div>
-    </div>
-  </div>
-);
+    </div>,
+    document.body
+  );
+};
 
 // Confirmation Dialog Component
 interface ConfirmDialogProps {
