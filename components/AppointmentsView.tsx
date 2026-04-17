@@ -1,9 +1,11 @@
 import React, { useState, useMemo } from 'react';
-import { Calendar, Plus, Loader2, Edit2, Trash2, Clock, User, FileText, FileDown, ChevronLeft, ChevronRight, List, CalendarDays } from 'lucide-react';
+import { Calendar, Plus, Loader2, Edit2, Trash2, Clock, User, FileText, ChevronLeft, ChevronRight, List, CalendarDays } from 'lucide-react';
 import { Appointment } from '../types';
 import { exportAppointmentsToPDF } from '../utils/pdfExport';
+import { exportAppointmentsToExcel } from '../utils/excelExport';
 import Pagination from './Pagination';
 import { ConfirmDialog } from './Shared';
+import ExportMenu from './ExportMenu';
 
 interface AppointmentsViewProps {
   appointments: Appointment[];
@@ -119,6 +121,10 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
     exportAppointmentsToPDF(appointments);
   };
 
+  const handleDownloadExcel = async () => {
+    await exportAppointmentsToExcel(appointments);
+  };
+
   const toISODate = (date: Date) => date.toISOString().split('T')[0];
 
   const calendarGrid = useMemo(() => {
@@ -206,13 +212,12 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
           </svg>
         </div>
         <div className="flex flex-wrap gap-2 w-full md:w-auto">
-          <button
-            onClick={handleDownloadPDF}
+          <ExportMenu
             disabled={appointments.length === 0}
-            className="flex-1 md:flex-initial flex items-center justify-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <FileDown className="w-4 h-4" /> <span className="hidden sm:inline">Export PDF</span>
-          </button>
+            onExportPDF={handleDownloadPDF}
+            onExportExcel={handleDownloadExcel}
+            className="flex-1 md:flex-initial"
+          />
           <button
             onClick={onAddAppointment}
             className="flex-1 md:flex-initial flex items-center justify-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"

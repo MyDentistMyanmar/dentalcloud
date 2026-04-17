@@ -1,11 +1,13 @@
 import React, { useMemo, useState } from 'react';
-import { Plus, Edit2, Trash2, Loader2, FileText, FileDown, BarChart3, Eye, TrendingDown, TrendingUp, DollarSign, Calendar, Tag } from 'lucide-react';
+import { Plus, Edit2, Trash2, Loader2, BarChart3, Eye, TrendingDown, TrendingUp, DollarSign, Calendar, Tag } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, Cell } from 'recharts';
 import { ClinicalRecord, Expense, MedicineSale } from '../types';
 import { formatCurrency, Currency } from '../utils/currency';
 import { exportExpensesToPDF } from '../utils/pdfExport';
+import { exportExpensesToExcel } from '../utils/excelExport';
 import { Modal } from './Shared';
 import Pagination from './Pagination';
+import ExportMenu from './ExportMenu';
 
 interface ExpensesViewProps {
   expenses: Expense[];
@@ -150,25 +152,8 @@ const ExpensesView: React.FC<ExpensesViewProps> = ({
     exportExpensesToPDF(expenses, currency);
   };
 
-  const handleDownloadCSV = () => {
-    const header = ['Date', 'Description', 'Category', 'Amount'];
-    const rows = expenses.map(exp => [
-      exp.date,
-      exp.description,
-      exp.category,
-      String(exp.amount ?? 0)
-    ]);
-    const escapeValue = (value: string) => `"${value.replace(/\"/g, '""')}"`;
-    const csv = [header, ...rows].map(row => row.map(escapeValue).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `expenses-${new Date().toISOString().split('T')[0]}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+  const handleDownloadExcel = async () => {
+    await exportExpensesToExcel(expenses, currency);
   };
 
   const openDetailModal = (expense: Expense) => {
@@ -214,22 +199,12 @@ const ExpensesView: React.FC<ExpensesViewProps> = ({
           </div>
           
           <div className="flex flex-wrap items-center gap-3">
-            <button
-              onClick={handleDownloadPDF}
+            <ExportMenu
               disabled={expenses.length === 0}
-              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-50 text-emerald-700 rounded-xl text-sm font-semibold hover:bg-emerald-100 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed border border-emerald-200"
-            >
-              <FileDown className="w-4 h-4" />
-              <span className="hidden sm:inline">Export PDF</span>
-            </button>
-            <button
-              onClick={handleDownloadCSV}
-              disabled={expenses.length === 0}
-              className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-100 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed border border-gray-200"
-            >
-              <FileText className="w-4 h-4" />
-              <span className="hidden sm:inline">Export CSV</span>
-            </button>
+              onExportPDF={handleDownloadPDF}
+              onExportExcel={handleDownloadExcel}
+              className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-700"
+            />
             <button
               onClick={onAdd}
               className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl text-sm font-semibold hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-sm hover:shadow-md"

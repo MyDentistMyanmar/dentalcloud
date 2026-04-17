@@ -1,10 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import { Activity, Loader2, Download, Trash2, FileDown } from 'lucide-react';
+import { Activity, Loader2, Download, Trash2 } from 'lucide-react';
 import { ClinicalRecord } from '../types';
 import { formatCurrency, Currency } from '../utils/currency';
 import { exportClinicalRecordsToPDF } from '../utils/pdfExport';
+import { exportClinicalRecordsToExcel } from '../utils/excelExport';
 import { formatTeethWithPosition } from '../utils/toothNumbering';
 import Pagination from './Pagination';
+import ExportMenu from './ExportMenu';
 
 interface RecordsViewProps {
   records: ClinicalRecord[];
@@ -47,6 +49,10 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, loading, onRefresh, 
 
   const handleDownloadPDF = () => {
     exportClinicalRecordsToPDF(records, currency);
+  };
+
+  const handleDownloadExcel = async () => {
+    await exportClinicalRecordsToExcel(records, currency);
   };
 
   const handleDownloadJSON = () => {
@@ -92,13 +98,11 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, loading, onRefresh, 
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
           </div>
-          <button 
-            onClick={handleDownloadPDF} 
+          <ExportMenu
             disabled={records.length === 0}
-            className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <FileDown size={16} /> Download PDF
-          </button>
+            onExportPDF={handleDownloadPDF}
+            onExportExcel={handleDownloadExcel}
+          />
           <button 
             onClick={handleDownloadJSON} 
             disabled={records.length === 0}

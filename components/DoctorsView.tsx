@@ -1,9 +1,11 @@
 import React, { useState, useMemo } from 'react';
-import { Plus, Edit2, Trash2, Clock, Loader2, User, FileDown } from 'lucide-react';
+import { Plus, Edit2, Trash2, Clock, Loader2, User } from 'lucide-react';
 import { Doctor, DoctorSchedule } from '../types';
 import { exportDoctorsToPDF } from '../utils/pdfExport';
+import { exportDoctorsToExcel } from '../utils/excelExport';
 import Pagination from './Pagination';
 import { ConfirmDialog } from './Shared';
+import ExportMenu from './ExportMenu';
 
 interface DoctorsViewProps {
   doctors: Doctor[];
@@ -56,6 +58,10 @@ const DoctorsView: React.FC<DoctorsViewProps> = ({
     exportDoctorsToPDF(doctors);
   };
 
+  const handleDownloadExcel = async () => {
+    await exportDoctorsToExcel(doctors);
+  };
+
   const formatSchedule = (schedules: DoctorSchedule[]) => {
     if (schedules.length === 0) return 'No schedule set';
     
@@ -94,13 +100,11 @@ const DoctorsView: React.FC<DoctorsViewProps> = ({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
           </div>
-          <button
-            onClick={handleDownloadPDF}
+          <ExportMenu
             disabled={doctors.length === 0}
-            className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <FileDown className="w-4 h-4" /> Export PDF
-          </button>
+            onExportPDF={handleDownloadPDF}
+            onExportExcel={handleDownloadExcel}
+          />
           <button
             onClick={onAdd}
             className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"

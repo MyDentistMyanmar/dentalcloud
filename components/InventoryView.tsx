@@ -1,11 +1,13 @@
 import React, { useState, useMemo } from 'react';
-import { Plus, Edit2, Trash2, Package, AlertTriangle, Loader2, FileDown, TrendingUp, BarChart3 } from 'lucide-react';
+import { Plus, Edit2, Trash2, Package, AlertTriangle, Loader2, TrendingUp, BarChart3 } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, Cell } from 'recharts';
 import { Medicine } from '../types';
 import { formatCurrency, Currency } from '../utils/currency';
 import { exportInventoryToPDF } from '../utils/pdfExport';
+import { exportInventoryToExcel } from '../utils/excelExport';
 import Pagination from './Pagination';
 import { ConfirmDialog } from './Shared';
+import ExportMenu from './ExportMenu';
 
 interface TopSellingItem {
   medicine_id: string;
@@ -66,6 +68,10 @@ const InventoryView: React.FC<InventoryViewProps> = ({
 
   const handleDownloadPDF = () => {
     exportInventoryToPDF(medicines, currency);
+  };
+
+  const handleDownloadExcel = async () => {
+    await exportInventoryToExcel(medicines, currency);
   };
 
   const getStockStatus = (stock: number, minStock?: number) => {
@@ -130,13 +136,12 @@ const InventoryView: React.FC<InventoryViewProps> = ({
           </svg>
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={handleDownloadPDF}
+          <ExportMenu
             disabled={medicines.length === 0}
-            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <FileDown className="w-4 h-4" /> <span className="hidden sm:inline">Export PDF</span>
-          </button>
+            onExportPDF={handleDownloadPDF}
+            onExportExcel={handleDownloadExcel}
+            className="flex-1 sm:flex-initial"
+          />
           <button
             onClick={onAdd}
             className="flex-1 sm:flex-initial flex items-center justify-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"

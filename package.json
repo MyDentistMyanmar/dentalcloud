@@ -19,7 +19,8 @@
     "react-teeth-selector": "^1.0.10",
     "recharts": "^3.6.0",
     "remark-gfm": "^4.0.1",
-    "tus-js-client": "^4.3.1"
+    "tus-js-client": "^4.3.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
