@@ -93,21 +93,33 @@ const saveWorkbook = async (
 export const exportPatientsToExcel = async (patients: Patient[], currency: Currency) => {
   const columns: ExcelColumn[] = [
     { header: 'Patient Name', width: 24 },
+    { header: 'Age', width: 8, format: 'integer' },
+    { header: 'Patient Type', width: 15 },
     { header: 'Phone', width: 16 },
     { header: 'Email', width: 28 },
+    { header: 'Address', width: 30 },
+    { header: 'City', width: 15 },
+    { header: 'State/Region', width: 15 },
     { header: 'Medical Status', width: 18 },
     { header: 'Balance', width: 14, format: 'currency' },
     { header: 'Portal Access', width: 14 },
-    { header: 'Loyalty Points', width: 14, format: 'integer' }
+    { header: 'Loyalty Points', width: 14, format: 'integer' },
+    { header: 'Join Date', width: 15 }
   ];
   const rows = patients.map((patient) => ({
     'Patient Name': patient.name,
+    Age: patient.age || 'N/A',
+    'Patient Type': patient.patient_type ? (patient.patient_type.charAt(0).toUpperCase() + patient.patient_type.slice(1)) : 'N/A',
     Phone: patient.phone,
     Email: patient.email || 'N/A',
+    Address: patient.address || 'N/A',
+    City: patient.city || 'N/A',
+    'State/Region': patient.state_region || 'N/A',
     'Medical Status': patient.medicalHistory ? 'Review Required' : 'No Alerts',
     Balance: patient.balance || 0,
     'Portal Access': patient.has_account ? 'Active' : 'No Access',
-    'Loyalty Points': patient.loyalty_points || 0
+    'Loyalty Points': patient.loyalty_points || 0,
+    'Join Date': patient.created_at ? new Date(patient.created_at).toLocaleDateString() : 'N/A'
   }));
 
   await saveWorkbook(rows, columns, 'Patients', `patient-directory-${new Date().toISOString().split('T')[0]}.xlsx`, currency);

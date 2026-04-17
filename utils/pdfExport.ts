@@ -14,7 +14,7 @@ declare module 'jspdf' {
 export const exportPatientsToPDF = (patients: Patient[], currency: Currency) => {
   // Use all patients for export (not just filtered/paginated view)
   const exportPatients = patients;
-  const doc = new jsPDF();
+  const doc = new jsPDF('l', 'mm', 'a4'); // Landscape orientation
   
   // Header
   doc.setFontSize(18);
@@ -29,17 +29,22 @@ export const exportPatientsToPDF = (patients: Patient[], currency: Currency) => 
   // Table
   autoTable(doc, {
     startY: 40,
-    head: [['Patient Name', 'Contact', 'Email', 'Medical Status', 'Balance']],
+    head: [['Patient Name', 'Age', 'Type', 'Contact', 'Email', 'Location', 'Medical Status', 'Balance', 'Points', 'Joined']],
     body: exportPatients.map(patient => [
       patient.name,
+      patient.age || '-',
+      patient.patient_type || '-',
       patient.phone,
-      patient.email || 'N/A',
+      patient.email || '-',
+      [patient.city, patient.state_region].filter(Boolean).join(', ') || '-',
       patient.medicalHistory ? 'Review Required' : 'No Alerts',
-      formatCurrency(patient.balance || 0, currency)
+      formatCurrency(patient.balance || 0, currency),
+      patient.loyalty_points || 0,
+      patient.created_at ? new Date(patient.created_at).toLocaleDateString() : '-'
     ]),
     theme: 'grid',
-    headStyles: { fillColor: [79, 70, 229], fontSize: 10, fontStyle: 'bold' },
-    bodyStyles: { fontSize: 9 },
+    headStyles: { fillColor: [79, 70, 229], fontSize: 9, fontStyle: 'bold' },
+    bodyStyles: { fontSize: 8 },
     alternateRowStyles: { fillColor: [245, 247, 250] },
     margin: { top: 40 }
   });
