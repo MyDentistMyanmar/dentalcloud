@@ -2133,7 +2133,7 @@ export const api = {
           .select(supportsAllowedTabs
             ? 'id, location_id, username, password, role, allowed_tabs'
             : 'id, location_id, username, password, role')
-          .eq('username', trimmedUsername);
+          .eq('username', trimmedUsername) as { data: User[] | null, error: any };
 
         console.log('Supabase response:', { data, error });
 
@@ -2205,7 +2205,7 @@ export const api = {
         .select(supportsAllowedTabs
           ? 'id, location_id, username, role, allowed_tabs, created_at, updated_at'
           : 'id, location_id, username, role, created_at, updated_at')
-        .single();
+        .single() as { data: User, error: any };
 
       if (error) throw new Error(error.message);
       return {
@@ -2225,7 +2225,7 @@ export const api = {
         .from('users')
         .select(supportsAllowedTabs ? 'role, allowed_tabs' : 'role')
         .eq('id', id)
-        .single();
+        .single() as { data: User, error: any };
 
       if (currentUserError) {
         throw new Error(currentUserError.message);
@@ -2243,7 +2243,7 @@ export const api = {
           .select('id')
           .eq('username', trimmedUsername)
           .neq('id', id)
-          .single();
+          .single() as { data: { id: string } | null, error: any };
 
         if (existing) {
           throw new Error('Username already exists');
@@ -2280,7 +2280,7 @@ export const api = {
         .select(supportsAllowedTabs
           ? 'id, location_id, username, role, allowed_tabs, created_at, updated_at'
           : 'id, location_id, username, role, created_at, updated_at')
-        .single();
+        .single() as { data: User, error: any };
 
       if (error) throw new Error(error.message);
       return {
