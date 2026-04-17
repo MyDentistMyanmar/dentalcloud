@@ -105,7 +105,7 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
   const [deleteModal, setDeleteModal] = React.useState(false);
   const [fileToDelete, setFileToDelete] = React.useState<{name: string, path: string} | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [showRecallComposer, setShowRecallComposer] = React.useState(false);
+  const [showRecallModal, setShowRecallModal] = React.useState(false);
   const [editingRecall, setEditingRecall] = React.useState<Recall | null>(null);
   const [isSavingRecall, setIsSavingRecall] = React.useState(false);
   const [recallForm, setRecallForm] = React.useState<Partial<Recall>>({
@@ -131,7 +131,7 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
   }, [patientFiles.length]);
 
   useEffect(() => {
-    setShowRecallComposer(false);
+    setShowRecallModal(false);
     setEditingRecall(null);
     setRecallForm({
       title: '6-Month Checkup Recall',
@@ -239,7 +239,7 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
       status: 'PENDING',
       notes: ''
     });
-    setShowRecallComposer(true);
+    setShowRecallModal(true);
   };
 
   const openEditRecallComposer = (recall: Recall) => {
@@ -251,7 +251,7 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
       status: recall.status,
       notes: recall.notes || ''
     });
-    setShowRecallComposer(true);
+    setShowRecallModal(true);
   };
 
   const handleRecallSubmit = async (e: React.FormEvent) => {
@@ -270,7 +270,7 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
           status: recallForm.status || 'PENDING'
         });
       }
-      setShowRecallComposer(false);
+      setShowRecallModal(false);
       setEditingRecall(null);
     } finally {
       setIsSavingRecall(false);
@@ -574,7 +574,7 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
                  </button>
                )}
 
-               {selectedPatient && (patientRecalls.length > 0 || showRecallComposer) && (
+               {selectedPatient && patientRecalls.length > 0 && (
                  <div className="rounded-2xl border border-sky-100 bg-sky-50/70 p-4 space-y-4">
                    <div className="flex items-center justify-between gap-3">
                      <div>
@@ -583,148 +583,69 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
                          {patientRecalls.length} recall{patientRecalls.length === 1 ? '' : 's'} for {selectedPatient.name}
                        </h4>
                      </div>
-                     {!showRecallComposer && (
-                       <button
-                         onClick={openNewRecallComposer}
-                         className="inline-flex items-center gap-1 rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-sky-700 border border-sky-200 hover:bg-sky-100"
-                       >
-                         <Plus size={13} /> Add
-                       </button>
-                     )}
+                     <button
+                       onClick={openNewRecallComposer}
+                       className="inline-flex items-center gap-1 rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-sky-700 border border-sky-200 hover:bg-sky-100"
+                     >
+                       <Plus size={13} /> Add
+                     </button>
                    </div>
 
-                   {showRecallComposer && (
-                     <form onSubmit={handleRecallSubmit} className="space-y-3 rounded-xl border border-sky-200 bg-white p-4">
-                       <Input
-                         label="Recall Title"
-                         required
-                         value={recallForm.title || ''}
-                         onChange={(e: any) => setRecallForm(prev => ({ ...prev, title: e.target.value }))}
-                       />
-                       <div className="grid grid-cols-2 gap-3">
-                         <Input
-                           label="Due Date"
-                           type="date"
-                           required
-                           value={recallForm.due_date || ''}
-                           onChange={(e: any) => setRecallForm(prev => ({ ...prev, due_date: e.target.value }))}
-                         />
-                         <Input
-                           label="Reminder Days"
-                           type="number"
-                           min="0"
-                           value={recallForm.reminder_days_before ?? 7}
-                           onChange={(e: any) => setRecallForm(prev => ({ ...prev, reminder_days_before: Number(e.target.value) }))}
-                         />
-                       </div>
-                       {editingRecall && (
-                         <div>
-                           <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 ml-1">Status</label>
-                           <select
-                             value={recallForm.status || 'PENDING'}
-                             onChange={(e) => setRecallForm(prev => ({ ...prev, status: e.target.value as Recall['status'] }))}
-                             className="w-full border-gray-200 border rounded-xl p-3 text-sm font-medium focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none transition-all"
-                           >
-                             <option value="PENDING">Pending</option>
-                             <option value="SCHEDULED">Scheduled</option>
-                             <option value="COMPLETED">Completed</option>
-                             <option value="OVERDUE">Overdue</option>
-                             <option value="CANCELLED">Cancelled</option>
-                           </select>
-                         </div>
-                       )}
-                       <div>
-                         <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 ml-1">Notes</label>
-                         <textarea
-                           rows={3}
-                           value={recallForm.notes || ''}
-                           onChange={(e) => setRecallForm(prev => ({ ...prev, notes: e.target.value }))}
-                           className="w-full border-gray-200 border rounded-xl p-3 text-sm font-medium focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none transition-all"
-                         />
-                       </div>
-                       <div className="flex gap-3">
-                         <button
-                           type="button"
-                           onClick={() => {
-                             setShowRecallComposer(false);
-                             setEditingRecall(null);
-                           }}
-                           className="flex-1 rounded-xl border border-gray-200 px-4 py-3 text-sm font-bold text-gray-500 hover:bg-gray-50"
-                         >
-                           Cancel
-                         </button>
-                         <button
-                           type="submit"
-                           disabled={isSavingRecall}
-                           className="flex-1 rounded-xl bg-sky-600 px-4 py-3 text-sm font-bold text-white hover:bg-sky-700 disabled:opacity-60"
-                         >
-                           {isSavingRecall ? 'Saving...' : editingRecall ? 'Update Recall' : 'Create Recall'}
-                         </button>
-                       </div>
-                     </form>
-                   )}
-
-                   {patientRecalls.length === 0 && !showRecallComposer ? (
-                     <div className="rounded-xl border border-dashed border-sky-200 bg-white/80 px-4 py-5 text-center text-sm text-gray-500">
-                       No recalls for this patient yet. Create one here without leaving Clinical Focus.
-                     </div>
-                   ) : (
-                     <div className="space-y-2">
-                       {patientRecalls.map((recall) => (
-                         <div key={recall.id} className="rounded-xl border border-sky-100 bg-white p-3">
-                           <div className="flex items-start justify-between gap-3">
-                             <div className="min-w-0">
-                               <div className="flex items-center gap-2 flex-wrap">
-                                 <p className="text-sm font-bold text-gray-900">{recall.title}</p>
-                                 <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${getRecallStatusClass(recall.status)}`}>
-                                   {recall.status}
-                                 </span>
-                               </div>
-                               <p className="mt-1 text-xs text-gray-500">Due {recall.due_date} · Remind {recall.reminder_days_before} day(s) before</p>
-                               {recall.notes && <p className="mt-1 text-xs text-gray-600">{recall.notes}</p>}
+                   <div className="space-y-2">
+                     {patientRecalls.map((recall) => (
+                       <div key={recall.id} className="rounded-xl border border-sky-100 bg-white p-3">
+                         <div className="flex items-start justify-between gap-3">
+                           <div className="min-w-0">
+                             <div className="flex items-center gap-2 flex-wrap">
+                               <p className="text-sm font-bold text-gray-900">{recall.title}</p>
+                               <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${getRecallStatusClass(recall.status)}`}>
+                                 {recall.status}
+                               </span>
                              </div>
-                             <div className="flex items-center gap-2">
-                               {onUpdateRecallStatus && (
-                                 <select
-                                   value={recall.status}
-                                   onChange={(e) => onUpdateRecallStatus(recall.id, e.target.value as Recall['status'])}
-                                   className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-sky-500"
-                                 >
-                                   <option value="PENDING">Pending</option>
-                                   <option value="SCHEDULED">Scheduled</option>
-                                   <option value="COMPLETED">Completed</option>
-                                   <option value="OVERDUE">Overdue</option>
-                                   <option value="CANCELLED">Cancelled</option>
-                                 </select>
-                               )}
-                               {onUpdateRecall && (
-                                 <button
-                                   onClick={() => openEditRecallComposer(recall)}
-                                   className="rounded-lg bg-sky-50 p-2 text-sky-700 hover:bg-sky-100"
-                                   title="Edit recall"
-                                 >
-                                   <Edit size={14} />
-                                 </button>
-                               )}
-                               {onDeleteRecall && (
-                                 <button
-                                   onClick={async () => {
-                                     if (window.confirm('Delete this recall for the patient?')) {
-                                       await onDeleteRecall(recall.id);
-                                     }
-                                   }}
-                                   className="rounded-lg bg-red-50 p-2 text-red-600 hover:bg-red-100"
-                                   title="Delete recall"
-                                 >
-                                   <Trash2 size={14} />
-                                 </button>
-                               )}
-                             </div>
+                             <p className="mt-1 text-xs text-gray-500">Due {recall.due_date} · Remind {recall.reminder_days_before} day(s) before</p>
+                             {recall.notes && <p className="mt-1 text-xs text-gray-600">{recall.notes}</p>}
+                           </div>
+                           <div className="flex items-center gap-2">
+                             {onUpdateRecallStatus && (
+                               <select
+                                 value={recall.status}
+                                 onChange={(e) => onUpdateRecallStatus(recall.id, e.target.value as Recall['status'])}
+                                 className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-sky-500"
+                               >
+                                 <option value="PENDING">Pending</option>
+                                 <option value="SCHEDULED">Scheduled</option>
+                                 <option value="COMPLETED">Completed</option>
+                                 <option value="OVERDUE">Overdue</option>
+                                 <option value="CANCELLED">Cancelled</option>
+                               </select>
+                             )}
+                             {onUpdateRecall && (
+                               <button
+                                 onClick={() => openEditRecallComposer(recall)}
+                                 className="rounded-lg bg-sky-50 p-2 text-sky-700 hover:bg-sky-100"
+                                 title="Edit recall"
+                               >
+                                 <Edit size={14} />
+                               </button>
+                             )}
+                             {onDeleteRecall && (
+                               <button
+                                 onClick={async () => {
+                                   if (window.confirm('Delete this recall for the patient?')) {
+                                     await onDeleteRecall(recall.id);
+                                   }
+                                 }}
+                                 className="rounded-lg bg-red-50 p-2 text-red-600 hover:bg-red-100"
+                                 title="Delete recall"
+                               >
+                                 <Trash2 size={14} />
+                               </button>
+                             )}
                            </div>
                          </div>
-                       ))}
-                     </div>
-                   )}
+                       </div>
+                     ))}
+                   </div>
                  </div>
                )}
 
@@ -1228,6 +1149,104 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
             )}
           </div>
         </div>
+      )}
+
+      {/* Recall Modal - Root level for proper overlay */}
+      {showRecallModal && selectedPatient && (
+        <Modal 
+          title={editingRecall ? "Edit Recall" : "Create New Recall"} 
+          onClose={() => {
+            setShowRecallModal(false);
+            setEditingRecall(null);
+          }}
+        >
+          <form onSubmit={handleRecallSubmit} className="space-y-5">
+            <div className="p-4 bg-sky-50 rounded-2xl border border-sky-100">
+              <p className="text-[10px] font-black text-sky-600 uppercase tracking-widest">Patient</p>
+              <p className="text-lg font-black text-sky-900">{selectedPatient.name}</p>
+            </div>
+
+            <Input
+              label="Recall Title"
+              required
+              value={recallForm.title || ''}
+              onChange={(e: any) => setRecallForm(prev => ({ ...prev, title: e.target.value }))}
+              placeholder="e.g., 6-Month Checkup"
+            />
+
+            <div className="grid grid-cols-2 gap-4">
+              <Input
+                label="Due Date"
+                type="date"
+                required
+                value={recallForm.due_date || ''}
+                onChange={(e: any) => setRecallForm(prev => ({ ...prev, due_date: e.target.value }))}
+              />
+              <Input
+                label="Reminder Days Before"
+                type="number"
+                min="0"
+                value={recallForm.reminder_days_before ?? 7}
+                onChange={(e: any) => setRecallForm(prev => ({ ...prev, reminder_days_before: Number(e.target.value) }))}
+              />
+            </div>
+
+            {editingRecall && (
+              <div>
+                <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 ml-1">Status</label>
+                <select
+                  value={recallForm.status || 'PENDING'}
+                  onChange={(e) => setRecallForm(prev => ({ ...prev, status: e.target.value as Recall['status'] }))}
+                  className="w-full border-gray-200 border rounded-xl p-3 text-sm font-medium focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none transition-all"
+                >
+                  <option value="PENDING">Pending</option>
+                  <option value="SCHEDULED">Scheduled</option>
+                  <option value="COMPLETED">Completed</option>
+                  <option value="OVERDUE">Overdue</option>
+                  <option value="CANCELLED">Cancelled</option>
+                </select>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 ml-1">Notes</label>
+              <textarea
+                rows={4}
+                value={recallForm.notes || ''}
+                onChange={(e) => setRecallForm(prev => ({ ...prev, notes: e.target.value }))}
+                className="w-full border-gray-200 border rounded-xl p-3 text-sm font-medium focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none transition-all resize-none"
+                placeholder="Add any additional notes or instructions..."
+              />
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRecallModal(false);
+                  setEditingRecall(null);
+                }}
+                className="flex-1 rounded-xl border border-gray-200 px-4 py-3 text-sm font-bold text-gray-500 hover:bg-gray-50 transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSavingRecall}
+                className="flex-1 rounded-xl bg-sky-600 px-4 py-3 text-sm font-bold text-white hover:bg-sky-700 disabled:opacity-60 disabled:cursor-not-allowed transition-all shadow-lg shadow-sky-600/20"
+              >
+                {isSavingRecall ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                    Saving...
+                  </span>
+                ) : (
+                  editingRecall ? 'Update Recall' : 'Create Recall'
+                )}
+              </button>
+            </div>
+          </form>
+        </Modal>
       )}
     </div>
   </div>
