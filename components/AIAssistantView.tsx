@@ -5153,7 +5153,7 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                       </button>
                     )}
                     <button
-                      onClick={handleSendMessage}
+                      onClick={() => handleSendMessage()}
                       disabled={!inputMessage.trim() || isLoading}
                       className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:cursor-not-allowed disabled:bg-slate-300"
                       title="Send message"
