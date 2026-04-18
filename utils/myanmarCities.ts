@@ -1,187 +1,204 @@
-// Myanmar Cities and States/Regions Data
+// Myanmar Cities and Townships Data
 // Source: https://github.com/bilions-org/myanmar-cities
 
 export interface MyanmarCity {
   name: string;
-  stateRegion: string;
+  township: string;
 }
 
-export const myanmarStatesAndRegions: string[] = [
-  'Kachin State',
-  'Kayah State',
-  'Kayin State',
-  'Chin State',
-  'Sagaing Region',
-  'Tanintharyi Region',
-  'Bago Region',
-  'Magway Region',
-  'Mandalay Region',
-  'Mon State',
-  'Rakhine State',
-  'Yangon Region',
-  'Shan State',
-  'Ayeyarwady Region',
-  'Naypyidaw Union Territory'
+// Myanmar townships (major townships for each region/state)
+export const myanmarTownships: string[] = [
+  'Yangon',
+  'Mandalay',
+  'Naypyidaw',
+  'Pyin Oo Lwin',
+  'Meiktila',
+  'Myingyan',
+  'Kyaukse',
+  'Sagaing',
+  'Monywa',
+  'Shwebo',
+  'Bago',
+  'Pyay',
+  'Taungoo',
+  'Pathein',
+  'Hinthada',
+  'Magway',
+  'Pakokku',
+  'Dawei',
+  'Myeik',
+  'Mawlamyine',
+  'Hpa-An',
+  'Loikaw',
+  'Taunggyi',
+  'Lashio',
+  'Muse',
+  'Kengtung',
+  'Myitkyina',
+  'Bhamo',
+  'Hakha',
+  'Sittwe',
+  'Chin State'
 ];
 
 export const myanmarCities: MyanmarCity[] = [
   // Yangon Region
-  { name: 'Yangon', stateRegion: 'Yangon Region' },
-  { name: 'Thanlyin', stateRegion: 'Yangon Region' },
-  { name: 'Insein', stateRegion: 'Yangon Region' },
-  { name: 'Taikkyi', stateRegion: 'Yangon Region' },
-  { name: 'Hmawbi', stateRegion: 'Yangon Region' },
-  { name: 'Hlegu', stateRegion: 'Yangon Region' },
-  { name: 'Kyauktan', stateRegion: 'Yangon Region' },
-  { name: 'Twante', stateRegion: 'Yangon Region' },
-  { name: 'Kawhmu', stateRegion: 'Yangon Region' },
-  { name: 'Kayan', stateRegion: 'Yangon Region' },
-  { name: 'Dala', stateRegion: 'Yangon Region' },
-  { name: 'Seikgyi Kanaungto', stateRegion: 'Yangon Region' },
-  { name: 'Cocokyun', stateRegion: 'Yangon Region' },
+  { name: 'Yangon', township: 'Yangon' },
+  { name: 'Thanlyin', township: 'Thanlyin' },
+  { name: 'Insein', township: 'Insein' },
+  { name: 'Taikkyi', township: 'Taikkyi' },
+  { name: 'Hmawbi', township: 'Hmawbi' },
+  { name: 'Hlegu', township: 'Hlegu' },
+  { name: 'Kyauktan', township: 'Kyauktan' },
+  { name: 'Twante', township: 'Twante' },
+  { name: 'Kawhmu', township: 'Kawhmu' },
+  { name: 'Kayan', township: 'Kayan' },
+  { name: 'Dala', township: 'Dala' },
+  { name: 'Seikgyi Kanaungto', township: 'Seikgyi Kanaungto' },
+  { name: 'Cocokyun', township: 'Cocokyun' },
   
   // Mandalay Region
-  { name: 'Mandalay', stateRegion: 'Mandalay Region' },
-  { name: 'Pyin Oo Lwin', stateRegion: 'Mandalay Region' },
-  { name: 'Myingyan', stateRegion: 'Mandalay Region' },
-  { name: 'Kyaukse', stateRegion: 'Mandalay Region' },
-  { name: 'Meiktila', stateRegion: 'Mandalay Region' },
-  { name: 'Nyaung U', stateRegion: 'Mandalay Region' },
-  { name: 'Yamethin', stateRegion: 'Mandalay Region' },
-  { name: 'Madaya', stateRegion: 'Mandalay Region' },
-  { name: 'Mogok', stateRegion: 'Mandalay Region' },
-  { name: 'Singu', stateRegion: 'Mandalay Region' },
-  { name: 'Myittha', stateRegion: 'Mandalay Region' },
-  { name: 'Wundwin', stateRegion: 'Mandalay Region' },
-  { name: 'Mahlaing', stateRegion: 'Mandalay Region' },
-  { name: 'Tada-U', stateRegion: 'Mandalay Region' },
-  { name: 'Patheingyi', stateRegion: 'Mandalay Region' },
-  { name: 'Aungmyethazan', stateRegion: 'Mandalay Region' },
+  { name: 'Mandalay', township: 'Mandalay' },
+  { name: 'Pyin Oo Lwin', township: 'Pyin Oo Lwin' },
+  { name: 'Myingyan', township: 'Myingyan' },
+  { name: 'Kyaukse', township: 'Kyaukse' },
+  { name: 'Meiktila', township: 'Meiktila' },
+  { name: 'Nyaung U', township: 'Nyaung U' },
+  { name: 'Yamethin', township: 'Yamethin' },
+  { name: 'Madaya', township: 'Madaya' },
+  { name: 'Mogok', township: 'Mogok' },
+  { name: 'Singu', township: 'Singu' },
+  { name: 'Myittha', township: 'Myittha' },
+  { name: 'Wundwin', township: 'Wundwin' },
+  { name: 'Mahlaing', township: 'Mahlaing' },
+  { name: 'Tada-U', township: 'Tada-U' },
+  { name: 'Patheingyi', township: 'Patheingyi' },
+  { name: 'Aungmyethazan', township: 'Aungmyethazan' },
   
   // Sagaing Region
-  { name: 'Sagaing', stateRegion: 'Sagaing Region' },
-  { name: 'Monywa', stateRegion: 'Sagaing Region' },
-  { name: 'Shwebo', stateRegion: 'Sagaing Region' },
-  { name: 'Kanbalu', stateRegion: 'Sagaing Region' },
-  { name: 'Katha', stateRegion: 'Sagaing Region' },
-  { name: 'Indaw', stateRegion: 'Sagaing Region' },
-  { name: 'Mawlaik', stateRegion: 'Sagaing Region' },
-  { name: 'Kalay', stateRegion: 'Sagaing Region' },
-  { name: 'Tamu', stateRegion: 'Sagaing Region' },
-  { name: 'Kalewa', stateRegion: 'Sagaing Region' },
-  { name: 'Khamti', stateRegion: 'Sagaing Region' },
-  { name: 'Homalin', stateRegion: 'Sagaing Region' },
+  { name: 'Sagaing', township: 'Sagaing' },
+  { name: 'Monywa', township: 'Monywa' },
+  { name: 'Shwebo', township: 'Shwebo' },
+  { name: 'Kanbalu', township: 'Kanbalu' },
+  { name: 'Katha', township: 'Katha' },
+  { name: 'Indaw', township: 'Indaw' },
+  { name: 'Mawlaik', township: 'Mawlaik' },
+  { name: 'Kalay', township: 'Kalay' },
+  { name: 'Tamu', township: 'Tamu' },
+  { name: 'Kalewa', township: 'Kalewa' },
+  { name: 'Khamti', township: 'Khamti' },
+  { name: 'Homalin', township: 'Homalin' },
   
   // Bago Region
-  { name: 'Bago', stateRegion: 'Bago Region' },
-  { name: 'Pyay', stateRegion: 'Bago Region' },
-  { name: 'Taungoo', stateRegion: 'Bago Region' },
-  { name: 'Tharyarwady', stateRegion: 'Bago Region' },
-  { name: 'Letpadan', stateRegion: 'Bago Region' },
-  { name: 'Okpho', stateRegion: 'Bago Region' },
-  { name: 'Waw', stateRegion: 'Bago Region' },
-  { name: 'Kyauktaga', stateRegion: 'Bago Region' },
-  { name: 'Daik-U', stateRegion: 'Bago Region' },
-  { name: 'Shwegyin', stateRegion: 'Bago Region' },
-  { name: 'Phyu', stateRegion: 'Bago Region' },
+  { name: 'Bago', township: 'Bago' },
+  { name: 'Pyay', township: 'Pyay' },
+  { name: 'Taungoo', township: 'Taungoo' },
+  { name: 'Tharyarwady', township: 'Tharyarwady' },
+  { name: 'Letpadan', township: 'Letpadan' },
+  { name: 'Okpho', township: 'Okpho' },
+  { name: 'Waw', township: 'Waw' },
+  { name: 'Kyauktaga', township: 'Kyauktaga' },
+  { name: 'Daik-U', township: 'Daik-U' },
+  { name: 'Shwegyin', township: 'Shwegyin' },
+  { name: 'Phyu', township: 'Phyu' },
   
   // Ayeyarwady Region
-  { name: 'Pathein', stateRegion: 'Ayeyarwady Region' },
-  { name: 'Hinthada', stateRegion: 'Ayeyarwady Region' },
-  { name: 'Myaungmya', stateRegion: 'Ayeyarwady Region' },
-  { name: 'Maubin', stateRegion: 'Ayeyarwady Region' },
-  { name: 'Kyonpyaw', stateRegion: 'Ayeyarwady Region' },
-  { name: 'Bogale', stateRegion: 'Ayeyarwady Region' },
-  { name: 'Lemyethna', stateRegion: 'Ayeyarwady Region' },
-  { name: 'Kangyidaunt', stateRegion: 'Ayeyarwady Region' },
-  { name: 'Myanaung', stateRegion: 'Ayeyarwady Region' },
-  { name: 'Ingapu', stateRegion: 'Ayeyarwady Region' },
-  { name: 'Einme', stateRegion: 'Ayeyarwady Region' },
-  { name: 'Wakema', stateRegion: 'Ayeyarwady Region' },
+  { name: 'Pathein', township: 'Pathein' },
+  { name: 'Hinthada', township: 'Hinthada' },
+  { name: 'Myaungmya', township: 'Myaungmya' },
+  { name: 'Maubin', township: 'Maubin' },
+  { name: 'Kyonpyaw', township: 'Kyonpyaw' },
+  { name: 'Bogale', township: 'Bogale' },
+  { name: 'Lemyethna', township: 'Lemyethna' },
+  { name: 'Kangyidaunt', township: 'Kangyidaunt' },
+  { name: 'Myanaung', township: 'Myanaung' },
+  { name: 'Ingapu', township: 'Ingapu' },
+  { name: 'Einme', township: 'Einme' },
+  { name: 'Wakema', township: 'Wakema' },
   
   // Magway Region
-  { name: 'Magway', stateRegion: 'Magway Region' },
-  { name: 'Pakokku', stateRegion: 'Magway Region' },
-  { name: 'Minbu', stateRegion: 'Magway Region' },
-  { name: 'Thayet', stateRegion: 'Magway Region' },
-  { name: 'Gangaw', stateRegion: 'Magway Region' },
-  { name: 'Chauk', stateRegion: 'Magway Region' },
-  { name: 'Natmauk', stateRegion: 'Magway Region' },
-  { name: 'Myothit', stateRegion: 'Magway Region' },
-  { name: 'Salin', stateRegion: 'Magway Region' },
-  { name: 'Mindon', stateRegion: 'Magway Region' },
-  { name: 'Tayet', stateRegion: 'Magway Region' },
+  { name: 'Magway', township: 'Magway' },
+  { name: 'Pakokku', township: 'Pakokku' },
+  { name: 'Minbu', township: 'Minbu' },
+  { name: 'Thayet', township: 'Thayet' },
+  { name: 'Gangaw', township: 'Gangaw' },
+  { name: 'Chauk', township: 'Chauk' },
+  { name: 'Natmauk', township: 'Natmauk' },
+  { name: 'Myothit', township: 'Myothit' },
+  { name: 'Salin', township: 'Salin' },
+  { name: 'Mindon', township: 'Mindon' },
+  { name: 'Tayet', township: 'Tayet' },
   
   // Tanintharyi Region
-  { name: 'Dawei', stateRegion: 'Tanintharyi Region' },
-  { name: 'Myeik', stateRegion: 'Tanintharyi Region' },
-  { name: 'Kawthaung', stateRegion: 'Tanintharyi Region' },
-  { name: 'Tanintharyi', stateRegion: 'Tanintharyi Region' },
-  { name: 'Kyunsu', stateRegion: 'Tanintharyi Region' },
-  { name: 'Palaw', stateRegion: 'Tanintharyi Region' },
-  { name: 'Yebyu', stateRegion: 'Tanintharyi Region' },
-  { name: 'Launglon', stateRegion: 'Tanintharyi Region' },
+  { name: 'Dawei', township: 'Dawei' },
+  { name: 'Myeik', township: 'Myeik' },
+  { name: 'Kawthaung', township: 'Kawthaung' },
+  { name: 'Tanintharyi', township: 'Tanintharyi' },
+  { name: 'Kyunsu', township: 'Kyunsu' },
+  { name: 'Palaw', township: 'Palaw' },
+  { name: 'Yebyu', township: 'Yebyu' },
+  { name: 'Launglon', township: 'Launglon' },
   
   // Mon State
-  { name: 'Mawlamyine', stateRegion: 'Mon State' },
-  { name: 'Thaton', stateRegion: 'Mon State' },
-  { name: 'Ye', stateRegion: 'Mon State' },
-  { name: 'Kyaikmaraw', stateRegion: 'Mon State' },
-  { name: 'Mudon', stateRegion: 'Mon State' },
-  { name: 'Chaungzon', stateRegion: 'Mon State' },
-  { name: 'Bilin', stateRegion: 'Mon State' },
+  { name: 'Mawlamyine', township: 'Mawlamyine' },
+  { name: 'Thaton', township: 'Thaton' },
+  { name: 'Ye', township: 'Ye' },
+  { name: 'Kyaikmaraw', township: 'Kyaikmaraw' },
+  { name: 'Mudon', township: 'Mudon' },
+  { name: 'Chaungzon', township: 'Chaungzon' },
+  { name: 'Bilin', township: 'Bilin' },
   
   // Kayin State
-  { name: 'Hpa-An', stateRegion: 'Kayin State' },
-  { name: 'Myawaddy', stateRegion: 'Kayin State' },
-  { name: 'Kawkareik', stateRegion: 'Kayin State' },
-  { name: 'Hpapun', stateRegion: 'Kayin State' },
+  { name: 'Hpa-An', township: 'Hpa-An' },
+  { name: 'Myawaddy', township: 'Myawaddy' },
+  { name: 'Kawkareik', township: 'Kawkareik' },
+  { name: 'Hpapun', township: 'Hpapun' },
   
   // Kayah State
-  { name: 'Loikaw', stateRegion: 'Kayah State' },
-  { name: 'Demoso', stateRegion: 'Kayah State' },
-  { name: 'Bawlakhe', stateRegion: 'Kayah State' },
-  { name: 'Mese', stateRegion: 'Kayah State' },
+  { name: 'Loikaw', township: 'Loikaw' },
+  { name: 'Demoso', township: 'Demoso' },
+  { name: 'Bawlakhe', township: 'Bawlakhe' },
+  { name: 'Mese', township: 'Mese' },
   
   // Shan State
-  { name: 'Taunggyi', stateRegion: 'Shan State' },
-  { name: 'Lashio', stateRegion: 'Shan State' },
-  { name: 'Muse', stateRegion: 'Shan State' },
-  { name: 'Kengtung', stateRegion: 'Shan State' },
-  { name: 'Tachileik', stateRegion: 'Shan State' },
-  { name: 'Hsipaw', stateRegion: 'Shan State' },
-  { name: 'Kyaukme', stateRegion: 'Shan State' },
-  { name: 'Langkho', stateRegion: 'Shan State' },
-  { name: 'Kunlong', stateRegion: 'Shan State' },
-  { name: 'Mong Hsat', stateRegion: 'Shan State' },
-  { name: 'Mong Hpayak', stateRegion: 'Shan State' },
+  { name: 'Taunggyi', township: 'Taunggyi' },
+  { name: 'Lashio', township: 'Lashio' },
+  { name: 'Muse', township: 'Muse' },
+  { name: 'Kengtung', township: 'Kengtung' },
+  { name: 'Tachileik', township: 'Tachileik' },
+  { name: 'Hsipaw', township: 'Hsipaw' },
+  { name: 'Kyaukme', township: 'Kyaukme' },
+  { name: 'Langkho', township: 'Langkho' },
+  { name: 'Kunlong', township: 'Kunlong' },
+  { name: 'Mong Hsat', township: 'Mong Hsat' },
+  { name: 'Mong Hpayak', township: 'Mong Hpayak' },
   
   // Kachin State
-  { name: 'Myitkyina', stateRegion: 'Kachin State' },
-  { name: 'Bhamo', stateRegion: 'Kachin State' },
-  { name: 'Mohnyin', stateRegion: 'Kachin State' },
-  { name: 'Moguang', stateRegion: 'Kachin State' },
-  { name: 'Putao', stateRegion: 'Kachin State' },
-  { name: 'Waingmaw', stateRegion: 'Kachin State' },
+  { name: 'Myitkyina', township: 'Myitkyina' },
+  { name: 'Bhamo', township: 'Bhamo' },
+  { name: 'Mohnyin', township: 'Mohnyin' },
+  { name: 'Moguang', township: 'Moguang' },
+  { name: 'Putao', township: 'Putao' },
+  { name: 'Waingmaw', township: 'Waingmaw' },
   
   // Chin State
-  { name: 'Hakha', stateRegion: 'Chin State' },
-  { name: 'Falam', stateRegion: 'Chin State' },
-  { name: 'Matupi', stateRegion: 'Chin State' },
-  { name: 'Mindat', stateRegion: 'Chin State' },
+  { name: 'Hakha', township: 'Hakha' },
+  { name: 'Falam', township: 'Falam' },
+  { name: 'Matupi', township: 'Matupi' },
+  { name: 'Mindat', township: 'Mindat' },
   
   // Rakhine State
-  { name: 'Sittwe', stateRegion: 'Rakhine State' },
-  { name: 'Kyaukpyu', stateRegion: 'Rakhine State' },
-  { name: 'Mrauk-U', stateRegion: 'Rakhine State' },
-  { name: 'Thandwe', stateRegion: 'Rakhine State' },
-  { name: 'Maungdaw', stateRegion: 'Rakhine State' },
-  { name: 'Buthidaung', stateRegion: 'Rakhine State' },
-  { name: 'Rathedaung', stateRegion: 'Rakhine State' },
-  { name: 'Pauktaw', stateRegion: 'Rakhine State' },
+  { name: 'Sittwe', township: 'Sittwe' },
+  { name: 'Kyaukpyu', township: 'Kyaukpyu' },
+  { name: 'Mrauk-U', township: 'Mrauk-U' },
+  { name: 'Thandwe', township: 'Thandwe' },
+  { name: 'Maungdaw', township: 'Maungdaw' },
+  { name: 'Buthidaung', township: 'Buthidaung' },
+  { name: 'Rathedaung', township: 'Rathedaung' },
+  { name: 'Pauktaw', township: 'Pauktaw' },
   
   // Naypyidaw
-  { name: 'Naypyidaw', stateRegion: 'Naypyidaw Union Territory' }
+  { name: 'Naypyidaw', township: 'Naypyidaw' }
 ];
 
 // Get unique cities sorted alphabetically
@@ -189,27 +206,19 @@ export const getMyanmarCities = (): string[] => {
   return [...new Set(myanmarCities.map(city => city.name))].sort();
 };
 
-// Get cities by state/region
-export const getCitiesByStateRegion = (stateRegion: string): string[] => {
-  return myanmarCities
-    .filter(city => city.stateRegion === stateRegion)
-    .map(city => city.name)
-    .sort();
-};
-
-// Get state/region for a city
-export const getStateRegionForCity = (city: string): string | undefined => {
+// Get township for a city
+export const getTownshipForCity = (city: string): string | undefined => {
   const found = myanmarCities.find(c => c.name === city);
-  return found?.stateRegion;
+  return found?.township;
 };
 
 // Get all cities as options for dropdown
-export const getCityOptions = (): { value: string; label: string; stateRegion: string }[] => {
+export const getCityOptions = (): { value: string; label: string; township: string }[] => {
   return myanmarCities
     .sort((a, b) => a.name.localeCompare(b.name))
     .map(city => ({
       value: city.name,
       label: city.name,
-      stateRegion: city.stateRegion
+      township: city.township
     }));
 };

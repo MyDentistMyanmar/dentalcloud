@@ -7,7 +7,7 @@ import { exportPatientsToExcel } from '../utils/excelExport';
 import Pagination from './Pagination';
 import { Modal, Input, ConfirmDialog } from './Shared';
 import ExportMenu from './ExportMenu';
-import { getMyanmarCities, myanmarStatesAndRegions, getStateRegionForCity } from '../utils/myanmarCities';
+import { getMyanmarCities, myanmarTownships, getTownshipForCity } from '../utils/myanmarCities';
 
 interface PatientsViewProps {
   patients: Patient[];
@@ -55,7 +55,7 @@ const PatientsView: React.FC<PatientsViewProps> = ({
     age: '',
     address: '',
     city: '',
-    state_region: '',
+    township: '',
     patient_type: 'walk-in' as Patient['patient_type']
   });
   const [newPassword, setNewPassword] = useState('');
@@ -267,7 +267,7 @@ const PatientsView: React.FC<PatientsViewProps> = ({
                             age: patient.age?.toString() || '',
                             address: patient.address || '',
                             city: patient.city || '',
-                            state_region: patient.state_region || '',
+                            township: patient.township || '',
                             patient_type: patient.patient_type || 'walk-in'
                           });
                         }}
@@ -351,7 +351,7 @@ const PatientsView: React.FC<PatientsViewProps> = ({
                     age: patient.age?.toString() || '',
                     address: patient.address || '',
                     city: patient.city || '',
-                    state_region: patient.state_region || '',
+                    township: patient.township || '',
                     patient_type: patient.patient_type || 'walk-in'
                   });
                 }}
@@ -475,7 +475,7 @@ const PatientsView: React.FC<PatientsViewProps> = ({
                   age: editData.age ? parseInt(editData.age) : undefined,
                   address: editData.address || undefined,
                   city: editData.city || undefined,
-                  state_region: editData.state_region || undefined,
+                  township: editData.township || undefined,
                   patient_type: editData.patient_type
                 };
                 await onUpdatePatient(editModal.patient.id, patientData);
@@ -551,11 +551,11 @@ const PatientsView: React.FC<PatientsViewProps> = ({
               <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 ml-1">City</label>
               <select
                 className="w-full border-gray-200 border rounded-xl p-3 text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all bg-white"
-                value={editData.city}
+                value={editData.city || ''}
                 onChange={(e) => {
                   const selectedCity = e.target.value;
-                  const stateRegion = getStateRegionForCity(selectedCity) || '';
-                  setEditData({...editData, city: selectedCity, state_region: stateRegion});
+                  const township = getTownshipForCity(selectedCity) || '';
+                  setEditData({...editData, city: selectedCity, township: township});
                 }}
               >
                 <option value="">Select City</option>
@@ -565,15 +565,15 @@ const PatientsView: React.FC<PatientsViewProps> = ({
               </select>
             </div>
             <div>
-              <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 ml-1">State/Region</label>
+              <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 ml-1">Township</label>
               <select
                 className="w-full border-gray-200 border rounded-xl p-3 text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all bg-white"
-                value={editData.state_region}
-                onChange={(e) => setEditData({...editData, state_region: e.target.value})}
+                value={editData.township || ''}
+                onChange={(e) => setEditData({...editData, township: e.target.value})}
               >
-                <option value="">Select State/Region</option>
-                {myanmarStatesAndRegions.map(state => (
-                  <option key={state} value={state}>{state}</option>
+                <option value="">Select Township</option>
+                {myanmarTownships.map(township => (
+                  <option key={township} value={township}>{township}</option>
                 ))}
               </select>
             </div>

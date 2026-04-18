@@ -92,7 +92,7 @@ CREATE TABLE patients (
   age INTEGER,
   address TEXT,
   city VARCHAR(100),
-  state_region VARCHAR(100),
+  township VARCHAR(100),
   patient_type VARCHAR(50) DEFAULT 'walk-in' CHECK (patient_type IN ('online', 'walk-in', 'phone call', 'hotline', 'tiktok', 'tiktok hotline')),
   balance DECIMAL(12,2) DEFAULT 0,
   loyalty_points INTEGER DEFAULT 0,
@@ -308,6 +308,7 @@ CREATE INDEX idx_patients_email ON patients(email);
 CREATE INDEX idx_patients_phone ON patients(phone);
 CREATE INDEX idx_patients_patient_type ON patients(patient_type);
 CREATE INDEX idx_patients_city ON patients(city);
+CREATE INDEX idx_patients_township ON patients(township);
 CREATE INDEX idx_patient_auth_email ON patient_auth(email);
 CREATE INDEX idx_patient_auth_phone ON patient_auth(phone);
 CREATE INDEX idx_patient_auth_username ON patient_auth(username);

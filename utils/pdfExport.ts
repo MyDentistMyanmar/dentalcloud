@@ -36,7 +36,7 @@ export const exportPatientsToPDF = (patients: Patient[], currency: Currency) => 
       patient.patient_type || '-',
       patient.phone,
       patient.email || '-',
-      [patient.city, patient.state_region].filter(Boolean).join(', ') || '-',
+      [patient.city, patient.township].filter(Boolean).join(', ') || '-',
       patient.medicalHistory ? 'Review Required' : 'No Alerts',
       formatCurrency(patient.balance || 0, currency),
       patient.loyalty_points || 0,

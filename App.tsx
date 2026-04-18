@@ -58,7 +58,7 @@ import { api } from './services/api';
 import { formatCurrency, getCurrencySymbol, Currency } from './utils/currency';
 import { buildFinancialReport, renderFinancialReportMarkdown } from './utils/aiReport';
 import { auth } from './services/auth';
-import { getMyanmarCities, myanmarStatesAndRegions, getStateRegionForCity } from './utils/myanmarCities';
+import { getMyanmarCities, myanmarTownships, getTownshipForCity } from './utils/myanmarCities';
 import { supabase } from './services/supabase';
 import { resolveAllowedTabs } from './utils/permissions';
 import { loadEmailSettings } from './utils/emailSettings';
@@ -271,7 +271,7 @@ const App: React.FC = () => {
       age: undefined,
       address: '',
       city: '',
-      state_region: '',
+      township: '',
       patient_type: 'walk-in'
     });
   const [newAppointmentData, setNewAppointmentData] = useState<Partial<Appointment>>({ date: '', time: '', type: 'Checkup', status: 'Scheduled', patient_id: '', doctor_id: '' });
@@ -927,7 +927,7 @@ const App: React.FC = () => {
         age: undefined,
         address: '',
         city: '',
-        state_region: '',
+        township: '',
         patient_type: 'walk-in'
       });
     } catch (err: any) {
@@ -2156,8 +2156,8 @@ const App: React.FC = () => {
                   value={newPatientData.city || ''}
                   onChange={(e) => {
                     const selectedCity = e.target.value;
-                    const stateRegion = getStateRegionForCity(selectedCity) || '';
-                    setNewPatientData({...newPatientData, city: selectedCity, state_region: stateRegion});
+                    const township = getTownshipForCity(selectedCity) || '';
+                    setNewPatientData({...newPatientData, city: selectedCity, township: township});
                   }}
                 >
                   <option value="">Select City</option>
@@ -2167,15 +2167,15 @@ const App: React.FC = () => {
                 </select>
               </div>
               <div>
-                <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">State/Region</label>
+                <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">Township</label>
                 <select
                   className="w-full border-gray-200 border rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white"
-                  value={newPatientData.state_region || ''}
-                  onChange={(e) => setNewPatientData({...newPatientData, state_region: e.target.value})}
+                  value={newPatientData.township || ''}
+                  onChange={(e) => setNewPatientData({...newPatientData, township: e.target.value})}
                 >
-                  <option value="">Select State/Region</option>
-                  {myanmarStatesAndRegions.map(state => (
-                    <option key={state} value={state}>{state}</option>
+                  <option value="">Select Township</option>
+                  {myanmarTownships.map(township => (
+                    <option key={township} value={township}>{township}</option>
                   ))}
                 </select>
               </div>

@@ -18,7 +18,7 @@ export interface Patient {
   age?: number;
   address?: string;
   city?: string;
-  state_region?: string;
+  township?: string;
   patient_type?: 'online' | 'walk-in' | 'phone call' | 'hotline' | 'tiktok' | 'tiktok hotline';
   lastVisit?: string;
   balance: number;

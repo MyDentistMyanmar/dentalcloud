@@ -371,7 +371,7 @@ export const api = {
         age: data.age || null,
         address: data.address || null,
         city: data.city || null,
-        state_region: data.state_region || null,
+        township: data.township || null,
         patient_type: data.patient_type || 'walk-in',
         balance: data.balance ?? 0,
         loyalty_points: 0,
@@ -416,7 +416,7 @@ export const api = {
         age: data.age,
         address: data.address,
         city: data.city,
-        state_region: data.state_region,
+        township: data.township,
         patient_type: data.patient_type,
         balance: data.balance,
         medical_history: data.medicalHistory
