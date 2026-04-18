@@ -1348,7 +1348,7 @@ export const api = {
         // Insert new schedules (filter and validate)
         if (data.schedules.length > 0) {
           const validSchedules = data.schedules
-            .filter(sched => {
+            .filter((sched: DoctorScheduleInput) => {
               // Filter out schedules with missing data
               if (!sched.start_time || !sched.end_time || sched.day_of_week === undefined) {
                 return false;
@@ -1358,7 +1358,7 @@ export const api = {
               const end = new Date(`2000-01-01T${sched.end_time}`);
               return end > start;
             })
-            .map(sched => ({
+            .map((sched: DoctorScheduleInput) => ({
               doctor_id: id,
               day_of_week: sched.day_of_week,
               start_time: sched.start_time,
@@ -2056,29 +2056,6 @@ export const api = {
 
       if (error) throw new Error(error.message);
     }
-  },
-
-  patients: {
-    getAll: async (locationId?: string): Promise<Patient[]> => {
-      try {
-        let query = supabase
-          .from('patients')
-          .select('id, location_id, name, email, phone, balance, loyalty_points, medical_history, created_at, patient_auth(id)')
-          .order('created_at', { ascending: false });  // Changed from ordering by name to ordering by created_at descending
-        
-        if (locationId) {
-          query = query.eq('location_id', locationId);
-        }
-        
-        const { data, error } = await query;
-        
-        if (error) throw error;
-        return (data || []).map(mapPatient);
-      } catch (err) {
-        console.warn("Error fetching patients:", err);
-        return []; // Return empty array instead of crashing
-      }
-    },
   },
 
   expenses: {
