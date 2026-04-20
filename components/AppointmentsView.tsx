@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Calendar, Plus, Loader2, Edit2, Trash2, Clock, User, FileText, ChevronLeft, ChevronRight, List, CalendarDays } from 'lucide-react';
+import { Calendar, Plus, Loader2, Edit2, Trash2, Clock, User, FileText, ChevronLeft, ChevronRight, List, CalendarDays, Eye } from 'lucide-react';
 import { Appointment } from '../types';
 import { exportAppointmentsToPDF } from '../utils/pdfExport';
 import { exportAppointmentsToExcel } from '../utils/excelExport';
@@ -14,6 +14,7 @@ interface AppointmentsViewProps {
   onEditAppointment: (appointment: Appointment) => void;
   onDeleteAppointment: (id: string) => void;
   onUpdateStatus: (id: string, status: 'Scheduled' | 'Completed' | 'Cancelled') => void;
+  onViewChart: (appointment: Appointment) => void;
   onExportPDF?: () => Promise<void>;
   onExportExcel?: () => Promise<void>;
 }
@@ -25,6 +26,7 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
   onEditAppointment,
   onDeleteAppointment,
   onUpdateStatus,
+  onViewChart,
   onExportPDF,
   onExportExcel
 }) => {
@@ -382,6 +384,14 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
                           </div>
                         </div>
                         <div className="flex items-center justify-between w-full sm:w-auto gap-2 pt-3 sm:pt-0 border-t sm:border-t-0 border-gray-100">
+                          <button
+                            onClick={() => onViewChart(appointment)}
+                            className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors"
+                            title="Open patient chart"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            View Chart
+                          </button>
                           <select
                             value={appointment.status}
                             onChange={(e) => onUpdateStatus(appointment.id, e.target.value as any)}
@@ -482,6 +492,14 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => onViewChart(appointment)}
+                            className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors"
+                            title="Open patient chart"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            View Chart
+                          </button>
                           <select
                             value={appointment.status}
                             onChange={(e) => onUpdateStatus(appointment.id, e.target.value as any)}
@@ -621,6 +639,14 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => onViewChart(appointment)}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors"
+                            title="Open patient chart"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            View Chart
+                          </button>
                           <select
                             value={appointment.status}
                             onChange={(e) => onUpdateStatus(appointment.id, e.target.value as any)}

@@ -1674,6 +1674,20 @@ const App: React.FC = () => {
     setShowTreatmentSelection(true);
   };
 
+  const handleViewAppointmentChart = (appointment: Appointment) => {
+    const patient = patients.find((item) => item.id === appointment.patient_id);
+    if (!patient) {
+      setToast({
+        message: 'Patient chart is not available for this appointment.',
+        type: 'error',
+        show: true
+      });
+      return;
+    }
+
+    handlePatientSelect(patient);
+  };
+
   const handleTreatmentSelectionConfirm = (selectedTreatments: ClinicalRecord[]) => {
     const selectedTreatmentIds = new Set(selectedTreatments.map((treatment) => treatment.id));
     const selectedDates = new Set(selectedTreatments.map((treatment) => treatment.date));
@@ -2036,6 +2050,7 @@ const App: React.FC = () => {
                 onEditAppointment={(apt) => {setEditingAppointment(apt); setNewAppointmentData({ date: apt.date, time: apt.time, type: apt.type || '', status: apt.status, patient_id: apt.patient_id, doctor_id: apt.doctor_id, notes: apt.notes }); setShowAppointmentModal(true)}} 
                 onDeleteAppointment={handleDeleteAppointment} 
                 onUpdateStatus={handleUpdateAppointmentStatus} 
+                onViewChart={handleViewAppointmentChart}
                 onExportPDF={async () => {
                    const freshAppointments = await api.appointments.getAll(currentLocationId || undefined);
                    const { exportAppointmentsToPDF } = await import('./utils/pdfExport');
