@@ -2195,7 +2195,7 @@ const App: React.FC = () => {
       </aside>
       )}
 
-      <main className={isDoctor ? "flex min-w-0 flex-1 flex-col p-0 pb-24" : isWorkspaceView ? "flex min-w-0 flex-1 flex-col p-0 md:h-screen" : "flex-1 min-w-0 p-4 md:p-10"}>
+      <main className={isDoctor ? "flex min-w-0 flex-1 flex-col p-0 pb-28" : isWorkspaceView ? "flex min-w-0 flex-1 flex-col p-0 md:h-screen" : "flex-1 min-w-0 p-4 md:p-10"}>
         <div className={isDoctor || isWorkspaceView ? "flex min-h-0 flex-1 flex-col" : "max-w-6xl mx-auto"}>
           <Suspense fallback={<div className="flex justify-center p-20"><Loader2 className="animate-spin text-indigo-600 w-10 h-10" /></div>}>
             {currentView === 'dashboard' && canAccessView('dashboard') && (
@@ -2437,18 +2437,26 @@ const App: React.FC = () => {
       </main>
 
       {isDoctor && (
-        <nav className="fixed bottom-0 inset-x-0 z-40 border-t border-gray-200 bg-white/95 backdrop-blur-sm" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-          {isTabPending && <div className="h-0.5 w-full bg-indigo-100"><div className="h-full w-1/3 bg-indigo-500 animate-pulse" /></div>}
-          <div className={`grid ${doctorMobileTabs.length === 3 ? 'grid-cols-3' : 'grid-cols-4'}`}>
+        <nav
+          className="fixed bottom-2 inset-x-3 z-40 rounded-2xl border border-gray-200/80 bg-white/95 shadow-[0_8px_24px_rgba(15,23,42,0.12)] backdrop-blur-md"
+          style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        >
+          {isTabPending && <div className="h-0.5 w-full bg-indigo-100 rounded-t-2xl"><div className="h-full w-1/3 bg-indigo-500 animate-pulse" /></div>}
+          <div className={`grid p-1.5 gap-1 ${doctorMobileTabs.length === 3 ? 'grid-cols-3' : 'grid-cols-4'}`}>
             {doctorMobileTabs.map((tab) => (
               <button
                 key={tab.key}
                 type="button"
                 onClick={() => handleDoctorTabChange(tab.key)}
-                className={`flex flex-col items-center justify-center gap-1 py-3 text-[11px] font-semibold transition-colors ${
-                  tab.isActive ? 'text-indigo-700 bg-indigo-50' : 'text-gray-500 hover:text-indigo-600'
+                className={`relative flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 text-[11px] font-semibold transition-all duration-200 ${
+                  tab.isActive ? 'text-indigo-700 bg-indigo-50 shadow-sm' : 'text-gray-500 hover:text-indigo-600 hover:bg-gray-50'
                 }`}
               >
+                <span
+                  className={`absolute top-0 left-4 right-4 h-0.5 rounded-full transition-opacity duration-200 ${
+                    tab.isActive ? 'opacity-100 bg-indigo-500' : 'opacity-0'
+                  }`}
+                />
                 {tab.icon}
                 <span>{tab.label}</span>
               </button>
