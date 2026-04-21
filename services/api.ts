@@ -1,7 +1,7 @@
 import { supabase, supabaseUrl, supabaseAnonKey } from './supabase';
 import * as tus from 'tus-js-client';
 import { Patient, Appointment, ClinicalRecord, TreatmentType, PatientFile, Doctor, DoctorSchedule, DoctorScheduleInput, User, Medicine, MedicineSale, Location, LoyaltyRule, LoyaltyTransaction, Expense, Message, Conversation, Recall, ScheduledTask, S3Settings } from '../types';
-import { FULL_ACCESS_TAB_PERMISSIONS } from '../constants';
+import { DOCTOR_DASHBOARD_TABS, FULL_ACCESS_TAB_PERMISSIONS } from '../constants';
 import { resolveAllowedTabs } from '../utils/permissions';
 import { loadEmailSettings } from '../utils/emailSettings';
 import { buildS3FileUrl, buildSupabaseS3Url, buildSupabaseS3PublicUrl, deleteS3Object, isSupabaseS3Endpoint, isS3SettingsReady, listS3Objects, normalizeS3BaseUrl, uploadS3Object } from '../utils/s3Storage';
@@ -9,6 +9,8 @@ import { buildSupabasePublicUrl, deleteSupabaseStorageFile, isSupabaseStorageRea
 import { findInvalidTeeth } from '../utils/toothNumbering';
 
 let usersAllowedTabsSupport: boolean | null = null;
+let usersDoctorIdSupport: boolean | null = null;
+let conversationsDoctorUserSupport: boolean | null = null;
 let storageConfigVersion = 0;
 
 const isMissingColumnError = (error: any, columnName: string): boolean => {
@@ -35,6 +37,52 @@ const detectUsersAllowedTabsSupport = async (): Promise<boolean> => {
   }
 
   usersAllowedTabsSupport = true;
+  return true;
+};
+
+const detectUsersDoctorIdSupport = async (): Promise<boolean> => {
+  if (usersDoctorIdSupport !== null) {
+    return usersDoctorIdSupport;
+  }
+
+  const { error } = await supabase
+    .from('users')
+    .select('doctor_id')
+    .limit(1);
+
+  if (error) {
+    if (isMissingColumnError(error, 'doctor_id')) {
+      usersDoctorIdSupport = false;
+      return false;
+    }
+
+    throw error;
+  }
+
+  usersDoctorIdSupport = true;
+  return true;
+};
+
+const detectConversationsDoctorUserSupport = async (): Promise<boolean> => {
+  if (conversationsDoctorUserSupport !== null) {
+    return conversationsDoctorUserSupport;
+  }
+
+  const { error } = await supabase
+    .from('conversations')
+    .select('doctor_user_id')
+    .limit(1);
+
+  if (error) {
+    if (isMissingColumnError(error, 'doctor_user_id')) {
+      conversationsDoctorUserSupport = false;
+      return false;
+    }
+
+    throw error;
+  }
+
+  conversationsDoctorUserSupport = true;
   return true;
 };
 
@@ -828,6 +876,7 @@ export const api = {
     },
     create: async (data: Partial<Appointment>): Promise<Appointment> => {
       if (!data.location_id) throw new Error('location_id is required');
+      if (!data.patient_id) throw new Error('patient_id is required');
       if (!data.date) throw new Error('date is required');
       if (!data.time) throw new Error('time is required');
       if (!data.type) throw new Error('type is required');
@@ -835,7 +884,7 @@ export const api = {
       const payload = {
         location_id: data.location_id,
         patient_id: data.patient_id,
-        doctor_id: data.doctor_id,
+        doctor_id: data.doctor_id && String(data.doctor_id).trim() !== '' ? data.doctor_id : null,
         date: data.date,
         time: data.time,
         type: data.type,
@@ -900,9 +949,16 @@ export const api = {
       }
     },
     update: async (id: string, data: Partial<Appointment>): Promise<Appointment> => {
+      const updatePayload = {
+        ...data,
+        doctor_id: Object.prototype.hasOwnProperty.call(data, 'doctor_id')
+          ? (data.doctor_id && String(data.doctor_id).trim() !== '' ? data.doctor_id : null)
+          : undefined
+      };
+
       const { data: result, error } = await supabase
         .from('appointments')
-        .update(data)
+        .update(updatePayload)
         .eq('id', id)
         .select('*, patients(name), doctors(name)')
         .single();
@@ -1258,20 +1314,69 @@ export const api = {
       }
     },
     create: async (data: Partial<Doctor> | any): Promise<Doctor> => {
+      const trimmedPassword = typeof data.password === 'string' ? data.password.trim() : '';
+      const trimmedEmail = typeof data.email === 'string' ? data.email.trim().toLowerCase() : '';
+      if (trimmedPassword && !trimmedEmail) {
+        throw new Error('Doctor email is required to create a doctor login account.');
+      }
       // First create the doctor
       const { data: doctorData, error: doctorError } = await supabase
         .from('doctors')
         .insert({
           location_id: data.location_id,
           name: data.name,
-          email: data.email,
+          email: trimmedEmail || null,
           phone: data.phone,
-          specialization: data.specialization
+          specialization: data.specialization,
+          password: trimmedPassword || null
         })
         .select()
         .single();
 
       if (doctorError) throw new Error(doctorError.message);
+
+      if (trimmedPassword) {
+        try {
+          const supportsDoctorId = await detectUsersDoctorIdSupport();
+          if (!supportsDoctorId) {
+            throw new Error('Database update required: users.doctor_id is missing. Run database/add_doctor_password.sql first.');
+          }
+
+          const supportsAllowedTabs = await detectUsersAllowedTabsSupport();
+          const { data: existingUsername } = await supabase
+            .from('users')
+            .select('id')
+            .eq('username', trimmedEmail)
+            .maybeSingle();
+
+          if (existingUsername) {
+            throw new Error('Doctor email is already used by another staff account.');
+          }
+
+          const doctorUserPayload: any = {
+            location_id: data.location_id || null,
+            doctor_id: doctorData.id,
+            username: trimmedEmail,
+            password: trimmedPassword,
+            role: 'normal'
+          };
+
+          if (supportsAllowedTabs) {
+            doctorUserPayload.allowed_tabs = DOCTOR_DASHBOARD_TABS;
+          }
+
+          const { error: userCreateError } = await supabase
+            .from('users')
+            .insert(doctorUserPayload);
+
+          if (userCreateError) {
+            throw new Error(userCreateError.message);
+          }
+        } catch (doctorUserError: any) {
+          await supabase.from('doctors').delete().eq('id', doctorData.id);
+          throw new Error(doctorUserError.message || 'Failed to create doctor login account.');
+        }
+      }
 
       // Then create schedules if provided (filter and validate)
       if (data.schedules && data.schedules.length > 0) {
@@ -1328,18 +1433,117 @@ export const api = {
       };
     },
     update: async (id: string, data: Partial<Doctor> | any): Promise<Doctor> => {
+      const { data: existingDoctor, error: existingDoctorError } = await supabase
+        .from('doctors')
+        .select('email, location_id')
+        .eq('id', id)
+        .single();
+
+      if (existingDoctorError) throw new Error(existingDoctorError.message);
+
+      const trimmedPassword = typeof data.password === 'string' ? data.password.trim() : '';
+      const nextEmailRaw = data.email !== undefined ? data.email : existingDoctor.email;
+      const nextEmail = typeof nextEmailRaw === 'string' ? nextEmailRaw.trim().toLowerCase() : '';
+      const supportsDoctorId = await detectUsersDoctorIdSupport();
+      const linkedDoctorUserQuery = supportsDoctorId
+        ? await supabase
+            .from('users')
+            .select('id')
+            .eq('doctor_id', id)
+            .maybeSingle()
+        : { data: null, error: null };
+
+      if (linkedDoctorUserQuery.error) {
+        throw new Error(linkedDoctorUserQuery.error.message);
+      }
+
+      const linkedDoctorUserBefore = linkedDoctorUserQuery.data;
+
+      if ((linkedDoctorUserBefore || trimmedPassword) && !nextEmail) {
+        throw new Error('Doctor email is required for doctor login accounts.');
+      }
+
       // Update doctor info
+      const doctorUpdatePayload: any = {
+        name: data.name,
+        email: nextEmail || null,
+        phone: data.phone,
+        specialization: data.specialization
+      };
+      if (trimmedPassword) {
+        doctorUpdatePayload.password = trimmedPassword;
+      }
+
       const { error: doctorError } = await supabase
         .from('doctors')
-        .update({
-          name: data.name,
-          email: data.email,
-          phone: data.phone,
-          specialization: data.specialization
-        })
+        .update(doctorUpdatePayload)
         .eq('id', id);
 
       if (doctorError) throw new Error(doctorError.message);
+      if (supportsDoctorId) {
+        const supportsAllowedTabs = await detectUsersAllowedTabsSupport();
+        const { data: linkedDoctorUser } = await supabase
+          .from('users')
+          .select('id')
+          .eq('doctor_id', id)
+          .maybeSingle();
+
+        const shouldManageDoctorLogin = Boolean(linkedDoctorUser) || Boolean(trimmedPassword);
+
+        if (shouldManageDoctorLogin) {
+          if (!nextEmail) {
+            throw new Error('Doctor email is required for doctor login accounts.');
+          }
+
+          const { data: duplicateUsername } = await supabase
+            .from('users')
+            .select('id')
+            .eq('username', nextEmail)
+            .neq('doctor_id', id)
+            .maybeSingle();
+
+          if (duplicateUsername) {
+            throw new Error('Doctor email is already used by another staff account.');
+          }
+
+          if (linkedDoctorUser) {
+            const linkedUserPayload: any = {
+              username: nextEmail,
+              location_id: data.location_id || existingDoctor.location_id || null
+            };
+            if (trimmedPassword) {
+              linkedUserPayload.password = trimmedPassword;
+            }
+            if (supportsAllowedTabs) {
+              linkedUserPayload.allowed_tabs = DOCTOR_DASHBOARD_TABS;
+            }
+
+            const { error: linkedUserError } = await supabase
+              .from('users')
+              .update(linkedUserPayload)
+              .eq('id', linkedDoctorUser.id);
+
+            if (linkedUserError) throw new Error(linkedUserError.message);
+          } else if (trimmedPassword) {
+            const newDoctorUserPayload: any = {
+              location_id: data.location_id || existingDoctor.location_id || null,
+              doctor_id: id,
+              username: nextEmail,
+              password: trimmedPassword,
+              role: 'normal'
+            };
+            if (supportsAllowedTabs) {
+              newDoctorUserPayload.allowed_tabs = DOCTOR_DASHBOARD_TABS;
+            }
+
+            const { error: createDoctorUserError } = await supabase
+              .from('users')
+              .insert(newDoctorUserPayload);
+
+            if (createDoctorUserError) throw new Error(createDoctorUserError.message);
+          }
+        }
+      }
 
       // Update schedules if provided
       if (data.schedules !== undefined) {
@@ -1405,6 +1609,14 @@ export const api = {
       };
     },
     delete: async (id: string): Promise<void> => {
+      const supportsDoctorId = await detectUsersDoctorIdSupport();
+      if (supportsDoctorId) {
+        await supabase
+          .from('users')
+          .delete()
+          .eq('doctor_id', id);
+      }
+
       // Delete schedules first (cascade should handle this, but being explicit)
       await supabase
         .from('doctor_schedules')
@@ -2151,17 +2363,19 @@ export const api = {
     getAll: async (): Promise<User[]> => {
       try {
         const supportsAllowedTabs = await detectUsersAllowedTabsSupport();
+        const supportsDoctorId = await detectUsersDoctorIdSupport();
         const { data, error } = await supabase
           .from('users')
           .select(supportsAllowedTabs
-            ? 'id, location_id, username, role, allowed_tabs, created_at, updated_at'
-            : 'id, location_id, username, role, created_at, updated_at')
+            ? `id, location_id, username, role, allowed_tabs, created_at, updated_at${supportsDoctorId ? ', doctor_id' : ''}`
+            : `id, location_id, username, role, created_at, updated_at${supportsDoctorId ? ', doctor_id' : ''}`)
           .order('created_at', { ascending: false });
         
         if (error) throw error;
         return (data || []).map((u: any) => ({
           id: u.id,
           location_id: u.location_id,
+          doctor_id: supportsDoctorId ? (u.doctor_id || null) : null,
           username: u.username,
           role: u.role,
           allowed_tabs: resolveAllowedTabs(u.role, supportsAllowedTabs ? u.allowed_tabs : undefined),
@@ -2178,12 +2392,13 @@ export const api = {
         const trimmedUsername = username.trim();
         console.log('Attempting to authenticate user:', trimmedUsername);
         const supportsAllowedTabs = await detectUsersAllowedTabsSupport();
+        const supportsDoctorId = await detectUsersDoctorIdSupport();
 
         const { data, error } = await supabase
           .from('users')
           .select(supportsAllowedTabs
-            ? 'id, location_id, username, password, role, allowed_tabs'
-            : 'id, location_id, username, password, role')
+            ? `id, location_id, username, password, role, allowed_tabs${supportsDoctorId ? ', doctor_id' : ''}`
+            : `id, location_id, username, password, role${supportsDoctorId ? ', doctor_id' : ''}`)
           .eq('username', trimmedUsername) as { data: User[] | null, error: any };
 
         console.log('Supabase response:', { data, error });
@@ -2206,6 +2421,7 @@ export const api = {
           return {
             id: user.id,
             location_id: user.location_id,
+            doctor_id: supportsDoctorId ? (user.doctor_id || null) : null,
             username: user.username,
             role: user.role,
             allowed_tabs: resolveAllowedTabs(user.role, supportsAllowedTabs ? user.allowed_tabs : undefined)
@@ -2221,6 +2437,7 @@ export const api = {
     },
     create: async (data: Partial<User>): Promise<User> => {
       const supportsAllowedTabs = await detectUsersAllowedTabsSupport();
+      const supportsDoctorId = await detectUsersDoctorIdSupport();
       const trimmedUsername = data.username?.trim();
       if (!trimmedUsername) {
         throw new Error('Username is required');
@@ -2244,6 +2461,10 @@ export const api = {
         role: data.role || 'normal'
       };
 
+      if (supportsDoctorId && data.doctor_id !== undefined) {
+        (payload as any).doctor_id = data.doctor_id || null;
+      }
+
       if (supportsAllowedTabs) {
         (payload as any).allowed_tabs = data.role === 'admin'
           ? FULL_ACCESS_TAB_PERMISSIONS
@@ -2254,14 +2475,15 @@ export const api = {
         .from('users')
         .insert(payload)
         .select(supportsAllowedTabs
-          ? 'id, location_id, username, role, allowed_tabs, created_at, updated_at'
-          : 'id, location_id, username, role, created_at, updated_at')
+          ? `id, location_id, username, role, allowed_tabs, created_at, updated_at${supportsDoctorId ? ', doctor_id' : ''}`
+          : `id, location_id, username, role, created_at, updated_at${supportsDoctorId ? ', doctor_id' : ''}`)
         .single() as { data: User, error: any };
 
       if (error) throw new Error(error.message);
       return {
         id: result.id,
         location_id: result.location_id,
+        doctor_id: supportsDoctorId ? (result.doctor_id || null) : null,
         username: result.username,
         role: result.role,
         allowed_tabs: resolveAllowedTabs(result.role, supportsAllowedTabs ? result.allowed_tabs : undefined),
@@ -2271,6 +2493,7 @@ export const api = {
     },
     update: async (id: string, data: Partial<User>): Promise<User> => {
       const supportsAllowedTabs = await detectUsersAllowedTabsSupport();
+      const supportsDoctorId = await detectUsersDoctorIdSupport();
       const payload: any = {};
       const { data: currentUser, error: currentUserError } = await supabase
         .from('users')
@@ -2314,6 +2537,10 @@ export const api = {
         payload.location_id = data.location_id || null;
       }
 
+      if (supportsDoctorId && data.doctor_id !== undefined) {
+        payload.doctor_id = data.doctor_id || null;
+      }
+
       if (supportsAllowedTabs && (data.allowed_tabs !== undefined || data.role !== undefined)) {
         const nextRole = (data.role || currentUser.role) as User['role'];
         const nextAllowedTabs = nextRole === 'admin'
@@ -2329,14 +2556,15 @@ export const api = {
         .update(payload)
         .eq('id', id)
         .select(supportsAllowedTabs
-          ? 'id, location_id, username, role, allowed_tabs, created_at, updated_at'
-          : 'id, location_id, username, role, created_at, updated_at')
+          ? `id, location_id, username, role, allowed_tabs, created_at, updated_at${supportsDoctorId ? ', doctor_id' : ''}`
+          : `id, location_id, username, role, created_at, updated_at${supportsDoctorId ? ', doctor_id' : ''}`)
         .single() as { data: User, error: any };
 
       if (error) throw new Error(error.message);
       return {
         id: result.id,
         location_id: result.location_id,
+        doctor_id: supportsDoctorId ? (result.doctor_id || null) : null,
         username: result.username,
         role: result.role,
         allowed_tabs: resolveAllowedTabs(result.role, supportsAllowedTabs ? result.allowed_tabs : undefined),
@@ -3124,17 +3352,31 @@ export const api = {
   },
 
   messages: {
-    mapConversationRow: (conv: any, unreadCount = 0): Conversation => ({
-      id: conv.id,
-      patient_id: conv.patient_id,
-      patient_name: conv.patients?.name || (Array.isArray(conv.patients) ? conv.patients[0]?.name : 'Unknown Patient'),
-      admin_id: conv.admin_id,
-      admin_name: conv.users?.username || (Array.isArray(conv.users) ? conv.users[0]?.username : 'Unknown Admin'),
-      last_message: conv.last_message,
-      last_message_time: conv.last_message_time,
-      unread_count: unreadCount,
-      created_at: conv.created_at
-    }),
+    mapConversationRow: (conv: any, unreadCount = 0, doctorNameByUserId: Record<string, string> = {}): Conversation => {
+      const patientName = conv.patients?.name || (Array.isArray(conv.patients) ? conv.patients[0]?.name : undefined);
+      const adminName = conv.admin_user?.username || (Array.isArray(conv.admin_user) ? conv.admin_user[0]?.username : 'Unknown Admin');
+      const doctorUserId = conv.doctor_user_id || null;
+      const doctorName = doctorUserId ? (doctorNameByUserId[doctorUserId] || conv.doctor_user?.username || 'Doctor') : null;
+      const participantType: 'patient' | 'doctor' = conv.patient_id ? 'patient' : 'doctor';
+      const participantName = participantType === 'patient'
+        ? (patientName || 'Unknown Patient')
+        : (doctorName || 'Doctor');
+
+      return {
+        id: conv.id,
+        patient_id: conv.patient_id || null,
+        doctor_user_id: doctorUserId,
+        participant_type: participantType,
+        participant_name: participantName,
+        patient_name: participantName,
+        admin_id: conv.admin_id,
+        admin_name: adminName,
+        last_message: conv.last_message,
+        last_message_time: conv.last_message_time,
+        unread_count: unreadCount,
+        created_at: conv.created_at
+      };
+    },
 
     // Get conversations for a user
     getConversations: async (userId: string, userType: 'patient' | 'admin'): Promise<Conversation[]> => {
@@ -3147,19 +3389,34 @@ export const api = {
         return [];
       }
       
-      let query = supabase
-        .from('conversations')
-        .select(`
+      const supportsDoctorMessaging = await detectConversationsDoctorUserSupport();
+      const selectClause = supportsDoctorMessaging
+        ? `
           id,
           patient_id,
-          patients!inner(name),
+          doctor_user_id,
+          patients(name),
           admin_id,
-          users!inner(username),
+          admin_user:users!conversations_admin_id_fkey(username),
           last_message,
           last_message_time,
           created_at
-        `)
-        .order('last_message_time', { ascending: false });
+        `
+        : `
+          id,
+          patient_id,
+          patients(name),
+          admin_id,
+          admin_user:users!conversations_admin_id_fkey(username),
+          last_message,
+          last_message_time,
+          created_at
+        `;
+
+      let query = supabase
+        .from('conversations')
+        .select(selectClause)
+        .order('last_message_time', { ascending: false, nullsFirst: false });
 
       if (userType === 'patient') {
         query = query.eq('patient_id', userId);
@@ -3173,6 +3430,38 @@ export const api = {
 
       if (!conversations || conversations.length === 0) {
         return [];
+      }
+
+      const doctorUserIds = supportsDoctorMessaging
+        ? Array.from(new Set(conversations.map((conv: any) => conv.doctor_user_id).filter(Boolean)))
+        : [];
+      const doctorNameByUserId: Record<string, string> = {};
+      if (doctorUserIds.length > 0) {
+        const { data: doctorUsers, error: doctorUsersError } = await supabase
+          .from('users')
+          .select('id, username, doctor_id')
+          .in('id', doctorUserIds);
+
+        if (!doctorUsersError && doctorUsers) {
+          const doctorIds = Array.from(new Set(doctorUsers.map((user: any) => user.doctor_id).filter(Boolean)));
+          const doctorNameByDoctorId: Record<string, string> = {};
+          if (doctorIds.length > 0) {
+            const { data: doctorsData, error: doctorsError } = await supabase
+              .from('doctors')
+              .select('id, name')
+              .in('id', doctorIds);
+
+            if (!doctorsError && doctorsData) {
+              doctorsData.forEach((doctor: any) => {
+                doctorNameByDoctorId[doctor.id] = doctor.name;
+              });
+            }
+          }
+
+          doctorUsers.forEach((user: any) => {
+            doctorNameByUserId[user.id] = doctorNameByDoctorId[user.doctor_id] || user.username || 'Doctor';
+          });
+        }
       }
       
       // Get unread message counts for each conversation
@@ -3190,7 +3479,7 @@ export const api = {
       if (unreadError) {
         console.warn('Error fetching unread message counts:', unreadError.message);
         // Return conversations with 0 unread count if unread query fails
-        return conversations.map((conv: any) => api.messages.mapConversationRow(conv, 0));
+        return conversations.map((conv: any) => api.messages.mapConversationRow(conv, 0, doctorNameByUserId));
       }
       
       // Create a map of conversation_id to unread count
@@ -3199,7 +3488,7 @@ export const api = {
         return acc;
       }, {} as Record<string, number>);
       
-      return conversations.map((conv: any) => api.messages.mapConversationRow(conv, unreadCountMap[conv.id] || 0));
+      return conversations.map((conv: any) => api.messages.mapConversationRow(conv, unreadCountMap[conv.id] || 0, doctorNameByUserId));
     },
     
     // Get messages for a conversation
@@ -3329,33 +3618,60 @@ export const api = {
       });
     },
     
-    // Create new conversation
-    createConversation: async (patientId: string, adminId: string): Promise<Conversation> => {
+    // Create new conversation (admin <-> patient|doctor)
+    createConversation: async (
+      participantId: string,
+      adminId: string,
+      participantType: 'patient' | 'doctor' = 'patient'
+    ): Promise<Conversation> => {
       // Perform automatic cleanup before creating new conversation
       await api.messages.performAutomaticCleanup();
       
       // Validate UUIDs
-      if (!patientId || patientId === 'undefined' || !adminId || adminId === 'undefined' || adminId === 'admin-default') {
-        throw new Error('Invalid patient or admin ID for conversation creation');
+      if (!participantId || participantId === 'undefined' || !adminId || adminId === 'undefined' || adminId === 'admin-default') {
+        throw new Error('Invalid participant or admin ID for conversation creation');
       }
 
-      const selectClause = `
-        id,
-        patient_id,
-        patients!inner(name),
-        admin_id,
-        users!inner(username),
-        last_message,
-        last_message_time,
-        created_at
-      `;
+      const supportsDoctorMessaging = await detectConversationsDoctorUserSupport();
+      if (participantType === 'doctor' && !supportsDoctorMessaging) {
+        throw new Error('Database update required: run database/add_doctor_admin_messaging.sql first.');
+      }
 
-      const { data: existingConversation, error: existingError } = await supabase
+      const selectClause = supportsDoctorMessaging
+        ? `
+          id,
+          patient_id,
+          doctor_user_id,
+          patients(name),
+          admin_id,
+          admin_user:users!conversations_admin_id_fkey(username),
+          last_message,
+          last_message_time,
+          created_at
+        `
+        : `
+          id,
+          patient_id,
+          patients(name),
+          admin_id,
+          admin_user:users!conversations_admin_id_fkey(username),
+          last_message,
+          last_message_time,
+          created_at
+        `;
+
+      let existingQuery = supabase
         .from('conversations')
         .select(selectClause)
-        .eq('patient_id', patientId)
-        .eq('admin_id', adminId)
-        .maybeSingle();
+        .eq('admin_id', adminId);
+
+      if (participantType === 'doctor') {
+        existingQuery = existingQuery.eq('doctor_user_id', participantId);
+      } else {
+        existingQuery = existingQuery.eq('patient_id', participantId);
+      }
+
+      const { data: existingConversation, error: existingError } = await existingQuery.maybeSingle();
 
       if (existingError) {
         throw new Error(existingError.message);
@@ -3365,14 +3681,20 @@ export const api = {
         return api.messages.mapConversationRow(existingConversation, 0);
       }
 
+      const insertPayload: any = {
+        admin_id: adminId,
+        last_message: null,
+        last_message_time: null
+      };
+      if (participantType === 'doctor') {
+        insertPayload.doctor_user_id = participantId;
+      } else {
+        insertPayload.patient_id = participantId;
+      }
+
       const { data: conversation, error } = await supabase
         .from('conversations')
-        .insert({
-          patient_id: patientId,
-          admin_id: adminId,
-          last_message: null,
-          last_message_time: null
-        })
+        .insert(insertPayload)
         .select(selectClause)
         .single();
       

@@ -1,8 +1,9 @@
-import React, { useState, useMemo } from 'react';
+﻿import React, { useState, useMemo } from 'react';
 import { Calendar, Plus, Loader2, Edit2, Trash2, Clock, User, FileText, ChevronLeft, ChevronRight, List, CalendarDays, Eye } from 'lucide-react';
 import { Appointment } from '../types';
 import { exportAppointmentsToPDF } from '../utils/pdfExport';
 import { exportAppointmentsToExcel } from '../utils/excelExport';
+import { parseAppointmentClinicalFocus } from '../utils/appointmentClinicalFocus';
 import Pagination from './Pagination';
 import { ConfirmDialog } from './Shared';
 import ExportMenu from './ExportMenu';
@@ -17,6 +18,11 @@ interface AppointmentsViewProps {
   onViewChart: (appointment: Appointment) => void;
   onExportPDF?: () => Promise<void>;
   onExportExcel?: () => Promise<void>;
+  canCreate?: boolean;
+  canEdit?: boolean;
+  canDelete?: boolean;
+  canViewChart?: boolean;
+  canExport?: boolean;
 }
 
 const AppointmentsView: React.FC<AppointmentsViewProps> = ({
@@ -28,7 +34,12 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
   onUpdateStatus,
   onViewChart,
   onExportPDF,
-  onExportExcel
+  onExportExcel,
+  canCreate = true,
+  canEdit = true,
+  canDelete = true,
+  canViewChart = true,
+  canExport = true
 }) => {
   const [viewMode, setViewMode] = useState<'current' | 'calendar'>('current');
   const [upcomingPage, setUpcomingPage] = useState(1);
@@ -88,6 +99,8 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
   const filteredAppointments = useMemo(() => {
     const term = searchTerm.toLowerCase();
     return appointments.filter(apt => {
+      const clinicalPlan = parseAppointmentClinicalFocus(apt.notes);
+      const focusTeethText = clinicalPlan.targetTeeth.join(', ');
       const matchesSearch = !searchTerm || (
         apt.patient_name?.toLowerCase().includes(term) ||
         apt.type?.toLowerCase().includes(term) ||
@@ -95,7 +108,9 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
         apt.date.toLowerCase().includes(term) ||
         apt.time.toLowerCase().includes(term) ||
         apt.status.toLowerCase().includes(term) ||
-        apt.notes?.toLowerCase().includes(term)
+        apt.notes?.toLowerCase().includes(term) ||
+        clinicalPlan.clinicalFocus.toLowerCase().includes(term) ||
+        focusTeethText.includes(term)
       );
 
       if (!matchesSearch) return false;
@@ -257,18 +272,22 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
           </svg>
         </div>
         <div className="flex flex-wrap gap-2 w-full md:w-auto">
-          <ExportMenu
-            disabled={appointments.length === 0 || exporting}
-            onExportPDF={handleDownloadPDF}
-            onExportExcel={handleDownloadExcel}
-            className="flex-1 md:flex-initial"
-          />
-          <button
-            onClick={onAddAppointment}
-            className="flex-1 md:flex-initial flex items-center justify-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
-          >
-            <Plus className="w-4 h-4" /> <span className="hidden sm:inline">New Appointment</span>
-          </button>
+          {canExport && (
+            <ExportMenu
+              disabled={appointments.length === 0 || exporting}
+              onExportPDF={handleDownloadPDF}
+              onExportExcel={handleDownloadExcel}
+              className="flex-1 md:flex-initial"
+            />
+          )}
+          {canCreate && (
+            <button
+              onClick={onAddAppointment}
+              className="flex-1 md:flex-initial flex items-center justify-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
+            >
+              <Plus className="w-4 h-4" /> <span className="hidden sm:inline">New Appointment</span>
+            </button>
+          )}
         </div>
         <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 w-full md:w-auto">
           <button
@@ -296,31 +315,6 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
             Tomorrow
           </button>
         </div>
-        <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 w-full md:w-auto">
-          <button
-            onClick={() => setViewMode('current')}
-            className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded-md transition-colors ${
-              viewMode === 'current' ? 'bg-white text-indigo-700 shadow-sm font-semibold' : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            <List className="w-3.5 h-3.5" />
-            Current View
-          </button>
-          <button
-            onClick={() => {
-              setViewMode('calendar');
-              if (!selectedCalendarDate) {
-                setSelectedCalendarDate(todayISO);
-              }
-            }}
-            className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded-md transition-colors ${
-              viewMode === 'calendar' ? 'bg-white text-indigo-700 shadow-sm font-semibold' : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            <CalendarDays className="w-3.5 h-3.5" />
-            Calendar View
-          </button>
-        </div>
       </div>
     </div>
 
@@ -344,7 +338,9 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {paginatedUpcoming.map((appointment) => (
+                    {paginatedUpcoming.map((appointment) => {
+                      const clinicalPlan = parseAppointmentClinicalFocus(appointment.notes);
+                      return (
                       <div
                         key={appointment.id}
                         className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors gap-4"
@@ -381,17 +377,29 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
                                 </span>
                               )}
                             </div>
+                            {(clinicalPlan.clinicalFocus || clinicalPlan.targetTeeth.length > 0) && (
+                              <div className="mt-2 rounded-lg border border-indigo-100 bg-indigo-50 px-2.5 py-2">
+                                {clinicalPlan.clinicalFocus && (
+                                  <p className="text-xs font-medium text-indigo-700">Clinical Focus: {clinicalPlan.clinicalFocus}</p>
+                                )}
+                                {clinicalPlan.targetTeeth.length > 0 && (
+                                  <p className="mt-1 text-xs text-indigo-600">Target Teeth: {clinicalPlan.targetTeeth.join(', ')}</p>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
                         <div className="flex items-center justify-between w-full sm:w-auto gap-2 pt-3 sm:pt-0 border-t sm:border-t-0 border-gray-100">
-                          <button
-                            onClick={() => onViewChart(appointment)}
-                            className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors"
-                            title="Open patient chart"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                            View Chart
-                          </button>
+                          {canViewChart && (
+                            <button
+                              onClick={() => onViewChart(appointment)}
+                              className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors"
+                              title="Open patient chart"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              View Chart
+                            </button>
+                          )}
                           <select
                             value={appointment.status}
                             onChange={(e) => onUpdateStatus(appointment.id, e.target.value as any)}
@@ -401,28 +409,35 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
                             <option value="Completed">Completed</option>
                             <option value="Cancelled">Cancelled</option>
                           </select>
-                          <div className="flex gap-1">
-                            <button
-                              onClick={() => onEditAppointment(appointment)}
-                              className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                              title="Edit appointment"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => {
-                                setAppointmentToDelete(appointment.id);
-                                setDeleteConfirmOpen(true);
-                              }}
-                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                              title="Delete appointment"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
+                          {(canEdit || canDelete) && (
+                            <div className="flex gap-1">
+                              {canEdit && (
+                                <button
+                                  onClick={() => onEditAppointment(appointment)}
+                                  className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                  title="Edit appointment"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </button>
+                              )}
+                              {canDelete && (
+                                <button
+                                  onClick={() => {
+                                    setAppointmentToDelete(appointment.id);
+                                    setDeleteConfirmOpen(true);
+                                  }}
+                                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                  title="Delete appointment"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
                 {upcomingAppointments.length > 0 && (
@@ -451,12 +466,14 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {paginatedPast.map((appointment) => (
+                    {paginatedPast.map((appointment) => {
+                      const clinicalPlan = parseAppointmentClinicalFocus(appointment.notes);
+                      return (
                       <div
                         key={appointment.id}
-                        className="flex items-center justify-between p-4 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors opacity-75"
+                        className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors opacity-75 gap-4"
                       >
-                        <div className="flex items-center gap-4 flex-1">
+                        <div className="flex items-center gap-4 flex-1 w-full">
                           <div className="flex-shrink-0 w-16 h-16 bg-gray-100 rounded-xl flex flex-col items-center justify-center">
                             <span className="text-xs font-bold text-gray-700">
                               {new Date(appointment.date).toLocaleDateString('en-US', { day: 'numeric' })}
@@ -465,14 +482,14 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
                               {new Date(appointment.date).toLocaleDateString('en-US', { month: 'short' })}
                             </span>
                           </div>
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-1">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2 mb-1">
                               <h4 className="font-semibold text-gray-700">{appointment.patient_name || 'Unknown Patient'}</h4>
                               <span className={`px-2 py-0.5 rounded text-xs font-medium border ${getStatusColor(appointment.status)}`}>
                                 {appointment.status}
                               </span>
                             </div>
-                            <div className="flex items-center gap-4 text-sm text-gray-500">
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
                               <span className="flex items-center gap-1">
                                 <Clock className="w-3 h-3" />
                                 {formatTime(appointment.time)}
@@ -486,49 +503,66 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
                                 {formatDate(appointment.date)}
                               </span>
                             </div>
-                            {appointment.notes && (
-                              <p className="text-xs text-gray-600 mt-2 italic">{appointment.notes}</p>
+                            {clinicalPlan.notes && (
+                              <p className="text-xs text-gray-600 mt-2 italic">{clinicalPlan.notes}</p>
+                            )}
+                            {(clinicalPlan.clinicalFocus || clinicalPlan.targetTeeth.length > 0) && (
+                              <div className="mt-2 rounded-lg border border-indigo-100 bg-indigo-50 px-2.5 py-2">
+                                {clinicalPlan.clinicalFocus && (
+                                  <p className="text-xs font-medium text-indigo-700">Clinical Focus: {clinicalPlan.clinicalFocus}</p>
+                                )}
+                                {clinicalPlan.targetTeeth.length > 0 && (
+                                  <p className="mt-1 text-xs text-indigo-600">Target Teeth: {clinicalPlan.targetTeeth.join(', ')}</p>
+                                )}
+                              </div>
                             )}
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => onViewChart(appointment)}
-                            className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors"
-                            title="Open patient chart"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                            View Chart
-                          </button>
+                        <div className="flex items-center justify-between w-full sm:w-auto gap-2 pt-3 sm:pt-0 border-t sm:border-t-0 border-gray-100">
+                          {canViewChart && (
+                            <button
+                              onClick={() => onViewChart(appointment)}
+                              className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors"
+                              title="Open patient chart"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              View Chart
+                            </button>
+                          )}
                           <select
                             value={appointment.status}
                             onChange={(e) => onUpdateStatus(appointment.id, e.target.value as any)}
-                            className="text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white flex-1 sm:flex-initial"
                           >
                             <option value="Scheduled">Scheduled</option>
                             <option value="Completed">Completed</option>
                             <option value="Cancelled">Cancelled</option>
                           </select>
-                          <button
-                            onClick={() => onEditAppointment(appointment)}
-                            className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                            title="Edit appointment"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => {
-                              setAppointmentToDelete(appointment.id);
-                              setDeleteConfirmOpen(true);
-                            }}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Delete appointment"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {canEdit && (
+                            <button
+                              onClick={() => onEditAppointment(appointment)}
+                              className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                              title="Edit appointment"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                          )}
+                          {canDelete && (
+                            <button
+                              onClick={() => {
+                                setAppointmentToDelete(appointment.id);
+                                setDeleteConfirmOpen(true);
+                              }}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Delete appointment"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
                 {pastAppointments.length > 0 && (
@@ -629,48 +663,58 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
                   <p className="text-sm text-gray-500 italic">No appointments found for this date.</p>
                 ) : (
                   <div className="space-y-2">
-                    {selectedDayAppointments.map((appointment) => (
-                      <div key={appointment.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">{appointment.patient_name || 'Unknown Patient'}</div>
-                          <div className="text-xs text-gray-500 mt-0.5">
-                            {formatTime(appointment.time)} • {appointment.type || 'Checkup'}
-                            {appointment.doctor_name ? ` • Dr. ${appointment.doctor_name}` : ''}
+                    {selectedDayAppointments.map((appointment) => {
+                      const clinicalPlan = parseAppointmentClinicalFocus(appointment.notes);
+                      return (
+                        <div key={appointment.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">{appointment.patient_name || 'Unknown Patient'}</div>
+                            <div className="text-xs text-gray-500 mt-0.5">
+                              {formatTime(appointment.time)} • {appointment.type || 'Checkup'}
+                              {appointment.doctor_name ? ` • Dr. ${appointment.doctor_name}` : ''}
+                            </div>
+                            {(clinicalPlan.clinicalFocus || clinicalPlan.targetTeeth.length > 0) && (
+                              <div className="mt-1 text-xs text-indigo-700">
+                                {clinicalPlan.clinicalFocus ? `Focus: ${clinicalPlan.clinicalFocus}` : ''}
+                                {clinicalPlan.clinicalFocus && clinicalPlan.targetTeeth.length > 0 ? ' • ' : ''}
+                                {clinicalPlan.targetTeeth.length > 0 ? `Teeth: ${clinicalPlan.targetTeeth.join(', ')}` : ''}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => onViewChart(appointment)}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors"
+                              title="Open patient chart"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              View Chart
+                            </button>
+                            <select
+                              value={appointment.status}
+                              onChange={(e) => onUpdateStatus(appointment.id, e.target.value as any)}
+                              className="text-xs border border-gray-200 rounded-lg px-2 py-1"
+                            >
+                              <option value="Scheduled">Scheduled</option>
+                              <option value="Completed">Completed</option>
+                              <option value="Cancelled">Cancelled</option>
+                            </select>
+                            <button onClick={() => onEditAppointment(appointment)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg">
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setAppointmentToDelete(appointment.id);
+                                setDeleteConfirmOpen(true);
+                              }}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => onViewChart(appointment)}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors"
-                            title="Open patient chart"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                            View Chart
-                          </button>
-                          <select
-                            value={appointment.status}
-                            onChange={(e) => onUpdateStatus(appointment.id, e.target.value as any)}
-                            className="text-xs border border-gray-200 rounded-lg px-2 py-1"
-                          >
-                            <option value="Scheduled">Scheduled</option>
-                            <option value="Completed">Completed</option>
-                            <option value="Cancelled">Cancelled</option>
-                          </select>
-                          <button onClick={() => onEditAppointment(appointment)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg">
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => {
-                              setAppointmentToDelete(appointment.id);
-                              setDeleteConfirmOpen(true);
-                            }}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -680,30 +724,33 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
       )}
 
       {/* Delete Confirmation Dialog */}
-      <ConfirmDialog
-        isOpen={deleteConfirmOpen}
-        title="Delete Appointment"
-        message="Are you sure you want to delete this appointment? This action cannot be undone."
-        confirmText="Delete Appointment"
-        cancelText="Cancel"
-        type="danger"
-        onConfirm={() => {
-          if (appointmentToDelete) {
-            onDeleteAppointment(appointmentToDelete);
+      {canDelete && (
+        <ConfirmDialog
+          isOpen={deleteConfirmOpen}
+          title="Delete Appointment"
+          message="Are you sure you want to delete this appointment? This action cannot be undone."
+          confirmText="Delete Appointment"
+          cancelText="Cancel"
+          type="danger"
+          onConfirm={() => {
+            if (appointmentToDelete) {
+              onDeleteAppointment(appointmentToDelete);
+              setAppointmentToDelete(null);
+            }
+            setDeleteConfirmOpen(false);
+          }}
+          onCancel={() => {
             setAppointmentToDelete(null);
-          }
-          setDeleteConfirmOpen(false);
-        }}
-        onCancel={() => {
-          setAppointmentToDelete(null);
-          setDeleteConfirmOpen(false);
-        }}
-      />
+            setDeleteConfirmOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 };
 
 export default AppointmentsView;
+
 
 
 

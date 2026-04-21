@@ -90,6 +90,7 @@ export interface Doctor {
   email?: string;
   phone?: string;
   specialization?: string;
+  password?: string;
   schedules: DoctorSchedule[]; // Array of schedules for different days/times
   created_at?: string;
 }
@@ -102,6 +103,7 @@ export interface DoctorInput {
   email?: string;
   phone?: string;
   specialization?: string;
+  password?: string;
   schedules?: DoctorScheduleInput[];
   created_at?: string;
 }
@@ -123,6 +125,7 @@ export interface Appointment {
 export interface User {
   id: string;
   location_id: string | null; // null for global admins
+  doctor_id?: string | null;
   username: string;
   password?: string; // Only for creation/update, not returned in queries
   role: 'admin' | 'normal';
@@ -232,7 +235,10 @@ export interface Message {
 
 export interface Conversation {
   id: string;
-  patient_id: string;
+  patient_id?: string | null;
+  doctor_user_id?: string | null;
+  participant_type?: 'patient' | 'doctor';
+  participant_name?: string;
   patient_name: string;
   admin_id: string;
   admin_name: string;

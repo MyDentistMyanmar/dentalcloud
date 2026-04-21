@@ -7,7 +7,6 @@ import { supabase } from '../services/supabase';
 
 interface MessagingViewProps {
   patients: any[];
-  users: any[];
   messagingEnabled: boolean;
 }
 
@@ -61,7 +60,11 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, messagingEnable
   );
 
   const availablePatients = useMemo(() => {
-    const existingPatientIds = new Set(conversations.map((conversation) => conversation.patient_id));
+    const existingPatientIds = new Set(
+      conversations
+        .map((conversation) => conversation.patient_id)
+        .filter(Boolean)
+    );
     return patients
       .filter((patient) => patient?.id && patient?.name)
       .filter((patient) => !existingPatientIds.has(patient.id))
@@ -87,18 +90,19 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, messagingEnable
       }
 
       const nextConversations = await api.messages.getConversations(adminId, 'admin');
-      setConversations(nextConversations);
+      const patientConversations = nextConversations.filter((conversation) => (conversation.participant_type || 'patient') !== 'doctor');
+      setConversations(patientConversations);
 
       setSelectedConversationId((currentId) => {
-        if (nextConversations.length === 0) {
+        if (patientConversations.length === 0) {
           return null;
         }
 
-        if (currentId && nextConversations.some((conversation) => conversation.id === currentId)) {
+        if (currentId && patientConversations.some((conversation) => conversation.id === currentId)) {
           return currentId;
         }
 
-        return nextConversations[0].id;
+        return patientConversations[0].id;
       });
       setError(null);
     } catch (err: any) {
@@ -134,7 +138,7 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, messagingEnable
     try {
       await api.messages.markAsRead(conversationId, adminId, 'admin');
       const refreshedConversations = await api.messages.getConversations(adminId, 'admin');
-      setConversations(refreshedConversations);
+      setConversations(refreshedConversations.filter((conversation) => (conversation.participant_type || 'patient') !== 'doctor'));
     } catch (err) {
       console.error('Failed to mark messages as read:', err);
     }
@@ -249,7 +253,7 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, messagingEnable
         conversation_id: selectedConversation.id,
         sender_id: adminId,
         sender_type: 'admin',
-        recipient_id: selectedConversation.patient_id,
+        recipient_id: selectedConversation.patient_id || '',
         recipient_type: 'patient',
         content
       });
@@ -283,7 +287,9 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, messagingEnable
       return;
     }
 
-    const existingConversation = conversations.find((conversation) => conversation.patient_id === patientId);
+    const existingConversation = conversations.find(
+      (conversation) => conversation.patient_id === patientId
+    );
     if (existingConversation) {
       setSelectedConversationId(existingConversation.id);
       return;
@@ -291,7 +297,7 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, messagingEnable
 
     try {
       setStartingConversation(patientId);
-      const conversation = await api.messages.createConversation(patientId, adminId);
+      const conversation = await api.messages.createConversation(patientId, adminId, 'patient');
       await loadConversations(false);
       setSelectedConversationId(conversation.id);
       setError(null);
@@ -323,7 +329,7 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, messagingEnable
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white">
       <div className="border-b border-gray-200 px-6 py-4">
         <h2 className="text-xl font-semibold text-gray-900">Patient Messages</h2>
-        <p className="mt-1 text-sm text-gray-500">Live messaging between the front desk and patient portal.</p>
+        <p className="mt-1 text-sm text-gray-500">Live messaging between admin and patients.</p>
       </div>
 
       {error && (
@@ -358,7 +364,8 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, messagingEnable
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold text-gray-900">{conversation.patient_name}</div>
+                      <div className="truncate text-sm font-semibold text-gray-900">{conversation.participant_name || conversation.patient_name}</div>
+                      <div className="mt-0.5 text-[11px] uppercase tracking-wide text-gray-400">Patient</div>
                       <div className="mt-1 truncate text-xs text-gray-500">
                         {conversation.last_message || 'No messages yet'}
                       </div>
@@ -379,7 +386,7 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, messagingEnable
 
           <div className="px-4 py-4">
             <h3 className="text-sm font-semibold text-gray-900">Start New Chat</h3>
-            <p className="mt-1 text-xs text-gray-500">Choose any patient to open a direct conversation.</p>
+            <p className="mt-1 text-xs text-gray-500">Choose a patient to open a direct conversation.</p>
           </div>
 
           <div className="max-h-[280px] overflow-y-auto bg-white">
@@ -390,7 +397,7 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, messagingEnable
             ) : (
               availablePatients.map((patient) => (
                 <button
-                  key={patient.id}
+                  key={`patient-${patient.id}`}
                   type="button"
                   onClick={() => handleOpenConversation(patient.id)}
                   disabled={startingConversation === patient.id}
@@ -415,7 +422,7 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, messagingEnable
                     <User className="h-5 w-5 text-indigo-600" />
                   </div>
                   <div>
-                    <div className="text-sm font-semibold text-gray-900">{selectedConversation.patient_name}</div>
+                    <div className="text-sm font-semibold text-gray-900">{selectedConversation.participant_name || selectedConversation.patient_name}</div>
                     <div className="text-xs text-gray-500">Live patient chat</div>
                   </div>
                 </div>

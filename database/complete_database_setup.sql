@@ -134,6 +134,7 @@ CREATE TABLE doctors (
   email VARCHAR(255),
   phone VARCHAR(50),
   specialization VARCHAR(255),
+  password VARCHAR(255),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -146,6 +147,10 @@ CREATE TABLE doctor_schedules (
   end_time TIME NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Link optional doctor login accounts to users (one doctor -> one staff login)
+ALTER TABLE users
+ADD COLUMN doctor_id UUID UNIQUE REFERENCES doctors(id) ON DELETE SET NULL;
 
 -- Treatment Types (Services/Procedures)
 CREATE TABLE treatment_types (
@@ -254,12 +259,16 @@ CREATE TABLE expenses (
 CREATE TABLE conversations (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   patient_id UUID REFERENCES patients(id) ON DELETE CASCADE,
+  doctor_user_id UUID REFERENCES users(id) ON DELETE CASCADE,
   admin_id UUID REFERENCES users(id) ON DELETE CASCADE,
   last_message TEXT,
   last_message_time TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  UNIQUE(patient_id, admin_id)
+  CHECK (
+    (patient_id IS NOT NULL AND doctor_user_id IS NULL) OR
+    (patient_id IS NULL AND doctor_user_id IS NOT NULL)
+  )
 );
 
 -- Messages (Messaging)
@@ -346,10 +355,13 @@ CREATE INDEX idx_expenses_location ON expenses(location_id);
 CREATE INDEX idx_expenses_date ON expenses(date);
 CREATE INDEX idx_expenses_category ON expenses(category);
 CREATE INDEX idx_conversations_patient_id ON conversations(patient_id);
+CREATE INDEX idx_conversations_doctor_user_id ON conversations(doctor_user_id);
 CREATE INDEX idx_conversations_admin_id ON conversations(admin_id);
 CREATE INDEX idx_messages_conversation_id ON messages(conversation_id);
 CREATE INDEX idx_messages_timestamp ON messages(timestamp);
 CREATE INDEX idx_messages_recipient ON messages(recipient_id, recipient_type, read);
+CREATE UNIQUE INDEX idx_conversations_patient_admin_unique ON conversations(patient_id, admin_id) WHERE patient_id IS NOT NULL;
+CREATE UNIQUE INDEX idx_conversations_doctor_admin_unique ON conversations(doctor_user_id, admin_id) WHERE doctor_user_id IS NOT NULL;
 CREATE INDEX idx_assistant_memory_admin ON assistant_memory(admin_id);
 CREATE INDEX idx_assistant_memory_location ON assistant_memory(location_id);
 CREATE INDEX idx_scheduled_tasks_location ON scheduled_tasks(location_id);

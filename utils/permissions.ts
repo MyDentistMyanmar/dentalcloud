@@ -22,14 +22,14 @@ export const sanitizeAllowedTabs = (tabs: unknown): AppTabPermission[] => {
 };
 
 export const resolveAllowedTabs = (
-  role: 'admin' | 'normal' | 'patient' | undefined,
+  role: 'admin' | 'normal' | 'patient' | 'doctor' | undefined,
   tabs: unknown
 ): AppTabPermission[] => {
   if (role === 'admin') {
     return [...FULL_ACCESS_TAB_PERMISSIONS];
   }
 
-  if (role === 'patient') {
+  if (role === 'patient' || role === 'doctor') {
     return [];
   }
 
@@ -41,7 +41,7 @@ export const resolveAllowedTabs = (
 };
 
 export const hasTabAccess = (
-  role: 'admin' | 'normal' | 'patient' | undefined,
+  role: 'admin' | 'normal' | 'patient' | 'doctor' | undefined,
   tabs: unknown,
   tab: AppTabPermission
 ): boolean => {

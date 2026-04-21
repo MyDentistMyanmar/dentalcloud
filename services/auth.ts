@@ -2,6 +2,7 @@ import { User, Patient } from '../types';
 import { api } from './api';
 import { supabase } from './supabase';
 import type { AppTabPermission } from '../constants';
+import { DOCTOR_DASHBOARD_TABS } from '../constants';
 import { resolveAllowedTabs } from '../utils/permissions';
 
 // Default admin credentials
@@ -38,10 +39,11 @@ const loadPendingPatientSignup = (email: string): { username?: string; phone?: s
 export interface AuthSession {
   userId: string;
   username: string;
-  role: 'admin' | 'normal' | 'patient';
+  role: 'admin' | 'normal' | 'patient' | 'doctor';
   allowed_tabs?: AppTabPermission[];
   location_id: string | null;
   loginTime: number;
+  doctor_id?: string | null;
   patientId?: string; // For patient sessions
   supabaseUserId?: string; // For Supabase Auth sessions
 }
@@ -82,12 +84,15 @@ export const auth = {
         await this.initializeDefaultAdmin();
         const retryUser = await api.users.authenticate(username, password);
         if (retryUser) {
+          const isDoctorUser = Boolean(retryUser.doctor_id);
+          const resolvedRole: AuthSession['role'] = isDoctorUser ? 'doctor' : retryUser.role;
           const session: AuthSession = {
             userId: retryUser.id,
             username: retryUser.username,
-            role: retryUser.role,
-            allowed_tabs: resolveAllowedTabs(retryUser.role, retryUser.allowed_tabs),
+            role: resolvedRole,
+            allowed_tabs: isDoctorUser ? [...DOCTOR_DASHBOARD_TABS] : resolveAllowedTabs(retryUser.role, retryUser.allowed_tabs),
             location_id: retryUser.location_id || null,
+            doctor_id: retryUser.doctor_id || null,
             loginTime: Date.now()
           };
           this.setSession(session);
@@ -99,12 +104,15 @@ export const auth = {
         throw new Error('Invalid username or password');
       }
 
+      const isDoctorUser = Boolean(user.doctor_id);
+      const resolvedRole: AuthSession['role'] = isDoctorUser ? 'doctor' : user.role;
       const session: AuthSession = {
         userId: user.id,
         username: user.username,
-        role: user.role,
-        allowed_tabs: resolveAllowedTabs(user.role, user.allowed_tabs),
+        role: resolvedRole,
+        allowed_tabs: isDoctorUser ? [...DOCTOR_DASHBOARD_TABS] : resolveAllowedTabs(user.role, user.allowed_tabs),
         location_id: user.location_id || null,
+        doctor_id: user.doctor_id || null,
         loginTime: Date.now()
       };
       this.setSession(session);

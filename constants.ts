@@ -101,3 +101,10 @@ export const ALL_APP_TAB_PERMISSIONS: AppTabPermission[] = [
 ];
 
 export const FULL_ACCESS_TAB_PERMISSIONS: AppTabPermission[] = [...ALL_APP_TAB_PERMISSIONS];
+
+export const DOCTOR_DASHBOARD_TABS: AppTabPermission[] = [
+  'dashboard',
+  'appointments',
+  'records',
+  'settings'
+];

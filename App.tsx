@@ -1,6 +1,7 @@
 
-import React, { useState, useEffect, Suspense, useMemo, useRef } from 'react';
+import React, { useState, useEffect, Suspense, useMemo, useRef, useTransition } from 'react';
 import {
+  Home,
   LayoutDashboard,
   Users,
   CreditCard, 
@@ -51,6 +52,7 @@ import {
 import {
   TREATMENT_CATEGORIES,
   DEFAULT_NORMAL_TAB_PERMISSIONS,
+  DOCTOR_DASHBOARD_TABS,
   FLEXIBLE_STAFF_TABS,
   FULL_ACCESS_TAB_PERMISSIONS,
   type AppTabPermission
@@ -63,6 +65,7 @@ import { getMyanmarCities, getTownshipsForCity } from './utils/myanmarCities';
 import { supabase } from './services/supabase';
 import { resolveAllowedTabs } from './utils/permissions';
 import { loadEmailSettings } from './utils/emailSettings';
+import { buildAppointmentClinicalFocusNotes, parseAppointmentClinicalFocus } from './utils/appointmentClinicalFocus';
 
 // Lazy Load Views
 const DashboardView = React.lazy(() => import('./components/DashboardView'));
@@ -85,6 +88,8 @@ const MessagingView = React.lazy(() => import('./components/MessagingView'));
 const PatientMessagingView = React.lazy(() => import('./components/PatientMessagingView'));
 const RecallsView = React.lazy(() => import('./components/RecallsView'));
 const ExpensesView = React.lazy(() => import('./components/ExpensesView'));
+const DoctorProfileView = React.lazy(() => import('./components/DoctorProfileView'));
+const DoctorHomeView = React.lazy(() => import('./components/DoctorHomeView'));
 
 const ALL_BRANCHES_VALUE = '__all_branches__';
 
@@ -124,6 +129,7 @@ const App: React.FC = () => {
   });
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isDoctor, setIsDoctor] = useState(false);
   const [allowedViews, setAllowedViews] = useState<ViewState[]>([]);
   const [currentUser, setCurrentUser] = useState<string>('');
   const [locations, setLocations] = useState<Location[]>([]);
@@ -270,6 +276,8 @@ const App: React.FC = () => {
   const [sidebarWidth, setSidebarWidth] = useState(256);
   const [isResizing, setIsResizing] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isTabPending, startTabTransition] = useTransition();
+  const [doctorActiveTab, setDoctorActiveTab] = useState<ViewState>('dashboard');
   
   // -- Form State --
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
@@ -289,6 +297,9 @@ const App: React.FC = () => {
   const [clinicalFeeAmount, setClinicalFeeAmount] = useState(0);
   const [applyClinicalFeeOnRegistration, setApplyClinicalFeeOnRegistration] = useState(false);
   const [newAppointmentData, setNewAppointmentData] = useState<Partial<Appointment>>({ date: '', time: '', type: '', status: 'Scheduled', patient_id: '', doctor_id: '' });
+  const [appointmentClinicalFocus, setAppointmentClinicalFocus] = useState('');
+  const [appointmentTargetTeethInput, setAppointmentTargetTeethInput] = useState('');
+  const [appointmentGeneralNotes, setAppointmentGeneralNotes] = useState('');
   const [doctorSearchQuery, setDoctorSearchQuery] = useState('');
   const [showDoctorDropdown, setShowDoctorDropdown] = useState(false);
   const doctorDropdownRef = useRef<HTMLDivElement>(null);
@@ -306,7 +317,7 @@ const App: React.FC = () => {
     return name.startsWith(query) || spec.startsWith(query);
   });
   const [newTreatmentTypeData, setNewTreatmentTypeData] = useState<Partial<TreatmentType>>({ name: '', cost: 0, category: '' });
-  const [newDoctorData, setNewDoctorData] = useState<Partial<DoctorInput>>({ name: '', email: '', phone: '', specialization: '', schedules: [] });
+  const [newDoctorData, setNewDoctorData] = useState<Partial<DoctorInput>>({ name: '', email: '', phone: '', specialization: '', password: '', schedules: [] });
   const [newUserData, setNewUserData] = useState<Partial<User>>(getDefaultUserFormData());
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [newMedicineData, setNewMedicineData] = useState<Partial<Medicine>>({
@@ -353,10 +364,15 @@ const App: React.FC = () => {
 
     setIsAuthenticated(true);
     setIsAdmin(session.role === 'admin');
+    setIsDoctor(session.role === 'doctor');
     setCurrentUser(session.username);
 
     if (session.role === 'patient') {
       setAllowedViews([]);
+      return;
+    }
+    if (session.role === 'doctor') {
+      setAllowedViews([...DOCTOR_DASHBOARD_TABS] as ViewState[]);
       return;
     }
 
@@ -367,12 +383,49 @@ const App: React.FC = () => {
   const resetStaffSession = () => {
     setIsAuthenticated(false);
     setIsAdmin(false);
+    setIsDoctor(false);
     setAllowedViews([]);
     setCurrentUser('');
   };
 
   const canAccessView = (view: ViewState): boolean => {
     return allowedViews.includes(view);
+  };
+
+  useEffect(() => {
+    if (!isDoctor) return;
+
+    if (currentView === 'finance') return;
+
+    if (!canAccessView(currentView)) {
+      setCurrentView('dashboard');
+    }
+  }, [isDoctor, currentView, allowedViews]);
+
+  useEffect(() => {
+    if (!isDoctor) return;
+
+    // Preload core doctor tabs to make first navigation feel instant on mobile.
+    void import('./components/DoctorHomeView');
+    void import('./components/AppointmentsView');
+    void import('./components/DoctorProfileView');
+  }, [isDoctor]);
+
+  useEffect(() => {
+    if (!isDoctor) return;
+    setDoctorActiveTab(currentView === 'finance' ? 'appointments' : currentView);
+  }, [isDoctor, currentView]);
+
+  const handleDoctorTabChange = (nextView: ViewState) => {
+    if (!isDoctor) {
+      setCurrentView(nextView);
+      return;
+    }
+
+    setDoctorActiveTab(nextView);
+    startTabTransition(() => {
+      setCurrentView(nextView);
+    });
   };
 
   const toggleUserTabAccess = (tab: ViewState) => {
@@ -714,11 +767,31 @@ const App: React.FC = () => {
           api.recalls.getAll(locId),
           api.medicines.getSales(locId)
         ]);
-        setPatients(patData);
-        setAppointments(aptData);
-        setDoctors(docData);
+
+        const isDoctorSession = session?.role === 'doctor' && !!session?.doctor_id;
+        const doctorAppointments = isDoctorSession
+          ? aptData.filter((appointment) => appointment.doctor_id === session.doctor_id)
+          : aptData;
+        const doctorRecords = isDoctorSession
+          ? recordsData.filter((record) => record.doctor_id === session.doctor_id)
+          : recordsData;
+        const doctorPatientIds = new Set<string>([
+          ...doctorAppointments.map((appointment) => appointment.patient_id),
+          ...doctorRecords.map((record) => record.patient_id)
+        ]);
+        const scopedPatients = isDoctorSession
+          ? patData.filter((patient) => doctorPatientIds.has(patient.id))
+          : patData;
+
+        const scopedDoctors = isDoctorSession
+          ? docData.filter((doctor) => doctor.id === session?.doctor_id)
+          : docData;
+
+        setPatients(scopedPatients);
+        setAppointments(doctorAppointments);
+        setDoctors(scopedDoctors);
         setTreatmentTypes(typeData);
-        setGlobalRecords(recordsData);
+        setGlobalRecords(doctorRecords);
         setMedicines(medData);
         setLoyaltyRules(loyaltyData);
         setExpenses(expenseData);
@@ -854,6 +927,11 @@ const App: React.FC = () => {
       return;
     }
 
+    // Doctor can temporarily access Clinical Focus when opening a patient chart from appointments.
+    if (isDoctor && currentView === 'finance') {
+      return;
+    }
+
     if (!canAccessView(currentView)) {
       const fallbackView = allowedViews.includes('dashboard' as ViewState) ? 'dashboard' as ViewState : allowedViews[0];
       setCurrentView(fallbackView);
@@ -946,7 +1024,12 @@ const App: React.FC = () => {
     setLoading(true);
     try {
       const records = await api.treatments.getAllRecords(currentLocationId || undefined);
-      setGlobalRecords(records);
+      const session = auth.getSession();
+      if (session?.role === 'doctor' && session.doctor_id) {
+        setGlobalRecords(records.filter((record) => record.doctor_id === session.doctor_id));
+      } else {
+        setGlobalRecords(records);
+      }
     } catch (err: any) {
       console.error(err);
     } finally {
@@ -1014,20 +1097,52 @@ const App: React.FC = () => {
     }
   };
 
+  const parseTargetTeethInput = (input: string): number[] => {
+    return Array.from(
+      new Set(
+        input
+          .split(',')
+          .map((part) => part.trim())
+          .filter(Boolean)
+          .map((part) => Number(part))
+          .filter((value) => Number.isFinite(value))
+      )
+    ).sort((a, b) => a - b);
+  };
+
+  const resetAppointmentForm = () => {
+    setNewAppointmentData({ date: '', time: '', type: appointmentTypeOptions[0] || '', status: 'Scheduled', patient_id: '', doctor_id: '' });
+    setDoctorSearchQuery('');
+    setShowDoctorDropdown(false);
+    setAppointmentClinicalFocus('');
+    setAppointmentTargetTeethInput('');
+    setAppointmentGeneralNotes('');
+  };
+
   const handleCreateAppointment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
+      const compiledNotes = buildAppointmentClinicalFocusNotes({
+        clinicalFocus: appointmentClinicalFocus,
+        targetTeeth: parseTargetTeethInput(appointmentTargetTeethInput),
+        notes: appointmentGeneralNotes
+      });
+      const payload: Partial<Appointment> = {
+        ...newAppointmentData,
+        doctor_id: (newAppointmentData.doctor_id || '').trim() || undefined,
+        notes: compiledNotes || undefined
+      };
       if (editingAppointment) {
-        await api.appointments.update(editingAppointment.id, newAppointmentData);
+        await api.appointments.update(editingAppointment.id, payload);
       } else {
-        await api.appointments.create({ ...newAppointmentData, location_id: currentLocationId });
+        await api.appointments.create({ ...payload, location_id: currentLocationId });
       }
       setShowAppointmentModal(false);
       fetchInitialData();
       setEditingAppointment(null);
-      setNewAppointmentData({ date: '', time: '', type: appointmentTypeOptions[0] || '', status: 'Scheduled', patient_id: '', doctor_id: '' });
+      resetAppointmentForm();
     } catch (err: any) {
       alert(err.message);
     } finally {
@@ -1059,7 +1174,9 @@ const App: React.FC = () => {
   };
 
   const handleDoctorChange = (doctorId: string) => {
-    setNewAppointmentData({ ...newAppointmentData, doctor_id: doctorId });
+    const selectedDoctor = doctors.find((doctor) => doctor.id === doctorId);
+    setNewAppointmentData({ ...newAppointmentData, doctor_id: doctorId || undefined });
+    setDoctorSearchQuery(selectedDoctor ? selectedDoctor.name : '');
   };
 
   const handleDateChange = (date: string) => {
@@ -1070,6 +1187,18 @@ const App: React.FC = () => {
     e.preventDefault();
     if (isSubmitting) return;
     setIsSubmitting(true);
+
+    const trimmedDoctorPassword = (newDoctorData.password || '').trim();
+    if (!editingDoctor && !trimmedDoctorPassword) {
+      alert('Password is required for a new doctor account.');
+      setIsSubmitting(false);
+      return;
+    }
+    if (trimmedDoctorPassword && !(newDoctorData.email || '').trim()) {
+      alert('Doctor email is required when setting a doctor password.');
+      setIsSubmitting(false);
+      return;
+    }
     
     // Validate schedules before submitting
     const schedules = (newDoctorData.schedules || []).filter(sched => {
@@ -1102,6 +1231,7 @@ const App: React.FC = () => {
       const doctorDataToSave = {
         ...newDoctorData,
         location_id: currentLocationId,
+        password: trimmedDoctorPassword || undefined,
         schedules: schedules
       };
 
@@ -1113,7 +1243,7 @@ const App: React.FC = () => {
       setShowDoctorModal(false);
       fetchInitialData();
       setEditingDoctor(null);
-      setNewDoctorData({ name: '', email: '', phone: '', specialization: '', schedules: [] });
+      setNewDoctorData({ name: '', email: '', phone: '', specialization: '', password: '', schedules: [] });
     } catch (err: any) {
       alert(err.message);
     } finally {
@@ -1128,6 +1258,24 @@ const App: React.FC = () => {
     } catch (err: any) {
       alert(err.message);
     }
+  };
+
+  const handleUpdateDoctorProfile = async (data: Partial<Doctor>) => {
+    const session = auth.getSession();
+    if (!session?.doctor_id) {
+      throw new Error('Doctor session is invalid. Please sign in again.');
+    }
+
+    await api.doctors.update(session.doctor_id, {
+      ...data,
+      location_id: currentLocationId
+    });
+    await fetchInitialData(currentLocationId || undefined);
+    setToast({
+      message: 'Doctor profile updated successfully.',
+      type: 'success',
+      show: true
+    });
   };
 
   const handleDeleteAllRecords = async () => {
@@ -1872,11 +2020,42 @@ const App: React.FC = () => {
     );
   }
 
+  const session = auth.getSession();
+  const currentDoctor = isDoctor && session?.doctor_id
+    ? doctors.find((doctor) => doctor.id === session.doctor_id) || null
+    : null;
   const isWorkspaceView = currentView === 'ai-assistant' || currentView === 'messaging' || currentView === 'patients' || currentView === 'appointments';
   const editableAllowedTabs = resolveAllowedTabs('normal', newUserData.allowed_tabs) as ViewState[];
+  const doctorMobileTabs: { key: ViewState; label: string; icon: React.ReactNode; isActive: boolean }[] = [
+    {
+      key: 'dashboard',
+      label: 'Home',
+      icon: <Home size={18} />,
+      isActive: doctorActiveTab === 'dashboard'
+    },
+    {
+      key: 'appointments',
+      label: 'Appointments',
+      icon: <Calendar size={18} />,
+      isActive: doctorActiveTab === 'appointments'
+    },
+    {
+      key: 'records',
+      label: 'Records',
+      icon: <ClipboardList size={18} />,
+      isActive: doctorActiveTab === 'records'
+    },
+    {
+      key: 'settings',
+      label: 'Profile',
+      icon: <Settings size={18} />,
+      isActive: doctorActiveTab === 'settings'
+    }
+  ];
+  const doctorViewTitle = 'Doctor Dashboard';
 
   return (
-    <div className="min-h-screen flex bg-gray-50 flex-col md:flex-row">
+    <div className={isDoctor ? "min-h-screen bg-gray-50 flex flex-col" : "min-h-screen flex bg-gray-50 flex-col md:flex-row"}>
       {/* Toast Notification */}
       {toast.show && (
         <Toast
@@ -1885,8 +2064,37 @@ const App: React.FC = () => {
           onClose={() => setToast({ ...toast, show: false })}
         />
       )}
+
+      {isDoctor && (
+        <header className="bg-white shadow-sm border-b border-gray-200 px-4 py-3 sticky top-0 z-40" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <h1 className="text-base font-semibold text-gray-900 truncate">{doctorViewTitle}</h1>
+              <p className="text-xs text-gray-500 truncate">{currentUser}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              {currentView === 'finance' && (
+                <button
+                  onClick={() => setCurrentView('appointments')}
+                  className="px-3 py-2 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 transition-colors"
+                >
+                  Back
+                </button>
+              )}
+              <button
+                onClick={handleLogout}
+                className="p-2 rounded-full bg-red-100 hover:bg-red-200 transition-colors"
+                aria-label="Logout"
+              >
+                <LogOut className="w-4 h-4 text-red-600" />
+              </button>
+            </div>
+          </div>
+        </header>
+      )}
       
       {/* Mobile Header */}
+      {!isDoctor && (
       <header className="md:hidden bg-gray-900 text-white p-4 flex items-center justify-between sticky top-0 z-50">
         <span className="text-lg font-black tracking-tight">DentalCloud<span className="text-indigo-400">Pro</span></span>
         <button 
@@ -1896,9 +2104,10 @@ const App: React.FC = () => {
           {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
         </button>
       </header>
+      )}
 
       {/* Mobile Overlay */}
-      {isMobileMenuOpen && (
+      {!isDoctor && isMobileMenuOpen && (
         <div 
           className="fixed inset-0 bg-black/50 z-40 md:hidden transition-opacity"
           onClick={() => setIsMobileMenuOpen(false)}
@@ -1906,6 +2115,7 @@ const App: React.FC = () => {
       )}
 
       {/* Sidebar Navigation */}
+      {!isDoctor && (
       <aside 
         style={{ width: `${sidebarWidth}px` }}
         className={`bg-gray-900 fixed md:sticky top-0 h-screen z-50 md:z-40 border-r border-gray-800 flex flex-col overflow-hidden transition-transform duration-300 md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}
@@ -1926,7 +2136,7 @@ const App: React.FC = () => {
                <NavItem icon={<Stethoscope size={18} />} label="Service Menu" active={currentView === 'treatments'} onClick={() => { setCurrentView('treatments'); setIsMobileMenuOpen(false); }} />
              )}
              {canAccessView('records') && (
-               <NavItem icon={<ClipboardList size={18} />} label="Audit Log" active={currentView === 'records'} onClick={() => { setCurrentView('records'); setIsMobileMenuOpen(false); }} />
+               <NavItem icon={<ClipboardList size={18} />} label={isDoctor ? 'Patient Records' : 'Audit Log'} active={currentView === 'records'} onClick={() => { setCurrentView('records'); setIsMobileMenuOpen(false); }} />
              )}
              {canAccessView('finance') && <NavItem icon={<CreditCard size={18} />} label="Clinical Focus" active={currentView === 'finance'} onClick={() => { setCurrentView('finance'); setIsMobileMenuOpen(false); }} />}
              {canAccessView('expenses') && (
@@ -1936,7 +2146,7 @@ const App: React.FC = () => {
                <NavItem icon={<Package size={18} />} label="Inventory" active={currentView === 'inventory'} onClick={() => { setCurrentView('inventory'); setIsMobileMenuOpen(false); }} />
              )}
              {canAccessView('messaging') && (
-               <NavItem icon={<MessageCircle size={18} />} label="Messaging" active={currentView === 'messaging'} onClick={() => { setCurrentView('messaging'); setIsMobileMenuOpen(false); }} />
+               <NavItem icon={<MessageCircle size={18} />} label={isDoctor ? 'Admin Chat' : 'Messaging'} active={currentView === 'messaging'} onClick={() => { setCurrentView('messaging'); setIsMobileMenuOpen(false); }} />
              )}
              {canAccessView('recalls') && (
                <NavItem icon={<BellRing size={18} />} label="Recalls" active={currentView === 'recalls'} onClick={() => { setCurrentView('recalls'); setIsMobileMenuOpen(false); }} />
@@ -1950,7 +2160,7 @@ const App: React.FC = () => {
                <NavItem icon={<Shield size={18} />} label="Users" active={currentView === 'users'} onClick={() => { setCurrentView('users'); setIsMobileMenuOpen(false); }} />
              )}
              {canAccessView('settings') && (
-               <NavItem icon={<Settings size={18} />} label="Settings" active={currentView === 'settings'} onClick={() => { setCurrentView('settings'); setIsMobileMenuOpen(false); }} />
+               <NavItem icon={<Settings size={18} />} label={isDoctor ? 'Profile' : 'Settings'} active={currentView === 'settings'} onClick={() => { setCurrentView('settings'); setIsMobileMenuOpen(false); }} />
              )}
           </div>
         </nav>
@@ -1983,23 +2193,33 @@ const App: React.FC = () => {
           }}
         />
       </aside>
+      )}
 
-      <main className={isWorkspaceView ? "flex min-w-0 flex-1 flex-col p-0 md:h-screen" : "flex-1 min-w-0 p-4 md:p-10"}>
-        <div className={isWorkspaceView ? "flex min-h-0 flex-1 flex-col" : "max-w-6xl mx-auto"}>
+      <main className={isDoctor ? "flex min-w-0 flex-1 flex-col p-0 pb-24" : isWorkspaceView ? "flex min-w-0 flex-1 flex-col p-0 md:h-screen" : "flex-1 min-w-0 p-4 md:p-10"}>
+        <div className={isDoctor || isWorkspaceView ? "flex min-h-0 flex-1 flex-col" : "max-w-6xl mx-auto"}>
           <Suspense fallback={<div className="flex justify-center p-20"><Loader2 className="animate-spin text-indigo-600 w-10 h-10" /></div>}>
-            {currentView === 'dashboard' && canAccessView('dashboard') && <DashboardView
-                patients={dashboardPatients}
-                appointments={dashboardAppointments}
-                treatmentRecords={dashboardRecords}
-                expenses={dashboardExpenses}
-                currency={currency}
-                locations={locations}
-                selectedLocationId={dashboardLocationId}
-                allBranchesValue={ALL_BRANCHES_VALUE}
-                canViewAllBranches={isAdmin && !auth.getSession()?.location_id}
-                onLocationChange={handleDashboardLocationChange}
-                loading={loading}
-              />}
+            {currentView === 'dashboard' && canAccessView('dashboard') && (
+              isDoctor ? (
+                <DoctorHomeView
+                  appointments={appointments}
+                  treatmentRecords={globalRecords}
+                />
+              ) : (
+                <DashboardView
+                  patients={dashboardPatients}
+                  appointments={dashboardAppointments}
+                  treatmentRecords={dashboardRecords}
+                  expenses={dashboardExpenses}
+                  currency={currency}
+                  locations={locations}
+                  selectedLocationId={dashboardLocationId}
+                  allBranchesValue={ALL_BRANCHES_VALUE}
+                  canViewAllBranches={isAdmin && !auth.getSession()?.location_id}
+                  onLocationChange={handleDashboardLocationChange}
+                  loading={loading}
+                />
+              )
+            )}
             {currentView === 'patients' && canAccessView('patients') && <PatientsView 
                 patients={patients} 
                 loading={loading} 
@@ -2046,11 +2266,26 @@ const App: React.FC = () => {
             {currentView === 'appointments' && canAccessView('appointments') && <AppointmentsView 
                 appointments={appointments} 
                 loading={loading} 
-                onAddAppointment={() => {setEditingAppointment(null); setNewAppointmentData({ date: '', time: '', type: appointmentTypeOptions[0] || '', status: 'Scheduled', patient_id: '', doctor_id: '' }); setShowAppointmentModal(true)}} 
-                onEditAppointment={(apt) => {setEditingAppointment(apt); setNewAppointmentData({ date: apt.date, time: apt.time, type: apt.type || '', status: apt.status, patient_id: apt.patient_id, doctor_id: apt.doctor_id, notes: apt.notes }); setShowAppointmentModal(true)}} 
+                onAddAppointment={() => {setEditingAppointment(null); resetAppointmentForm(); setShowAppointmentModal(true)}} 
+                onEditAppointment={(apt) => {
+                  const clinicalPlan = parseAppointmentClinicalFocus(apt.notes);
+                  setEditingAppointment(apt);
+                  setNewAppointmentData({ date: apt.date, time: apt.time, type: apt.type || '', status: apt.status, patient_id: apt.patient_id, doctor_id: apt.doctor_id, notes: apt.notes });
+                  setDoctorSearchQuery(apt.doctor_name || '');
+                  setShowDoctorDropdown(false);
+                  setAppointmentClinicalFocus(clinicalPlan.clinicalFocus || apt.type || '');
+                  setAppointmentTargetTeethInput(clinicalPlan.targetTeeth.join(', '));
+                  setAppointmentGeneralNotes(clinicalPlan.notes || '');
+                  setShowAppointmentModal(true);
+                }} 
                 onDeleteAppointment={handleDeleteAppointment} 
                 onUpdateStatus={handleUpdateAppointmentStatus} 
                 onViewChart={handleViewAppointmentChart}
+                canCreate={!isDoctor}
+                canEdit={!isDoctor}
+                canDelete={!isDoctor}
+                canViewChart={true}
+                canExport={!isDoctor}
                 onExportPDF={async () => {
                    const freshAppointments = await api.appointments.getAll(currentLocationId || undefined);
                    const { exportAppointmentsToPDF } = await import('./utils/pdfExport');
@@ -2062,9 +2297,9 @@ const App: React.FC = () => {
                    await exportAppointmentsToExcel(freshAppointments);
                 }}
             />}
-            {currentView === 'doctors' && canAccessView('doctors') && <DoctorsView doctors={doctors} loading={loading} onAdd={() => {setEditingDoctor(null); setNewDoctorData({ name: '', email: '', phone: '', specialization: '', schedules: [] }); setShowDoctorModal(true)}} onEdit={(doc) => {setEditingDoctor(doc); setNewDoctorData(doc); setShowDoctorModal(true)}} onDelete={handleDeleteDoctor} />}
+            {currentView === 'doctors' && canAccessView('doctors') && <DoctorsView doctors={doctors} loading={loading} onAdd={() => {setEditingDoctor(null); setNewDoctorData({ name: '', email: '', phone: '', specialization: '', password: '', schedules: [] }); setShowDoctorModal(true)}} onEdit={(doc) => {setEditingDoctor(doc); setNewDoctorData({ ...doc, password: '' }); setShowDoctorModal(true)}} onDelete={handleDeleteDoctor} />}
             {currentView === 'treatments' && canAccessView('treatments') && <TreatmentConfigView treatmentTypes={treatmentTypes} currency={currency} onAdd={() => {setEditingTreatmentType(null); setNewTreatmentTypeData({ name: '', cost: 0, category: '' }); setShowTreatmentTypeModal(true)}} onEdit={(t) => {setEditingTreatmentType(t); setNewTreatmentTypeData(t); setShowTreatmentTypeModal(true)}} onDelete={(id) => { const treatment = treatmentTypes.find(t => t.id === id); if (treatment) { setServiceToDelete({ id: treatment.id, name: treatment.name }); setDeleteServiceConfirmOpen(true); } }} />}
-            {currentView === 'records' && canAccessView('records') && <RecordsView records={globalRecords} loading={loading} onRefresh={fetchGlobalRecords} onDeleteAll={handleDeleteAllRecords} currency={currency} />}
+            {currentView === 'records' && canAccessView('records') && <RecordsView records={globalRecords} loading={loading} onRefresh={fetchGlobalRecords} onDeleteAll={isDoctor ? () => alert('Doctor accounts cannot delete patient records.') : handleDeleteAllRecords} currency={currency} isDoctor={isDoctor} />}
             {currentView === 'inventory' && canAccessView('inventory') && <InventoryView medicines={medicines} topSelling={topSellingMedicines} loading={loading} currency={currency} onAdd={() => {setEditingMedicine(null); setNewMedicineData({ name: '', description: '', unit: 'pack', item_type: 'Medicine', price: 0, stock: 0, min_stock: 0, quantity_step: 1, category: '' }); setShowMedicineModal(true)}} onEdit={(med) => {setEditingMedicine(med); setNewMedicineData(med); setShowMedicineModal(true)}} onDelete={handleDeleteMedicine} />}
             {currentView === 'expenses' && canAccessView('expenses') && (
               <ExpensesView
@@ -2079,28 +2314,38 @@ const App: React.FC = () => {
               />
             )}
             {currentView === 'users' && canAccessView('users') && <UsersView users={users} loading={loading} isAdmin={isAdmin} onAdd={() => {setEditingUser(null); setUserFormError(null); setNewUserData(getDefaultUserFormData()); setShowUserModal(true)}} onEdit={(user) => {setEditingUser(user); setUserFormError(null); setNewUserData({ username: user.username, password: '', role: user.role, location_id: user.location_id, allowed_tabs: resolveAllowedTabs(user.role, user.allowed_tabs) }); setShowUserModal(true)}} onDelete={handleDeleteUser} />}
-            {currentView === 'settings' && canAccessView('settings') && <SettingsView 
-                currency={currency} 
-                onCurrencyChange={handleCurrencyChange} 
-                locations={locations} 
-                currentLocationId={currentLocationId}
-                onLocationChange={handleLocationChange}
-                onAddLocation={handleCreateLocation} 
-                loyaltyRules={loyaltyRules} 
-                onUpdateLoyaltyRule={handleUpdateLoyaltyRule} 
-                onCreateLoyaltyRule={handleCreateLoyaltyRule} 
-                onDeleteLoyaltyRule={handleDeleteLoyaltyRule}
-                onResetAllLoyaltyPoints={handleResetAllLoyaltyPoints}
-                loyaltyEnabled={loyaltyEnabled}
-                onToggleLoyalty={handleToggleLoyalty}
-                messagingEnabled={messagingEnabled}
-                onToggleMessaging={handleToggleMessaging}
-                onRemoveAllMessages={handleRemoveAllMessages}
-                clinicalFeeEnabled={clinicalFeeEnabled}
-                clinicalFeeAmount={clinicalFeeAmount}
-                onSaveClinicalFeeSettings={handleSaveClinicalFeeSettings}
-                isAdmin={isAdmin} 
-            />}
+            {currentView === 'settings' && canAccessView('settings') && (
+              isDoctor ? (
+                <DoctorProfileView
+                  doctor={currentDoctor}
+                  loading={loading}
+                  onSave={handleUpdateDoctorProfile}
+                />
+              ) : (
+                <SettingsView 
+                    currency={currency} 
+                    onCurrencyChange={handleCurrencyChange} 
+                    locations={locations} 
+                    currentLocationId={currentLocationId}
+                    onLocationChange={handleLocationChange}
+                    onAddLocation={handleCreateLocation} 
+                    loyaltyRules={loyaltyRules} 
+                    onUpdateLoyaltyRule={handleUpdateLoyaltyRule} 
+                    onCreateLoyaltyRule={handleCreateLoyaltyRule} 
+                    onDeleteLoyaltyRule={handleDeleteLoyaltyRule}
+                    onResetAllLoyaltyPoints={handleResetAllLoyaltyPoints}
+                    loyaltyEnabled={loyaltyEnabled}
+                    onToggleLoyalty={handleToggleLoyalty}
+                    messagingEnabled={messagingEnabled}
+                    onToggleMessaging={handleToggleMessaging}
+                    onRemoveAllMessages={handleRemoveAllMessages}
+                    clinicalFeeEnabled={clinicalFeeEnabled}
+                    clinicalFeeAmount={clinicalFeeAmount}
+                    onSaveClinicalFeeSettings={handleSaveClinicalFeeSettings}
+                    isAdmin={isAdmin} 
+                />
+              )
+            )}
             {currentView === 'ai-assistant' && canAccessView('ai-assistant') && <AIAssistantView 
                 patients={assistantPatients} 
                 treatmentRecords={assistantRecords} 
@@ -2120,7 +2365,6 @@ const App: React.FC = () => {
               />}
             {currentView === 'messaging' && canAccessView('messaging') && <MessagingView 
               patients={patients} 
-              users={users} 
               messagingEnabled={messagingEnabled}
             />}
             {currentView === 'recalls' && canAccessView('recalls') && <RecallsView
@@ -2183,12 +2427,35 @@ const App: React.FC = () => {
                 onCreateAppointment={handleCreateAppointmentFromClinical}
                 onOpenAppointments={() => setCurrentView('appointments')}
                 loyaltyEnabled={loyaltyEnabled}
+                compactToothSelector={true}
+                doctorMobileView={isDoctor}
                 loyaltyRules={loyaltyRules}
                 loyaltyTransactions={loyaltyTransactions}
             />}
           </Suspense>
         </div>
       </main>
+
+      {isDoctor && (
+        <nav className="fixed bottom-0 inset-x-0 z-40 border-t border-gray-200 bg-white/95 backdrop-blur-sm" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          {isTabPending && <div className="h-0.5 w-full bg-indigo-100"><div className="h-full w-1/3 bg-indigo-500 animate-pulse" /></div>}
+          <div className={`grid ${doctorMobileTabs.length === 3 ? 'grid-cols-3' : 'grid-cols-4'}`}>
+            {doctorMobileTabs.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => handleDoctorTabChange(tab.key)}
+                className={`flex flex-col items-center justify-center gap-1 py-3 text-[11px] font-semibold transition-colors ${
+                  tab.isActive ? 'text-indigo-700 bg-indigo-50' : 'text-gray-500 hover:text-indigo-600'
+                }`}
+              >
+                {tab.icon}
+                <span>{tab.label}</span>
+              </button>
+            ))}
+          </div>
+        </nav>
+      )}
 
       {/* Modals */}
       {showPatientModal && (
@@ -2330,7 +2597,7 @@ const App: React.FC = () => {
       )}
 
       {showAppointmentModal && (
-        <Modal title={editingAppointment ? "Edit Appointment" : "New Appointment"} onClose={() => {setShowAppointmentModal(false); setEditingAppointment(null);}}>
+        <Modal title={editingAppointment ? "Edit Appointment" : "New Appointment"} onClose={() => {setShowAppointmentModal(false); setEditingAppointment(null); resetAppointmentForm();}}>
           <form onSubmit={handleCreateAppointment} className="space-y-5">
             <div>
               <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">Patient</label>
@@ -2367,6 +2634,7 @@ const App: React.FC = () => {
                   />
                   {newAppointmentData.doctor_id && (
                     <button
+                      type="button"
                       onClick={() => {
                         handleDoctorChange('');
                         setDoctorSearchQuery('');
@@ -2384,10 +2652,11 @@ const App: React.FC = () => {
                 {showDoctorDropdown && (
                   <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-60 overflow-y-auto">
                     <button
+                      type="button"
                       className="w-full px-4 py-2.5 text-sm text-left hover:bg-gray-50 border-b border-gray-100"
-                      onClick={() => {
+                      onMouseDown={(e) => {
+                        e.preventDefault();
                         handleDoctorChange('');
-                        setDoctorSearchQuery('');
                         setShowDoctorDropdown(false);
                       }}
                     >
@@ -2398,13 +2667,14 @@ const App: React.FC = () => {
                     ) : (
                       filteredDoctors.map(doctor => (
                         <button
+                          type="button"
                           key={doctor.id}
                           className={`w-full px-4 py-2.5 text-sm text-left hover:bg-indigo-50 ${
                             newAppointmentData.doctor_id === doctor.id ? 'bg-indigo-50 text-indigo-700' : 'text-gray-700'
                           }`}
-                          onClick={() => {
+                          onMouseDown={(e) => {
+                            e.preventDefault();
                             handleDoctorChange(doctor.id);
-                            setDoctorSearchQuery(doctor.name);
                             setShowDoctorDropdown(false);
                           }}
                         >
@@ -2444,7 +2714,12 @@ const App: React.FC = () => {
                 <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">Type</label>
                 <SearchableSelect
                   value={newAppointmentData.type || ''}
-                  onChange={(selectedType) => setNewAppointmentData({ ...newAppointmentData, type: selectedType })}
+                  onChange={(selectedType) => {
+                    setNewAppointmentData({ ...newAppointmentData, type: selectedType });
+                    if (!appointmentClinicalFocus.trim()) {
+                      setAppointmentClinicalFocus(selectedType);
+                    }
+                  }}
                   options={appointmentTypeOptionsForModal.map((typeName) => ({ value: typeName, label: typeName }))}
                   placeholder="Select treatment type"
                   emptyMessage="No treatment type found"
@@ -2466,15 +2741,34 @@ const App: React.FC = () => {
                 </select>
               </div>
             </div>
-            <div>
-              <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">Notes</label>
-              <textarea 
-                className="w-full border-gray-200 border rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent" 
-                rows={3}
-                value={newAppointmentData.notes || ''} 
-                onChange={(e: any) => setNewAppointmentData({...newAppointmentData, notes: e.target.value})}
-                placeholder="Optional notes about this appointment..."
-              />
+            <div className="grid grid-cols-1 gap-4">
+              <div>
+                <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">Clinical Focus</label>
+                <Input
+                  value={appointmentClinicalFocus}
+                  onChange={(e: any) => setAppointmentClinicalFocus(e.target.value)}
+                  placeholder="What treatment should be done?"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">Target Teeth</label>
+                <Input
+                  value={appointmentTargetTeethInput}
+                  onChange={(e: any) => setAppointmentTargetTeethInput(e.target.value)}
+                  placeholder="e.g. 11, 12, 46"
+                />
+                <p className="mt-1 text-[11px] text-gray-500">Use comma-separated tooth numbers so doctors can see exactly where to work.</p>
+              </div>
+              <div>
+                <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">Extra Notes</label>
+                <textarea
+                  className="w-full border-gray-200 border rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  rows={3}
+                  value={appointmentGeneralNotes}
+                  onChange={(e: any) => setAppointmentGeneralNotes(e.target.value)}
+                  placeholder="Optional additional instructions..."
+                />
+              </div>
             </div>
             <button type="submit" className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-indigo-600/20">
               {editingAppointment ? 'Update Appointment' : 'Create Appointment'}
@@ -2492,6 +2786,19 @@ const App: React.FC = () => {
               <Input label="Phone" value={newDoctorData.phone} onChange={(e: any) => setNewDoctorData({...newDoctorData, phone: e.target.value})} />
             </div>
             <Input label="Specialization" value={newDoctorData.specialization} onChange={(e: any) => setNewDoctorData({...newDoctorData, specialization: e.target.value})} placeholder="e.g., Orthodontics, Oral Surgery" />
+            <div>
+              <Input
+                label={editingDoctor ? 'Doctor Login Password (optional)' : 'Doctor Login Password'}
+                type="password"
+                required={!editingDoctor}
+                value={newDoctorData.password || ''}
+                onChange={(e: any) => setNewDoctorData({ ...newDoctorData, password: e.target.value })}
+                placeholder={editingDoctor ? 'Leave blank to keep current password' : 'Set initial login password'}
+              />
+              <p className="mt-2 text-xs text-gray-500">
+                Doctor will sign in from Staff Login using their email as username.
+              </p>
+            </div>
             
             <div>
               <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">Working Schedule</label>

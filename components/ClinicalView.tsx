@@ -45,6 +45,8 @@ interface ClinicalViewProps {
   onCreateAppointment?: (data: Partial<Appointment>) => Promise<void>;
   onOpenAppointments?: () => void;
   loyaltyEnabled: boolean;
+  compactToothSelector?: boolean;
+  doctorMobileView?: boolean;
   loyaltyRules?: LoyaltyRule[];
   loyaltyTransactions?: LoyaltyTransaction[];
 }
@@ -80,6 +82,8 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
   onCreateAppointment,
   onOpenAppointments,
   loyaltyEnabled,
+  compactToothSelector = false,
+  doctorMobileView = false,
   loyaltyRules = [],
   loyaltyTransactions = []
 }) => {
@@ -347,11 +351,13 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
         </div>
         
         <div className="flex justify-start md:justify-center w-full overflow-x-auto pb-4 custom-scrollbar">
-          <div className="min-w-[400px] md:min-w-[600px] max-w-full">
+          <div className={`${doctorMobileView ? 'w-full min-w-full' : 'min-w-[400px] md:min-w-[600px]'} max-w-full`}>
             <ToothSelector 
               selectedTeeth={selectedTeeth} 
               onToggleTooth={onToggleTooth} 
-              onDeselectAll={onDeselectAll}
+              onDeselectAll={onDeselectAll} 
+              compact={compactToothSelector}
+              doctorCompact={doctorMobileView}
             />
           </div>
         </div>
