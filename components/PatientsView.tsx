@@ -70,10 +70,10 @@ const PatientsView: React.FC<PatientsViewProps> = ({
     if (!searchTerm) return patients;
     const term = searchTerm.toLowerCase();
     return patients.filter(patient => 
-      patient.name.toLowerCase().includes(term) ||
-      patient.email?.toLowerCase().includes(term) ||
-      patient.phone.toLowerCase().includes(term) ||
-      patient.medicalHistory?.toLowerCase().includes(term)
+      (patient.name || '').toLowerCase().includes(term) ||
+      (patient.email || '').toLowerCase().includes(term) ||
+      (patient.phone || '').toLowerCase().includes(term) ||
+      (patient.medicalHistory || '').toLowerCase().includes(term)
     );
   }, [patients, searchTerm]);
 

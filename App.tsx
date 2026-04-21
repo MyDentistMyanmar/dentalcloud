@@ -2743,23 +2743,6 @@ const App: React.FC = () => {
             </div>
             <div className="grid grid-cols-1 gap-4">
               <div>
-                <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">Clinical Focus</label>
-                <Input
-                  value={appointmentClinicalFocus}
-                  onChange={(e: any) => setAppointmentClinicalFocus(e.target.value)}
-                  placeholder="What treatment should be done?"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">Target Teeth</label>
-                <Input
-                  value={appointmentTargetTeethInput}
-                  onChange={(e: any) => setAppointmentTargetTeethInput(e.target.value)}
-                  placeholder="e.g. 11, 12, 46"
-                />
-                <p className="mt-1 text-[11px] text-gray-500">Use comma-separated tooth numbers so doctors can see exactly where to work.</p>
-              </div>
-              <div>
                 <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">Extra Notes</label>
                 <textarea
                   className="w-full border-gray-200 border rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
