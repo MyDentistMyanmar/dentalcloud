@@ -37,12 +37,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({
   }, [allBranchesValue, locations, selectedLocationId]);
 
   const todayKey = useMemo(() => new Date().toISOString().split('T')[0], []);
-  const defaultFrom = useMemo(() => {
-    const start = new Date();
-    start.setDate(start.getDate() - 29);
-    return start.toISOString().split('T')[0];
-  }, []);
-  const [dateFrom, setDateFrom] = useState(defaultFrom);
+  const [dateFrom, setDateFrom] = useState(todayKey);
   const [dateTo, setDateTo] = useState(todayKey);
 
   const handleDateFromChange = (value: string) => {
