@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { DollarSign, Activity, Users, Calendar as CalendarIcon, PieChart as PieIcon, MapPin, TrendingDown, LineChart as LineChartIcon } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, Legend, PieChart, Pie, Cell } from 'recharts';
-import { Patient, Appointment, ClinicalRecord, Location, Expense } from '../types';
+import { Patient, Appointment, ClinicalRecord, Location, Expense, PaymentRecord } from '../types';
 import { formatCurrency, Currency } from '../utils/currency';
 
 interface DashboardViewProps {
@@ -9,6 +9,7 @@ interface DashboardViewProps {
   appointments: Appointment[];
   treatmentRecords: ClinicalRecord[];
   expenses: Expense[];
+  paymentRecords: PaymentRecord[];
   currency: Currency;
   locations: Location[];
   selectedLocationId: string;
@@ -23,6 +24,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({
   appointments,
   treatmentRecords,
   expenses,
+  paymentRecords,
   currency,
   locations,
   selectedLocationId,
@@ -108,9 +110,24 @@ const DashboardView: React.FC<DashboardViewProps> = ({
     [appointments, dateFrom, dateTo]
   );
 
-  const rangeRevenue = useMemo(
+  const filteredPaymentRecords = useMemo(
+    () => paymentRecords.filter(record => isWithinRange(record.date)),
+    [paymentRecords, dateFrom, dateTo]
+  );
+
+  const rangeTreatmentRevenue = useMemo(
     () => filteredTreatmentRecords.reduce((sum, record) => sum + (record.cost || 0), 0),
     [filteredTreatmentRecords]
+  );
+
+  const rangeCollectedPayments = useMemo(
+    () => filteredPaymentRecords.reduce((sum, payment) => sum + (payment.amount || 0), 0),
+    [filteredPaymentRecords]
+  );
+
+  const rangeRevenue = useMemo(
+    () => rangeTreatmentRevenue + rangeCollectedPayments,
+    [rangeTreatmentRevenue, rangeCollectedPayments]
   );
 
   const rangeExpenses = useMemo(
@@ -133,9 +150,13 @@ const DashboardView: React.FC<DashboardViewProps> = ({
   const dailyFinancialData = useMemo(() => {
     return chartDates.map(dateStr => {
       const dateLabel = new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      const revenue = filteredTreatmentRecords
+      const treatmentRevenue = filteredTreatmentRecords
         .filter(record => record.date === dateStr)
         .reduce((sum, record) => sum + (record.cost || 0), 0);
+      const collectedPayment = filteredPaymentRecords
+        .filter(payment => payment.date === dateStr)
+        .reduce((sum, payment) => sum + (payment.amount || 0), 0);
+      const revenue = treatmentRevenue + collectedPayment;
       const totalExpense = filteredExpenses
         .filter(expense => expense.date === dateStr)
         .reduce((sum, expense) => sum + (expense.amount || 0), 0);
@@ -147,18 +168,22 @@ const DashboardView: React.FC<DashboardViewProps> = ({
         date: dateStr
       };
     });
-  }, [chartDates, filteredTreatmentRecords, filteredExpenses]);
+  }, [chartDates, filteredTreatmentRecords, filteredPaymentRecords, filteredExpenses]);
 
   const dailyAppointmentData = useMemo(() => {
     return chartDates.map(dateStr => {
       const dateLabel = new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      const revenue = filteredTreatmentRecords
+      const treatmentRevenue = filteredTreatmentRecords
         .filter(record => record.date === dateStr)
         .reduce((sum, record) => sum + (record.cost || 0), 0);
+      const collectedPayment = filteredPaymentRecords
+        .filter(payment => payment.date === dateStr)
+        .reduce((sum, payment) => sum + (payment.amount || 0), 0);
+      const revenue = treatmentRevenue + collectedPayment;
       const appointmentsCount = filteredAppointments.filter(apt => apt.date === dateStr).length;
       return { name: dateLabel, revenue, appointments: appointmentsCount, date: dateStr };
     });
-  }, [chartDates, filteredTreatmentRecords, filteredAppointments]);
+  }, [chartDates, filteredTreatmentRecords, filteredPaymentRecords, filteredAppointments]);
 
   // Patient Revenue Performance (top 10 patients by total revenue in range)
   const patientRevenueData = useMemo(() => {

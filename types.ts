@@ -60,6 +60,7 @@ export interface ClinicalRecord {
 
 export interface PaymentRecord {
   id: string;
+  location_id?: string;
   patientId: string;
   amount: number;
   date: string;

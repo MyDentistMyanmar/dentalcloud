@@ -34,6 +34,7 @@ import {
   Appointment, 
   TreatmentType, 
   ClinicalRecord,
+  PaymentRecord,
   PatientFile,
   Doctor,
   DoctorInput,
@@ -92,6 +93,31 @@ const DoctorProfileView = React.lazy(() => import('./components/DoctorProfileVie
 const DoctorHomeView = React.lazy(() => import('./components/DoctorHomeView'));
 
 const ALL_BRANCHES_VALUE = '__all_branches__';
+const PAYMENT_RECORDS_STORAGE_KEY = 'dentalcloud_payment_records_v1';
+
+const toLocalISODate = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const readPaymentRecords = (): PaymentRecord[] => {
+  try {
+    const raw = localStorage.getItem(PAYMENT_RECORDS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item: any) => item && typeof item.amount === 'number' && typeof item.date === 'string');
+  } catch (error) {
+    console.warn('Failed to parse local payment records:', error);
+    return [];
+  }
+};
+
+const writePaymentRecords = (records: PaymentRecord[]) => {
+  localStorage.setItem(PAYMENT_RECORDS_STORAGE_KEY, JSON.stringify(records));
+};
 
 const isRecoveryFlowActive = (): boolean => {
   if (typeof window === 'undefined') return false;
@@ -163,6 +189,7 @@ const App: React.FC = () => {
   const [dashboardAppointments, setDashboardAppointments] = useState<Appointment[]>([]);
   const [dashboardRecords, setDashboardRecords] = useState<ClinicalRecord[]>([]);
   const [dashboardExpenses, setDashboardExpenses] = useState<Expense[]>([]);
+  const [dashboardPayments, setDashboardPayments] = useState<PaymentRecord[]>(() => readPaymentRecords());
   const [dashboardLocationId, setDashboardLocationId] = useState<string>(() => {
     return localStorage.getItem('dashboardLocationId') || ALL_BRANCHES_VALUE;
   });
@@ -597,6 +624,7 @@ const App: React.FC = () => {
     setDashboardAppointments([]);
     setDashboardRecords([]);
     setDashboardLocationId(ALL_BRANCHES_VALUE);
+    setDashboardPayments([]);
     setAssistantPatients([]);
     setAssistantAppointments([]);
     setAssistantDoctors([]);
@@ -662,6 +690,10 @@ const App: React.FC = () => {
         : (hasMatchingLocation ? requestedScope : (availableLocations[0]?.id || requestedScope))
     );
     const queryLocationId = sanitizedScope === ALL_BRANCHES_VALUE ? undefined : sanitizedScope;
+    const storedPayments = readPaymentRecords();
+    const scopedPayments = queryLocationId
+      ? storedPayments.filter((record) => record.location_id === queryLocationId)
+      : storedPayments;
 
     const [patData, aptData, recordsData, expenseData] = await Promise.all([
       api.patients.getAll(queryLocationId),
@@ -678,6 +710,7 @@ const App: React.FC = () => {
     setDashboardAppointments(aptData);
     setDashboardRecords(recordsData);
     setDashboardExpenses(expenseData);
+    setDashboardPayments(scopedPayments);
     setDashboardLocationId(sanitizedScope);
     localStorage.setItem('dashboardLocationId', sanitizedScope);
   };
@@ -1803,6 +1836,23 @@ const App: React.FC = () => {
     if (!selectedPatient) return;
     try {
       const res = await api.finance.processPayment(selectedPatient.id, paymentAmount);
+      const paymentRecord: PaymentRecord = {
+        id: `pay_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        location_id: selectedPatient.location_id,
+        patientId: selectedPatient.id,
+        amount: paymentAmount,
+        date: toLocalISODate(new Date()),
+        type: paymentAmount >= (selectedPatient.balance || 0) ? 'FULL' : 'PARTIAL',
+        remainingBalance: res.new_balance
+      };
+      const allPaymentRecords = [paymentRecord, ...readPaymentRecords()];
+      writePaymentRecords(allPaymentRecords);
+      const shouldIncludeInCurrentScope =
+        dashboardLocationId === ALL_BRANCHES_VALUE || dashboardLocationId === selectedPatient.location_id;
+      if (shouldIncludeInCurrentScope) {
+        setDashboardPayments((prev) => [paymentRecord, ...prev]);
+      }
+
       setSelectedPatient({ ...selectedPatient, balance: res.new_balance });
       setLastPaymentAmount(paymentAmount);
       setSelectedTreatmentsForReceipt([]);
@@ -2224,6 +2274,7 @@ const App: React.FC = () => {
                   appointments={dashboardAppointments}
                   treatmentRecords={dashboardRecords}
                   expenses={dashboardExpenses}
+                  paymentRecords={dashboardPayments}
                   currency={currency}
                   locations={locations}
                   selectedLocationId={dashboardLocationId}
