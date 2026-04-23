@@ -19,6 +19,13 @@ interface DashboardViewProps {
   loading?: boolean;
 }
 
+const toLocalISODate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 const DashboardView: React.FC<DashboardViewProps> = ({
   patients,
   appointments,
@@ -38,7 +45,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({
     return locations.find(location => location.id === selectedLocationId)?.name || 'Current Branch';
   }, [allBranchesValue, locations, selectedLocationId]);
 
-  const todayKey = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const todayKey = useMemo(() => toLocalISODate(new Date()), []);
   const [dateFrom, setDateFrom] = useState(todayKey);
   const [dateTo, setDateTo] = useState(todayKey);
 
@@ -309,6 +316,59 @@ const DashboardView: React.FC<DashboardViewProps> = ({
       };
     });
   }, [filteredTreatmentRecords, filteredExpenses, rangeMonths]);
+
+  const serviceMonitorData = useMemo(() => {
+    const monitoredServices = ['X-ray (OBU)', 'X-ray (CBTC)', 'X Ray (Lateral)', 'X-ray (PA)'];
+
+    return monitoredServices.map((service) => {
+      const serviceRecords = filteredTreatmentRecords.filter((record) => (record.description || '').trim() === service);
+      const count = serviceRecords.length;
+      const revenue = serviceRecords.reduce((sum, record) => sum + (record.cost || 0), 0);
+      return {
+        name: service,
+        patients: count,
+        revenue
+      };
+    });
+  }, [filteredTreatmentRecords]);
+
+  const serviceMonitorHasData = useMemo(
+    () => serviceMonitorData.some((item) => item.patients > 0),
+    [serviceMonitorData]
+  );
+
+  const totalXrayPatients = useMemo(
+    () => {
+      const monitoredServices = new Set(['X-ray (OBU)', 'X-ray (CBTC)', 'X Ray (Lateral)', 'X-ray (PA)']);
+      const uniquePatientIds = new Set<string>();
+
+      filteredTreatmentRecords.forEach((record) => {
+        const serviceName = (record.description || '').trim();
+        if (!monitoredServices.has(serviceName)) return;
+        if (record.patient_id) {
+          uniquePatientIds.add(record.patient_id);
+        }
+      });
+
+      return uniquePatientIds.size;
+    },
+    [filteredTreatmentRecords]
+  );
+
+  const totalXrayRevenue = useMemo(
+    () => serviceMonitorData.reduce((sum, item) => sum + item.revenue, 0),
+    [serviceMonitorData]
+  );
+
+  const topXrayService = useMemo(() => {
+    const ranked = [...serviceMonitorData].sort((a, b) => b.patients - a.patients);
+    return ranked[0];
+  }, [serviceMonitorData]);
+
+  const xrayXAxisMax = useMemo(() => {
+    const currentMax = Math.max(...serviceMonitorData.map((item) => item.patients), 0);
+    return Math.max(currentMax, 2);
+  }, [serviceMonitorData]);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -708,6 +768,74 @@ const DashboardView: React.FC<DashboardViewProps> = ({
               />
             </AreaChart>
           </ResponsiveContainer>
+        </div>
+      </div>
+
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="flex flex-col gap-2 mb-5">
+          <h3 className="text-lg font-semibold text-gray-800">X-Ray Service Monitor</h3>
+          <p className="text-xs text-gray-500">Daily usage visibility for key X-ray services in the selected date range</p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+          <div className="rounded-lg border border-indigo-100 bg-indigo-50 p-4">
+            <p className="text-[10px] uppercase tracking-wider font-bold text-indigo-500">Total X-Ray Patients</p>
+            <p className="text-2xl font-bold text-indigo-700 mt-1">{totalXrayPatients}</p>
+          </div>
+          <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-4">
+            <p className="text-[10px] uppercase tracking-wider font-bold text-emerald-500">Total X-Ray Revenue</p>
+            <p className="text-2xl font-bold text-emerald-700 mt-1">{formatCurrency(totalXrayRevenue, currency)}</p>
+          </div>
+          <div className="rounded-lg border border-amber-100 bg-amber-50 p-4">
+            <p className="text-[10px] uppercase tracking-wider font-bold text-amber-500">Top Service Today</p>
+            <p className="text-sm font-bold text-amber-700 mt-1">{topXrayService?.name || 'N/A'}</p>
+            <p className="text-xs text-amber-600 mt-1">{topXrayService?.patients || 0} patient(s)</p>
+          </div>
+        </div>
+
+        <div className="h-[320px] w-full min-h-[320px]">
+          {serviceMonitorHasData ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={serviceMonitorData} layout="vertical" margin={{ top: 10, right: 24, left: 12, bottom: 10 }} barCategoryGap={20}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E5E7EB" />
+                <XAxis
+                  type="number"
+                  axisLine={false}
+                  tickLine={false}
+                  allowDecimals={false}
+                  domain={[0, xrayXAxisMax]}
+                  tickCount={xrayXAxisMax + 1}
+                  tick={{ fill: '#6B7280', fontSize: 12 }}
+                />
+                <YAxis
+                  type="category"
+                  dataKey="name"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: '#4B5563', fontSize: 12, fontWeight: 600 }}
+                  width={140}
+                />
+                <Tooltip
+                  contentStyle={{ borderRadius: 12, borderColor: '#E5E7EB' }}
+                  formatter={(value: number, name: string) => {
+                    if (name === 'patients') return [`${value}`, 'Patients'];
+                    return [formatCurrency(value, currency), 'Revenue'];
+                  }}
+                  labelFormatter={(label) => `Service: ${label}`}
+                />
+                <Bar dataKey="patients" radius={[8, 8, 8, 8]}>
+                  {serviceMonitorData.map((entry, index) => {
+                    const colors = ['#6366F1', '#3B82F6', '#8B5CF6', '#14B8A6'];
+                    return <Cell key={`xray-service-${entry.name}-${index}`} fill={colors[index % colors.length]} />;
+                  })}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-full flex items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50">
+              <p className="text-sm text-gray-500 italic">No X-ray activity found for the selected date range.</p>
+            </div>
+          )}
         </div>
       </div>
 
