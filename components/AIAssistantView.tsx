@@ -5008,7 +5008,7 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                             </ReactMarkdown>
                           </div>
                         ) : (
-                          <div className="whitespace-pre-wrap text-sm leading-relaxed text-white/95 md:text-[15px]">{message.content}</div>
+                          <div className="whitespace-pre-wrap text-[13px] leading-relaxed text-white/95">{message.content}</div>
                         )}
 
                         <div className={`mt-4 flex items-center gap-2 border-t pt-3 ${
