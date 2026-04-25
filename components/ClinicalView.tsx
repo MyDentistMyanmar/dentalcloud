@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { User, X, Upload, Trash2, FileText, Receipt as ReceiptIcon, Package, RotateCcw, Award, Zap, Key, Edit, Download, Eye, MoreVertical, Calendar, CheckCircle2, AlertCircle } from 'lucide-react';
+import { User, X, Upload, Trash2, FileText, Receipt as ReceiptIcon, Package, RotateCcw, Award, Zap, Key, Edit, Download, Eye, MoreVertical, Calendar, CheckCircle2, AlertCircle, ArrowLeft } from 'lucide-react';
 import { ToothSelector } from './ToothSelector';
 import { Patient, TreatmentType, ClinicalRecord, PatientFile, LoyaltyTransaction, LoyaltyRule, Doctor, Appointment } from '../types';
 import { formatCurrency, getCurrencySymbol, Currency } from '../utils/currency';
@@ -486,7 +486,18 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
 
     <div className="space-y-6 h-fit">
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-        <h3 className="text-lg font-bold text-gray-800 mb-4">Patient Brief</h3>
+        <div className="mb-4 flex items-center justify-between gap-2">
+          <h3 className="text-lg font-bold text-gray-800">Patient Brief</h3>
+          {selectedPatient && (
+            <button
+              onClick={onOpenDirectory}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100"
+            >
+              <ArrowLeft size={14} />
+              Back to Patients
+            </button>
+          )}
+        </div>
         {selectedPatient ? (
           <div className="space-y-6">
              <div className="flex items-center gap-4">
