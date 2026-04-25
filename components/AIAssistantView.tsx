@@ -556,6 +556,41 @@ const AIAssistantView: React.FC<AIAssistantViewProps> = ({
   const formatAppointmentLabel = (appointment: Appointment) =>
     `${appointment.patient_name || 'Unknown Patient'} on ${appointment.date} at ${appointment.time}${appointment.doctor_name ? ` with Dr. ${appointment.doctor_name}` : ''}`;
 
+  const isAppointmentActionIntent = (text: string) => {
+    const normalized = normalizeLookupText(text);
+    const hasAppointmentWord = /\b(appointment|appointments|appoint|booking|booked|book|reschedule|followup|follow up|follow-up)\b/.test(normalized);
+    const hasScheduleIntent = /\b(schedule|make|create|set up)\b/.test(normalized);
+    const isMessagingOrEmail = /\b(email|mail|message|notify|report)\b/.test(normalized);
+    return hasAppointmentWord || (hasScheduleIntent && !isMessagingOrEmail && /\b(patient|doctor|dr|clinic)\b/.test(normalized));
+  };
+
+  const buildNoActionMessage = (
+    userText: string,
+    cleanedResponse: string,
+    hasActionIntent: boolean
+  ) => {
+    const prefix = cleanedResponse.trim();
+    const appendPrefix = (message: string) => prefix ? `${prefix}\n\n${message}` : message;
+
+    if (!hasActionIntent) {
+      return prefix || 'I could not form a system action from that request.';
+    }
+
+    if (isAppointmentActionIntent(userText)) {
+      if (mode !== 'agent') {
+        return appendPrefix('I did not create the appointment because Agent Mode is off. Switch to Agent Mode, then ask again with the patient, date, time, doctor, and branch if needed.');
+      }
+
+      return appendPrefix('I could not safely create the appointment because I could not form a valid booking action from the request. Please include the patient name, date, time, appointment type, and doctor or branch if needed.');
+    }
+
+    if (mode !== 'agent') {
+      return appendPrefix('I did not make a system change because Agent Mode is off. Switch to Agent Mode, then ask again.');
+    }
+
+    return appendPrefix('I could not safely complete that system action because I could not form a valid action from the request. Please include the required details and try again.');
+  };
+
   const fetchAppointmentsForVerification = async (locationId?: string) =>
     api.appointments.getAll(locationId);
 
@@ -3461,7 +3496,7 @@ I can provide guidance on:
         return;
       }
 
-      const aiResponse = await callAICompletionAPI(userMessage.content, messages);
+      let aiResponse = await callAICompletionAPI(userMessage.content, messages);
           
       // Parse for multiple action JSON blocks with improved validation
       let actionResults: string[] = [];
@@ -3507,6 +3542,20 @@ I can provide guidance on:
               break;
             }
           }
+        }
+      }
+
+      if (allActionMatches.length === 0 && mode === 'agent' && isAppointmentActionIntent(userMessage.content)) {
+        try {
+          const recoveryPrompt = `The previous response did not include an executable system action. Convert this appointment request into exactly one JSON action if enough details are present.\n\nUser request: ${userMessage.content}\n\nUse this schema only:\n{ "action": "apt_c", "params": { "name": "patient name", "doctor_name": "doctor name if provided", "dt": "YYYY-MM-DD", "t": "HH:mm", "ty": "appointment type", "n": "optional notes" } }\n\nRules:\n- Return JSON only, no markdown.\n- Do not invent patient, date, time, doctor, branch, or type.\n- If patient, date, time, or type is missing, return a short sentence starting with MISSING_APPOINTMENT_DETAILS instead of JSON.`;
+          const recoveredResponse = await callAICompletionAPI(recoveryPrompt, messages);
+          const recoveredActionMatches = findAllActions(recoveredResponse);
+          if (recoveredActionMatches.length > 0) {
+            aiResponse = recoveredResponse;
+            allActionMatches = recoveredActionMatches;
+          }
+        } catch (recoveryError) {
+          console.error('Appointment action recovery failed:', recoveryError);
         }
       }
           
@@ -4723,9 +4772,7 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
       const assistantContent = needsConfirmation
         ? actionResultText
         : actionIntentDetected && !hasActionAttempt
-        ? mode !== 'agent'
-          ? `${cleanedAiResponse.trim()}\n\n⚠️ I did not execute any real system action for that request, so no appointment or database record was created.\n\nPlease try again in Agent Mode, and I will only confirm completion after the system action succeeds.`.trim()
-          : (cleanedAiResponse.trim() || `⚠️ I understood the request, but I could not form a real system action to run. Please try again with the recipient, subject, body, and branch if needed.`)
+        ? buildNoActionMessage(userMessage.content, cleanedAiResponse, actionIntentDetected)
         : actionIntentDetected && hasActionAttempt && !hasSuccessfulAction
           ? `${cleanedAiResponse.trim()}\n\n${actionResultText || '⚠️ I could not complete the requested system action.'}`.trim()
           : actionResultText
@@ -4735,9 +4782,7 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
       const safeAssistantContent = needsConfirmation
         ? actionResultText
         : actionIntentDetected && !hasActionAttempt
-          ? mode !== 'agent'
-            ? `${cleanedAiResponse.trim()}\n\n⚠️ I did not execute any real system action for that request, so nothing was sent or changed.\n\nPlease try again in Agent Mode, and I will only confirm completion after the system action succeeds.`.trim()
-            : `⚠️ I did not execute any real system action for that request, so nothing was sent or changed.\n\nPlease try again with the recipient, subject, body, and branch if needed.`
+          ? buildNoActionMessage(userMessage.content, cleanedAiResponse, actionIntentDetected)
           : actionIntentDetected && hasActionAttempt && !hasSuccessfulAction
             ? `${actionResultText || '⚠️ I could not complete the requested system action.'}\n\nNo real system change was completed yet.`.trim()
             : assistantContent;
