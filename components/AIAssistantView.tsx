@@ -8,6 +8,13 @@ import { Currency } from '../utils/currency';
 import { formatTeethWithPosition } from '../utils/toothNumbering';
 import { buildFinancialReport, renderFinancialReportMarkdown, buildInsightsNoNumbers, runReportUpgradeCheck, buildAIReportPayload, payloadToReport, validateAIReportPayload, AIReportPayload } from '../utils/aiReport';
 import {
+  ExpectedAppointmentState,
+  renderVerificationResult,
+  verifyAppointmentCreated,
+  verifyAppointmentDeleted,
+  verifyAppointmentUpdated
+} from '../utils/aiActionVerification';
+import {
   AssistantMemoryProfile,
   MemoryCommand,
   buildMemoryMarkdown,
@@ -548,6 +555,79 @@ const AIAssistantView: React.FC<AIAssistantViewProps> = ({
 
   const formatAppointmentLabel = (appointment: Appointment) =>
     `${appointment.patient_name || 'Unknown Patient'} on ${appointment.date} at ${appointment.time}${appointment.doctor_name ? ` with Dr. ${appointment.doctor_name}` : ''}`;
+
+  const fetchAppointmentsForVerification = async (locationId?: string) =>
+    api.appointments.getAll(locationId);
+
+  const getExpectedAppointmentState = (
+    params: any,
+    overrides: Partial<ExpectedAppointmentState> = {}
+  ): ExpectedAppointmentState => ({
+    id: overrides.id || params?.id || params?.appointment_id || params?.apt_id,
+    location_id: overrides.location_id,
+    patient_id: overrides.patient_id || params?.p_id || params?.pid || params?.patient_id,
+    doctor_id: Object.prototype.hasOwnProperty.call(overrides, 'doctor_id')
+      ? overrides.doctor_id
+      : params?.dr_id || params?.doctor_id,
+    date: overrides.date || params?.dt || params?.date,
+    time: overrides.time || params?.t || params?.tm || params?.time,
+    type: overrides.type || params?.ty || params?.type,
+    status: overrides.status || params?.status,
+    ...overrides
+  });
+
+  const verifyAppointmentCreateAction = async (
+    locationId: string | undefined,
+    params: any,
+    result: Appointment,
+    patientId: string,
+    doctorId?: string | null
+  ) => {
+    const freshAppointments = await fetchAppointmentsForVerification(locationId);
+    return verifyAppointmentCreated(
+      freshAppointments,
+      getExpectedAppointmentState(params, {
+        id: result.id,
+        location_id: locationId,
+        patient_id: patientId,
+        doctor_id: doctorId || null,
+        status: result.status || 'Scheduled'
+      }),
+      result
+    );
+  };
+
+  const verifyAppointmentUpdateAction = async (
+    locationId: string | undefined,
+    params: any,
+    appointment: Appointment,
+    result?: Appointment | null,
+    overrides: Partial<ExpectedAppointmentState> = {}
+  ) => {
+    const freshAppointments = await fetchAppointmentsForVerification(locationId);
+    return verifyAppointmentUpdated(
+      freshAppointments,
+      getExpectedAppointmentState(params, {
+        id: appointment.id,
+        location_id: appointment.location_id,
+        patient_id: appointment.patient_id,
+        doctor_id: result?.doctor_id ?? appointment.doctor_id ?? null,
+        date: result?.date ?? appointment.date,
+        time: result?.time ?? appointment.time,
+        type: result?.type ?? appointment.type,
+        status: result?.status ?? appointment.status,
+        ...overrides
+      })
+    );
+  };
+
+  const verifyAppointmentDeleteAction = async (
+    locationId: string | undefined,
+    appointmentId: string
+  ) => {
+    const freshAppointments = await fetchAppointmentsForVerification(locationId);
+    return verifyAppointmentDeleted(freshAppointments, appointmentId);
+  };
 
   const getLocalTimeZone = () => {
     try {
@@ -2940,6 +3020,7 @@ I can provide guidance on:
                 notes: pendingAction.params.n || pendingAction.params.notes,
                 status: 'Scheduled'
               });
+              result.verification = await verifyAppointmentCreateAction(locationId, pendingAction.params, result, patientId, doctorId);
             }
             break;
           case 'apt_u':
@@ -2947,6 +3028,7 @@ I can provide guidance on:
               const appointment = resolveAppointment(pendingAction.params);
               if (!appointment) throw new Error("Appointment not found for update.");
               result = await api.appointments.update(appointment.id, pendingAction.params.data || {});
+              result.verification = await verifyAppointmentUpdateAction(locationId, pendingAction.params, appointment, result, pendingAction.params.data || {});
             }
             break;
           case 'apt_status':
@@ -2955,7 +3037,8 @@ I can provide guidance on:
               if (!appointment) throw new Error("Appointment not found for status update.");
               const status = normalizeAppointmentStatus(pendingAction.params.status);
               await api.appointments.updateStatus(appointment.id, status);
-              result = { appointment, status };
+              const verification = await verifyAppointmentUpdateAction(locationId, pendingAction.params, appointment, null, { status });
+              result = { appointment, status, verification };
             }
             break;
           case 'apt_reschedule':
@@ -2966,6 +3049,7 @@ I can provide guidance on:
                 date: pendingAction.params.dt || pendingAction.params.date,
                 time: pendingAction.params.t || pendingAction.params.tm || pendingAction.params.time
               });
+              result.verification = await verifyAppointmentUpdateAction(locationId, pendingAction.params, appointment, result);
             }
             break;
           case 'apt_d':
@@ -2973,7 +3057,8 @@ I can provide guidance on:
               const appointment = resolveAppointment(pendingAction.params);
               if (!appointment) throw new Error("Appointment not found for deletion.");
               await api.appointments.delete(appointment.id);
-              result = appointment;
+              const verification = await verifyAppointmentDeleteAction(locationId, appointment.id);
+              result = { ...appointment, verification };
             }
             break;
           case 'p_c':
@@ -3244,6 +3329,27 @@ I can provide guidance on:
           case 'recall_delete':
             successMessage = `✅ Recall deleted successfully.`;
             break;
+        }
+
+        if (result?.verification) {
+          const verificationText = renderVerificationResult(result.verification);
+          switch (pendingAction.action) {
+            case 'apt_c':
+              successMessage = `Appointment created for ${result.patient_name} with Dr. ${result.doctor_name || 'Unassigned'} at ${result.time}.\n\n${verificationText}`;
+              break;
+            case 'apt_u':
+              successMessage = `Appointment update completed.\n\n${verificationText}`;
+              break;
+            case 'apt_status':
+              successMessage = `Appointment status change completed: ${result.status}.\n\n${verificationText}`;
+              break;
+            case 'apt_reschedule':
+              successMessage = `Appointment reschedule completed: ${result.date} at ${result.time}.\n\n${verificationText}`;
+              break;
+            case 'apt_d':
+              successMessage = `Appointment delete completed.\n\n${verificationText}`;
+              break;
+          }
         }
 
         const assistantMessage: Message = {
@@ -4064,6 +4170,7 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                   notes: params.n || params.notes,
                   status: 'Scheduled'
                 });
+                result.verification = await verifyAppointmentCreateAction(locationId, params, result, patient.id, doctor?.id);
                 currentActionResult = `✅ Appointment created successfully for ${result.patient_name} with Dr. ${result.doctor_name} at ${result.time}.`;
               } catch (err: any) {
                 console.error('Appointment creation error:', err);
@@ -4081,6 +4188,7 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                   data.doctor_id = doctor.id;
                 }
                 result = await api.appointments.update(appointment.id, data);
+                result.verification = await verifyAppointmentUpdateAction(locationId, params, appointment, result, data);
                 currentActionResult = `✅ Appointment updated successfully for ${formatAppointmentLabel(result)}.`;
               } catch (err: any) {
                 console.error('Appointment update error:', err);
@@ -4093,6 +4201,7 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                 if (!appointment) throw new Error("Appointment not found for status change.");
                 const status = normalizeAppointmentStatus(params.status);
                 await api.appointments.updateStatus(appointment.id, status);
+                result = { appointment, status, verification: await verifyAppointmentUpdateAction(locationId, params, appointment, null, { status }) };
                 currentActionResult = `✅ Appointment status updated to ${status} for ${formatAppointmentLabel(appointment)}.`;
               } catch (err: any) {
                 console.error('Appointment status error:', err);
@@ -4107,6 +4216,7 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                   date: params.dt || params.date,
                   time: params.t || params.tm || params.time
                 });
+                result.verification = await verifyAppointmentUpdateAction(locationId, params, appointment, result);
                 currentActionResult = `✅ Appointment rescheduled to ${result.date} at ${result.time} for ${result.patient_name}.`;
               } catch (err: any) {
                 console.error('Appointment reschedule error:', err);
@@ -4118,6 +4228,7 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                 const appointment = resolveAppointment(params);
                 if (!appointment) throw new Error("Appointment not found for deletion.");
                 await api.appointments.delete(appointment.id);
+                result = { ...appointment, verification: await verifyAppointmentDeleteAction(locationId, appointment.id) };
                 currentActionResult = `✅ Appointment deleted successfully for ${formatAppointmentLabel(appointment)}.`;
               } catch (err: any) {
                 console.error('Appointment deletion error:', err);
@@ -4160,6 +4271,7 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                 if (patientInputs.length === 0) throw new Error("Patient list is required.");
 
                 const created: string[] = [];
+                const createdAppointments: Appointment[] = [];
                 for (const patientInput of patientInputs) {
                   const patient = resolvePatient(typeof patientInput === 'string' ? patientInput : patientInput?.name || patientInput?.id);
                   if (!patient) continue;
@@ -4174,11 +4286,36 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                     status: 'Scheduled'
                   });
                   created.push(`${appointment.patient_name} at ${appointment.time}`);
+                  createdAppointments.push(appointment);
                 }
 
                 currentActionResult = created.length === 0
                   ? `⚠️ No appointments were created because no patients could be matched.`
                   : `✅ Created ${created.length} appointments:\n\n${created.map(item => `• ${item}`).join('\n')}`;
+                if (createdAppointments.length > 0) {
+                  const freshAppointments = await fetchAppointmentsForVerification(locationId);
+                  const verificationResults = createdAppointments.map(appointment =>
+                    verifyAppointmentCreated(
+                      freshAppointments,
+                      getExpectedAppointmentState(params, {
+                        id: appointment.id,
+                        location_id: locationId,
+                        patient_id: appointment.patient_id,
+                        doctor_id: appointment.doctor_id || null,
+                        date: appointment.date,
+                        time: appointment.time,
+                        type: appointment.type,
+                        status: appointment.status
+                      }),
+                      appointment
+                    )
+                  );
+                  const failedVerifications = verificationResults.filter(verification => verification.status !== 'passed');
+                  const verificationSummary = failedVerifications.length === 0
+                    ? `[Verified] All ${verificationResults.length} bulk appointments were confirmed.`
+                    : `[Needs review] ${failedVerifications.length} of ${verificationResults.length} bulk appointments need review.\n\n${failedVerifications.map(renderVerificationResult).join('\n\n')}`;
+                  currentActionResult = `Created ${created.length} appointments:\n\n${created.map(item => `- ${item}`).join('\n')}\n\n${verificationSummary}`;
+                }
               } catch (err: any) {
                 currentActionResult = `❌ Failed to create bulk appointments: ${err.message}`;
               }
@@ -4534,6 +4671,27 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
             shouldRefreshData = true;
           }
 
+          if (result?.verification) {
+            const verificationText = renderVerificationResult(result.verification);
+            switch (action) {
+              case 'apt_c':
+                currentActionResult = `Appointment created for ${result.patient_name} with Dr. ${result.doctor_name || 'Unassigned'} at ${result.time}.\n\n${verificationText}`;
+                break;
+              case 'apt_u':
+                currentActionResult = `Appointment update completed for ${formatAppointmentLabel(result)}.\n\n${verificationText}`;
+                break;
+              case 'apt_status':
+                currentActionResult = `Appointment status update completed to ${result.status} for ${formatAppointmentLabel(result.appointment)}.\n\n${verificationText}`;
+                break;
+              case 'apt_reschedule':
+                currentActionResult = `Appointment reschedule completed to ${result.date} at ${result.time} for ${result.patient_name}.\n\n${verificationText}`;
+                break;
+              case 'apt_d':
+                currentActionResult = `Appointment delete completed for ${formatAppointmentLabel(result)}.\n\n${verificationText}`;
+                break;
+            }
+          }
+
           if (currentActionResult) {
             actionResults.push(currentActionResult);
           }
@@ -4552,7 +4710,7 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
       }
 
       const actionResultText = actionResults.join('\n\n---\n\n');
-      const hasSuccessfulAction = actionResults.some(result => result.includes('✅'));
+      const hasSuccessfulAction = actionResults.some(result => result.includes('✅') || result.includes('[Verified]'));
       const hasActionAttempt = allActionMatches.length > 0;
       const needsConfirmation = actionResultText.toLowerCase().includes('confirmation') || actionResultText.toLowerCase().includes('confirm');
       // Clean the AI response to remove internal processing artifacts
