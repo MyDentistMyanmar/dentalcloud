@@ -26,6 +26,7 @@ export interface Patient {
   medicalHistory?: string;
   created_at?: string;
   has_account?: boolean;
+  username?: string | null;
 }
 
 export interface PatientFile {

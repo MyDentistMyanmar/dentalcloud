@@ -36,6 +36,34 @@ const loadPendingPatientSignup = (email: string): { username?: string; phone?: s
   }
 };
 
+const normalizePhoneForLookup = (value?: string | null): string => (value || '').replace(/\D/g, '');
+
+const getPhoneLookupVariants = (value: string): string[] => {
+  const trimmed = value.trim();
+  const digits = normalizePhoneForLookup(trimmed);
+  const variants = new Set<string>();
+
+  if (trimmed) variants.add(trimmed);
+  if (digits) {
+    variants.add(digits);
+    variants.add(`+${digits}`);
+
+    if (digits.startsWith('959')) {
+      variants.add(`0${digits.slice(2)}`);
+      variants.add(`+${digits}`);
+    } else if (digits.startsWith('09')) {
+      variants.add(`95${digits.slice(1)}`);
+      variants.add(`+95${digits.slice(1)}`);
+    } else if (digits.startsWith('9')) {
+      variants.add(`0${digits}`);
+      variants.add(`95${digits}`);
+      variants.add(`+95${digits}`);
+    }
+  }
+
+  return Array.from(variants);
+};
+
 const lookupPatientAuthEmailByIdentifier = async (identifier: string): Promise<string | null> => {
   const trimmedIdentifier = identifier.trim();
   const normalizedIdentifier = trimmedIdentifier.toLowerCase();
@@ -59,8 +87,39 @@ const lookupPatientAuthEmailByIdentifier = async (identifier: string): Promise<s
 
   return (
     await lookupByColumn('username', normalizedIdentifier) ||
-    await lookupByColumn('phone', trimmedIdentifier)
+    (await Promise.all(getPhoneLookupVariants(trimmedIdentifier).map((variant) => lookupByColumn('phone', variant)))).find(Boolean) ||
+    await lookupPatientEmailByNormalizedPhone(trimmedIdentifier)
   );
+};
+
+const lookupPatientEmailByNormalizedPhone = async (identifier: string): Promise<string | null> => {
+  const normalizedPhone = normalizePhoneForLookup(identifier);
+  if (!normalizedPhone) return null;
+
+  const { data: authRows, error: authError } = await supabase
+    .from('patient_auth')
+    .select('email, phone');
+
+  if (authError) {
+    console.warn('Patient auth normalized phone lookup error:', authError.message);
+  } else {
+    const authMatch = (authRows || []).find((row: any) => normalizePhoneForLookup(row.phone) === normalizedPhone);
+    if (authMatch?.email) {
+      return authMatch.email;
+    }
+  }
+
+  const { data: patientRows, error: patientError } = await supabase
+    .from('patients')
+    .select('email, phone');
+
+  if (patientError) {
+    console.warn('Patient normalized phone lookup error:', patientError.message);
+    return null;
+  }
+
+  const patientMatch = (patientRows || []).find((row: any) => normalizePhoneForLookup(row.phone) === normalizedPhone);
+  return patientMatch?.email || null;
 };
 
 export interface AuthSession {

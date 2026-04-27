@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, CheckCheck, MessageCircle, Send, User } from 'lucide-react';
-import { Conversation, Message } from '../types';
+import { Check, CheckCheck, MessageCircle, Search, Send, User } from 'lucide-react';
+import { Conversation, Message, Patient } from '../types';
 import { api } from '../services/api';
 import { auth } from '../services/auth';
 import { supabase } from '../services/supabase';
 
 interface MessagingViewProps {
-  patients: any[];
+  patients: Patient[];
   messagingEnabled: boolean;
 }
 
@@ -37,6 +37,21 @@ const formatConversationTime = (timestamp?: string) => {
   return `${date.toLocaleDateString()} ${formatTime(timestamp)}`;
 };
 
+const normalizeSearchText = (value?: string | number | null) => String(value || '').toLowerCase().trim();
+const normalizePhoneSearchText = (value?: string | null) => (value || '').replace(/\D/g, '');
+
+const matchesSearch = (values: Array<string | number | null | undefined>, rawQuery: string) => {
+  const query = normalizeSearchText(rawQuery);
+  const phoneQuery = normalizePhoneSearchText(rawQuery);
+  if (!query) return true;
+
+  return values.some((value) => {
+    const text = normalizeSearchText(value);
+    const phoneText = normalizePhoneSearchText(typeof value === 'string' ? value : String(value || ''));
+    return text.includes(query) || (!!phoneQuery && phoneText.includes(phoneQuery));
+  });
+};
+
 const MessagingView: React.FC<MessagingViewProps> = ({ patients, messagingEnabled }) => {
   const staffSession = auth.getCurrentUser();
   const adminId = staffSession && staffSession.role !== 'patient' ? staffSession.userId : undefined;
@@ -49,6 +64,8 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, messagingEnable
   const [sending, setSending] = useState(false);
   const [startingConversation, setStartingConversation] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [conversationSearch, setConversationSearch] = useState('');
+  const [newChatSearch, setNewChatSearch] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const selectedConversationIdRef = useRef<string | null>(null);
 
@@ -58,6 +75,29 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, messagingEnable
     () => conversations.find((conversation) => conversation.id === selectedConversationId) || null,
     [conversations, selectedConversationId]
   );
+
+  const patientsById = useMemo(() => {
+    return patients.reduce<Record<string, Patient>>((acc, patient) => {
+      if (patient?.id) {
+        acc[patient.id] = patient;
+      }
+      return acc;
+    }, {});
+  }, [patients]);
+
+  const filteredConversations = useMemo(() => {
+    return conversations.filter((conversation) => {
+      const patient = conversation.patient_id ? patientsById[conversation.patient_id] : undefined;
+      return matchesSearch([
+        conversation.participant_name,
+        conversation.patient_name,
+        patient?.name,
+        patient?.username,
+        patient?.phone,
+        patient?.email
+      ], conversationSearch);
+    });
+  }, [conversationSearch, conversations, patientsById]);
 
   const availablePatients = useMemo(() => {
     const existingPatientIds = new Set(
@@ -70,6 +110,15 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, messagingEnable
       .filter((patient) => !existingPatientIds.has(patient.id))
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [conversations, patients]);
+
+  const filteredAvailablePatients = useMemo(() => {
+    return availablePatients.filter((patient) => matchesSearch([
+      patient.name,
+      patient.username,
+      patient.phone,
+      patient.email
+    ], newChatSearch));
+  }, [availablePatients, newChatSearch]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -343,6 +392,16 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, messagingEnable
           <div className="border-b border-gray-200 px-4 py-4">
             <h3 className="text-sm font-semibold text-gray-900">Conversations</h3>
             <p className="mt-1 text-xs text-gray-500">Updates arrive automatically through Supabase realtime.</p>
+            <div className="relative mt-3">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <input
+                type="search"
+                value={conversationSearch}
+                onChange={(event) => setConversationSearch(event.target.value)}
+                placeholder="Search username, phone, or email"
+                className="w-full rounded-xl border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+              />
+            </div>
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto border-b border-gray-200 bg-white">
@@ -352,8 +411,18 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, messagingEnable
                 <p className="mt-3 text-sm font-medium text-gray-700">No conversations yet</p>
                 <p className="mt-1 text-xs text-gray-500">Start one from the patient list below.</p>
               </div>
+            ) : filteredConversations.length === 0 ? (
+              <div className="px-4 py-6 text-center text-xs text-gray-500">
+                No conversations match your search.
+              </div>
             ) : (
-              conversations.map((conversation) => (
+              filteredConversations.map((conversation) => {
+                const conversationPatient = conversation.patient_id ? patientsById[conversation.patient_id] : undefined;
+                const contactLine = [conversationPatient?.username, conversationPatient?.phone, conversationPatient?.email]
+                  .filter(Boolean)
+                  .join(' / ');
+
+                return (
                 <button
                   key={conversation.id}
                   type="button"
@@ -365,7 +434,7 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, messagingEnable
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="truncate text-sm font-semibold text-gray-900">{conversation.participant_name || conversation.patient_name}</div>
-                      <div className="mt-0.5 text-[11px] uppercase tracking-wide text-gray-400">Patient</div>
+                      <div className="mt-0.5 truncate text-[11px] text-gray-400">{contactLine || 'Patient'}</div>
                       <div className="mt-1 truncate text-xs text-gray-500">
                         {conversation.last_message || 'No messages yet'}
                       </div>
@@ -380,13 +449,24 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, messagingEnable
                     )}
                   </div>
                 </button>
-              ))
+              );
+              })
             )}
           </div>
 
           <div className="px-4 py-4">
             <h3 className="text-sm font-semibold text-gray-900">Start New Chat</h3>
             <p className="mt-1 text-xs text-gray-500">Choose a patient to open a direct conversation.</p>
+            <div className="relative mt-3">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <input
+                type="search"
+                value={newChatSearch}
+                onChange={(event) => setNewChatSearch(event.target.value)}
+                placeholder="Search username, phone, or email"
+                className="w-full rounded-xl border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+              />
+            </div>
           </div>
 
           <div className="max-h-[280px] overflow-y-auto bg-white">
@@ -394,8 +474,12 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, messagingEnable
               <div className="px-4 pb-6 text-xs text-gray-500">
                 Every patient already has an active conversation with this admin.
               </div>
+            ) : filteredAvailablePatients.length === 0 ? (
+              <div className="px-4 pb-6 text-xs text-gray-500">
+                No patients match your search.
+              </div>
             ) : (
-              availablePatients.map((patient) => (
+              filteredAvailablePatients.map((patient) => (
                 <button
                   key={`patient-${patient.id}`}
                   type="button"
@@ -403,7 +487,12 @@ const MessagingView: React.FC<MessagingViewProps> = ({ patients, messagingEnable
                   disabled={startingConversation === patient.id}
                   className="flex w-full items-center justify-between border-b border-gray-100 px-4 py-3 text-left transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <span className="truncate text-sm text-gray-800">{patient.name}</span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm text-gray-800">{patient.name}</span>
+                    <span className="block truncate text-xs text-gray-500">
+                      {[patient.username, patient.phone, patient.email].filter(Boolean).join(' / ') || 'No contact details'}
+                    </span>
+                  </span>
                   <span className="text-xs font-medium text-indigo-600">
                     {startingConversation === patient.id ? 'Opening...' : 'Chat'}
                   </span>

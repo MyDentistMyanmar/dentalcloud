@@ -93,8 +93,37 @@ const mapPatient = (row: any): Patient => ({
   loyalty_points: row?.loyalty_points ?? 0,
   medicalHistory: row?.medical_history ?? row?.medicalHistory,
   created_at: row?.created_at,
-  has_account: Array.isArray(row?.patient_auth) ? row.patient_auth.length > 0 : !!row?.patient_auth
+  has_account: Array.isArray(row?.patient_auth) ? row.patient_auth.length > 0 : !!row?.patient_auth,
+  username: Array.isArray(row?.patient_auth) ? (row.patient_auth[0]?.username ?? null) : (row?.patient_auth?.username ?? null)
 });
+
+const normalizePhoneForLookup = (value?: string | null): string => (value || '').replace(/\D/g, '');
+
+const getPhoneLookupVariants = (value: string): string[] => {
+  const trimmed = value.trim();
+  const digits = normalizePhoneForLookup(trimmed);
+  const variants = new Set<string>();
+
+  if (trimmed) variants.add(trimmed);
+  if (digits) {
+    variants.add(digits);
+    variants.add(`+${digits}`);
+
+    if (digits.startsWith('959')) {
+      variants.add(`0${digits.slice(2)}`);
+      variants.add(`+${digits}`);
+    } else if (digits.startsWith('09')) {
+      variants.add(`95${digits.slice(1)}`);
+      variants.add(`+95${digits.slice(1)}`);
+    } else if (digits.startsWith('9')) {
+      variants.add(`0${digits}`);
+      variants.add(`95${digits}`);
+      variants.add(`+95${digits}`);
+    }
+  }
+
+  return Array.from(variants);
+};
 
 const isValidEmailAddress = (email?: string | null) => {
   if (!email) return false;
@@ -314,7 +343,7 @@ export const api = {
   patients: {
     getAll: async (locationId?: string): Promise<Patient[]> => {
       try {
-        const baseColumns = 'id, location_id, name, email, phone, age, address, city, patient_type, balance, loyalty_points, medical_history, created_at, patient_auth(id)';
+        const baseColumns = 'id, location_id, name, email, phone, age, address, city, patient_type, balance, loyalty_points, medical_history, created_at, patient_auth(id, username)';
         const buildQuery = (regionColumn: 'township' | 'state_region') => {
           let query = supabase
             .from('patients')
@@ -633,10 +662,28 @@ export const api = {
           return data;
         };
 
+        const lookupPhoneByNormalizedDigits = async (): Promise<{ patient_id: string; password: string | null } | null> => {
+          const normalizedPhone = normalizePhoneForLookup(trimmedIdentifier);
+          if (!normalizedPhone) return null;
+
+          const { data, error } = await supabase
+            .from('patient_auth')
+            .select('patient_id, password, phone');
+
+          if (error) {
+            console.warn('Patient auth normalized phone lookup error:', error.message);
+            return null;
+          }
+
+          return (data || []).find((record: any) => normalizePhoneForLookup(record.phone) === normalizedPhone) || null;
+        };
+
+        const phoneVariants = getPhoneLookupVariants(trimmedIdentifier);
         const authMatch =
           await lookupAuthMatch('email', normalizedIdentifier) ||
           await lookupAuthMatch('username', normalizedIdentifier) ||
-          await lookupAuthMatch('phone', trimmedIdentifier);
+          (await Promise.all(phoneVariants.map((variant) => lookupAuthMatch('phone', variant)))).find(Boolean) ||
+          await lookupPhoneByNormalizedDigits();
 
         if (authMatch?.patient_id) {
           if (authMatch.password !== password) {
@@ -659,7 +706,49 @@ export const api = {
           return mapPatient(patientData);
         }
 
-        // 2. Fallback: allow legacy login by patient name
+        // 2. Fallback: allow phone login when patient_auth.phone is missing but patients.phone is present.
+        const lookupPatientByNormalizedPhone = async (): Promise<Patient | null> => {
+          const normalizedPhone = normalizePhoneForLookup(trimmedIdentifier);
+          if (!normalizedPhone) return null;
+
+          const { data: patientRows, error: patientRowsError } = await supabase
+            .from('patients')
+            .select('id, location_id, name, email, phone, balance, loyalty_points, medical_history, created_at');
+
+          if (patientRowsError) {
+            console.warn('Patient normalized phone lookup error:', patientRowsError.message);
+            return null;
+          }
+
+          const phonePatient = (patientRows || []).find((record: any) => normalizePhoneForLookup(record.phone) === normalizedPhone);
+          if (!phonePatient?.id) return null;
+
+          const { data: phoneAuthData, error: phoneAuthError } = await supabase
+            .from('patient_auth')
+            .select('password')
+            .eq('patient_id', phonePatient.id)
+            .maybeSingle();
+
+          if (phoneAuthError || !phoneAuthData) {
+            console.log('No auth record found for phone patient:', phonePatient.name);
+            return null;
+          }
+
+          if (password !== phoneAuthData.password) {
+            console.log('Password mismatch for phone patient:', phonePatient.name);
+            return null;
+          }
+
+          console.log('Patient authentication successful for phone:', phonePatient.name);
+          return mapPatient(phonePatient);
+        };
+
+        const phonePatient = await lookupPatientByNormalizedPhone();
+        if (phonePatient) {
+          return phonePatient;
+        }
+
+        // 3. Fallback: allow legacy login by patient name
         const { data: patientData, error: pError } = await supabase
           .from('patients')
           .select('id, location_id, name, email, phone, balance, loyalty_points, medical_history, created_at')
