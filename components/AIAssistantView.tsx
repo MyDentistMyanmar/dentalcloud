@@ -4914,15 +4914,15 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
   
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white animate-fade-in">
-      <div className="border-b border-slate-200 bg-white">
+      <div className="border-b border-gray-200 bg-white">
         <div className="flex flex-col gap-4 px-4 py-4 lg:px-6">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-white shadow-sm">
+              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-indigo-600 text-white shadow-sm">
                 <img
                   src="./assets/loli-logo.png"
                   alt="Loli AI Assistant Logo"
-                  className="h-9 w-9 rounded-lg object-cover"
+                  className="h-9 w-9 rounded-full object-cover"
                 />
               </div>
               <div>
@@ -4934,7 +4934,7 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
             <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={() => setShowHelpModal(true)}
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
+                className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50"
                 title="Quick start guide and command reference"
               >
                 <HelpCircle className="h-4 w-4" />
@@ -4942,7 +4942,7 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
               </button>
               <button
                 onClick={() => setShowMemoryPanel(true)}
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
+                className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50"
                 title="View assistant memory"
               >
                 <Brain className="h-4 w-4" />
@@ -4950,7 +4950,7 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
               </button>
               <button
                 onClick={createNewSession}
-                className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
+                className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-indigo-700"
                 title="Start new conversation"
               >
                 <Plus className="h-4 w-4" />
@@ -4966,7 +4966,7 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                   <select
                     value={selectedLocationScope}
                     onChange={(e) => setSelectedLocationScope(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200"
+                    className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
                   >
                     <option value={ALL_BRANCHES_VALUE}>All Branches</option>
                     {locations.map(location => (
@@ -4976,25 +4976,25 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                     ))}
                   </select>
                 ) : (
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-700">
                     {selectedLocationLabel}
                   </div>
                 )}
               </div>
 
-              <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+              <div className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-500">
                 <MapPin className="h-3.5 w-3.5" />
                 {selectedLocationLabel}
               </div>
             </div>
 
-            <div className="inline-flex rounded-xl border border-slate-200 bg-slate-100 p-1">
+            <div className="inline-flex rounded-lg bg-gray-100 p-1">
               <button
                 onClick={() => setMode('ask')}
                 className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition ${
                   mode === 'ask'
-                    ? 'bg-white text-slate-900 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-800'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-800'
                 }`}
               >
                 <ShieldQuestion className="h-4 w-4" />
@@ -5004,8 +5004,8 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                 onClick={() => setMode('agent')}
                 className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition ${
                   mode === 'agent'
-                    ? 'bg-slate-900 text-white shadow-sm'
-                    : 'text-slate-500 hover:text-slate-800'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-gray-500 hover:text-gray-800'
                 }`}
               >
                 <Zap className="h-4 w-4" />
@@ -5016,69 +5016,72 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
         </div>
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr),280px]">
-        <aside className="order-2 hidden min-h-0 flex-col border-l border-slate-800 bg-slate-950 text-slate-200 lg:flex">
-          <div className="border-b border-slate-800 px-4 py-4">
+      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[360px_minmax(0,1fr)]">
+        <aside className="hidden min-h-0 flex-col border-r border-gray-200 bg-white lg:flex">
+          <div className="space-y-3 border-b border-gray-200 px-4 py-4">
             <button
               onClick={createNewSession}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-100 px-3 py-2.5 text-sm font-medium text-slate-900 transition hover:bg-white"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-3 py-2.5 text-sm font-medium text-white transition hover:bg-indigo-700"
             >
               <Plus className="h-4 w-4" />
               New chat
             </button>
+            <div className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">
+              {chatSessions.length} saved chat{chatSessions.length === 1 ? '' : 's'}
+            </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-3 py-3">
-            <div className="mb-3 px-2">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Chats</p>
-            </div>
-
+          <div className="min-h-0 flex-1 overflow-y-auto">
             {chatSessions.length === 0 ? (
-              <div className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-5 text-sm text-slate-500">
-                No conversations yet.
+              <div className="px-6 py-10 text-center">
+                <MessageCircle className="mx-auto h-10 w-10 text-gray-300" />
+                <p className="mt-3 text-sm font-medium text-gray-700">No conversations yet</p>
+                <p className="mt-1 text-xs text-gray-500">Start a new AI chat to begin.</p>
               </div>
             ) : (
-              <div className="space-y-1.5">
-                {chatSessions.map(session => (
-                  <div
+              chatSessions.map(session => (
+                  <button
                     key={session.id}
-                    className={`group rounded-xl border transition ${
+                    type="button"
+                    onClick={() => switchSession(session.id)}
+                    className={`group flex w-full gap-3 border-b border-gray-100 px-4 py-3 text-left transition-colors ${
                       currentSessionId === session.id
-                        ? 'border-slate-700 bg-slate-900'
-                        : 'border-transparent hover:border-slate-800 hover:bg-slate-900/70'
+                        ? 'bg-indigo-50'
+                        : 'hover:bg-gray-50'
                     }`}
                   >
-                    <div className="flex items-start gap-2 p-3">
+                    <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full ${
+                      currentSessionId === session.id ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      <Bot className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold text-gray-900">{session.title}</div>
+                      <div className="mt-0.5 text-xs text-gray-500">{session.messages.length} messages</div>
+                    </div>
                       <button
-                        onClick={() => switchSession(session.id)}
-                        className="min-w-0 flex-1 rounded-lg text-left focus:outline-none focus:ring-2 focus:ring-slate-500"
-                        title={session.title}
-                      >
-                        <div className="truncate text-sm font-medium text-slate-100">{session.title}</div>
-                        <div className="mt-1 text-xs text-slate-500">{session.messages.length} messages</div>
-                      </button>
-                      <button
-                        onClick={() => deleteSession(session.id)}
-                        className="shrink-0 rounded-lg p-2 text-slate-500 transition hover:bg-red-500/10 hover:text-red-300 focus:outline-none focus:ring-2 focus:ring-red-400"
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          deleteSession(session.id);
+                        }}
+                        className="shrink-0 rounded-lg p-2 text-gray-400 opacity-0 transition hover:bg-red-50 hover:text-red-600 group-hover:opacity-100 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-300"
                         title="Delete conversation"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  </button>
+              ))
             )}
           </div>
-
         </aside>
 
-        <div className="order-1 flex min-h-0 flex-col bg-white">
-          <div className="border-b border-slate-200 px-4 py-3 lg:px-6">
+        <div className="flex min-h-0 flex-col bg-slate-50">
+          <div className="border-b border-gray-200 bg-white px-4 py-3 lg:px-6">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-slate-900">{activeSession?.title || 'New chat'}</p>
-                <p className="text-xs text-slate-500">{mode === 'ask' ? 'Ask mode is active' : 'Agent mode is active'}</p>
+                <p className="truncate text-sm font-semibold text-gray-900">{activeSession?.title || 'New chat'}</p>
+                <p className="text-xs text-gray-500">{mode === 'ask' ? 'Ask mode is active' : 'Agent mode is active'}</p>
               </div>
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 {apiStatus === 'mock' && (
@@ -5151,21 +5154,21 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                       )}
                       
                       <div
-                        className={`group max-w-[min(100%,52rem)] rounded-2xl border px-4 py-4 transition ${
+                      className={`group max-w-[min(100%,52rem)] rounded-2xl px-4 py-4 shadow-sm transition ${
                           message.role === 'user'
-                            ? 'border-slate-900 bg-slate-900 text-white'
-                            : 'border-slate-200 bg-slate-50 text-slate-900'
+                            ? 'bg-indigo-600 text-white'
+                            : 'border border-gray-200 bg-white text-gray-900'
                         }`}
                       >
                         {message.role === 'assistant' && (
-                          <div className="mb-3 flex items-center justify-between gap-3 border-b border-slate-200 pb-3">
+                          <div className="mb-3 flex items-center justify-between gap-3 border-b border-gray-100 pb-3">
                             <div className="flex items-center gap-2">
-                              <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-white text-slate-600">
+                              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-indigo-50 text-indigo-600">
                                 <Sparkles className="h-3.5 w-3.5" />
                               </span>
                               <div>
-                                <p className="text-sm font-medium text-slate-900">Loli</p>
-                                <p className="text-xs text-slate-500">Assistant</p>
+                                <p className="text-sm font-medium text-gray-900">Loli</p>
+                                <p className="text-xs text-gray-500">Assistant</p>
                               </div>
                             </div>
                           </div>
@@ -5215,7 +5218,7 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                         )}
 
                         <div className={`mt-4 flex items-center gap-2 border-t pt-3 ${
-                          message.role === 'user' ? 'border-white/10' : 'border-slate-200'
+                          message.role === 'user' ? 'border-white/10' : 'border-gray-100'
                         }`}>
                           <span className={`text-xs ${
                             message.role === 'user' ? 'text-slate-300' : 'text-slate-500'
@@ -5263,7 +5266,7 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                       </div>
 
                       {message.role === 'user' && (
-                        <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-slate-900 text-white">
+                        <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-indigo-600 text-white">
                           <User className="h-4 w-4" />
                         </div>
                       )}
@@ -5272,10 +5275,10 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
 
                   {isLoading && (
                     <div className="flex justify-start gap-3 animate-fade-in-up">
-                      <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                      <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-white text-indigo-600 shadow-sm">
                         <Bot className="h-4 w-4" />
                       </div>
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                      <div className="rounded-2xl border border-gray-200 bg-white px-4 py-4 shadow-sm">
                         <div className="flex items-center gap-2 text-sm font-medium text-slate-600">
                           <Loader2 className="h-4 w-4 animate-spin text-indigo-600" />
                           Thinking through your request...
@@ -5291,9 +5294,9 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
           </div>
 
           {/* Input Area */}
-          <div className="border-t border-slate-200 bg-white px-4 py-4 lg:px-6">
+          <div className="border-t border-gray-200 bg-white px-4 py-4 lg:px-6">
             <div className="w-full">
-              <div className="rounded-2xl border border-slate-200 bg-white p-3">
+              <div className="rounded-xl border border-gray-200 bg-white p-3">
                 <div className="flex flex-col gap-3 md:flex-row">
                   <textarea
                     ref={inputRef}
@@ -5301,7 +5304,7 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                     onChange={(e) => setInputMessage(e.target.value)}
                     onKeyDown={handleKeyPress}
                     placeholder={inputPlaceholder}
-                    className="min-h-[96px] flex-1 resize-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:bg-white focus:ring-2 focus:ring-slate-200"
+                    className="min-h-[96px] flex-1 resize-none rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700 outline-none transition placeholder:text-gray-400 focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-100"
                     rows={3}
                     disabled={isLoading || isListening}
                   />
@@ -5350,7 +5353,7 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                             ? 'bg-amber-500 text-white focus:ring-amber-300'
                             : isListening
                               ? 'bg-rose-600 text-white focus:ring-rose-300'
-                              : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 focus:ring-slate-300'
+                              : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 focus:ring-indigo-100'
                         }`}
                         title={isProcessing ? "Processing speech..." : isListening ? "Stop listening" : "Start voice input"}
                         disabled={isLoading}
@@ -5368,7 +5371,7 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                     <button
                       onClick={() => handleSendMessage()}
                       disabled={!inputMessage.trim() || isLoading}
-                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:cursor-not-allowed disabled:bg-slate-300"
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-300 disabled:cursor-not-allowed disabled:bg-gray-300"
                       title="Send message"
                     >
                       {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
@@ -5377,7 +5380,7 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                   </div>
                 </div>
 
-                <div className="mt-3 flex flex-col gap-2 border-t border-slate-100 pt-3 md:flex-row md:items-center md:justify-between">
+                <div className="mt-3 flex flex-col gap-2 border-t border-gray-100 pt-3 md:flex-row md:items-center md:justify-between">
                   <div className="flex flex-wrap items-center gap-2">
                     {isProcessing && (
                       <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
@@ -5392,7 +5395,7 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-slate-500">AI guidance supports decisions, but final clinical judgment stays with your team.</p>
+                  <p className="text-xs text-gray-500">AI guidance supports decisions, but final clinical judgment stays with your team.</p>
                 </div>
               </div>
             </div>
