@@ -26,6 +26,8 @@ interface SettingsViewProps {
   clinicalFeeAmount: number;
   onSaveClinicalFeeSettings: (enabled: boolean, amount: number) => Promise<void>;
   isAdmin: boolean;
+  appName: string;
+  onSaveAppName: (name: string) => Promise<void>;
 }
 
 interface ManagerContact {
@@ -58,8 +60,12 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   clinicalFeeEnabled,
   clinicalFeeAmount,
   onSaveClinicalFeeSettings,
-  isAdmin 
+  isAdmin,
+  appName,
+  onSaveAppName
 }) => {
+  const [appNameInput, setAppNameInput] = useState<string>(appName);
+  const [appNameMessage, setAppNameMessage] = useState<string | null>(null);
   const MANAGER_EMAILS_KEY = 'loli_manager_emails';
 
   const normalizeEmail = (email: string) => email.trim().toLowerCase();
@@ -1092,13 +1098,61 @@ const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         )}
 
+        {/* App Branding Section */}
+        <div className="border border-gray-200 rounded-xl p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            <h3 className="text-lg font-semibold text-gray-800">App Branding</h3>
+          </div>
+          
+          <p className="text-sm text-gray-600 mb-4">
+            Customize the application name displayed in the header, sidebar, and receipts.
+          </p>
+          
+          <div className="flex flex-col md:flex-row gap-3 items-start md:items-end">
+            <div className="flex-1 w-full">
+              <Input
+                label="Application Name"
+                value={appNameInput}
+                onChange={(e: any) => {
+                  setAppNameInput(e.target.value);
+                  setAppNameMessage(null);
+                }}
+                placeholder="DentalCloud Pro"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await onSaveAppName(appNameInput);
+                  setAppNameMessage('App name saved successfully!');
+                } catch (err: any) {
+                  setAppNameMessage('Failed to save app name: ' + (err?.message || 'Unknown error'));
+                }
+              }}
+              className="w-full md:w-auto rounded-xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-600/20 transition hover:bg-indigo-700"
+            >
+              Save App Name
+            </button>
+          </div>
+          {appNameMessage && (
+            <p className={`mt-2 text-xs ${appNameMessage.toLowerCase().includes('failed') ? 'text-red-600' : 'text-emerald-600'}`}>
+              {appNameMessage}
+            </p>
+          )}
+        </div>
+
         {/* About Us Section */}
         <div className="border border-gray-200 rounded-xl p-6">
           <div className="flex items-center gap-3 mb-4">
             <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
             </svg>
-            <h3 className="text-lg font-semibold text-gray-800">About DentalCloud Pro</h3>
+            <h3 className="text-lg font-semibold text-gray-800">About {appName}</h3>
           </div>
           
           <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">

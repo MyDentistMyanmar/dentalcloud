@@ -1905,6 +1905,46 @@ export const api = {
       if (error) {
         throw new Error(error.message);
       }
+    },
+
+    getAppName: async (): Promise<string> => {
+      try {
+        const { data, error } = await supabase
+          .from('app_settings')
+          .select('app_name')
+          .eq('id', APP_SETTINGS_SINGLETON_ID)
+          .maybeSingle();
+
+        if (error || !data?.app_name) {
+          return 'DentalCloud Pro';
+        }
+
+        return data.app_name;
+      } catch (error: any) {
+        console.warn('Failed to load app name:', error?.message || error);
+        return 'DentalCloud Pro';
+      }
+    },
+
+    saveAppName: async (name: string): Promise<void> => {
+      const trimmed = name.trim();
+      if (!trimmed) {
+        throw new Error('App name cannot be empty.');
+      }
+
+      const payload = {
+        id: APP_SETTINGS_SINGLETON_ID,
+        app_name: trimmed,
+        updated_at: new Date().toISOString()
+      };
+
+      const { error } = await supabase
+        .from('app_settings')
+        .upsert(payload);
+
+      if (error) {
+        throw new Error(error.message);
+      }
     }
   },
 

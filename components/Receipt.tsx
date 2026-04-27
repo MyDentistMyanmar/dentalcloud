@@ -10,10 +10,11 @@ interface ReceiptProps {
   medicines?: MedicineSale[];
   paymentAmount?: number;
   currency: Currency;
+  appName?: string;
   onClose: () => void;
 }
 
-const Receipt: React.FC<ReceiptProps> = ({ patient, treatments, medicines = [], paymentAmount, currency, onClose }) => {
+const Receipt: React.FC<ReceiptProps> = ({ patient, treatments, medicines = [], paymentAmount, currency, appName = 'DentalCloud Pro', onClose }) => {
   const receiptNumber = `REC-${Date.now().toString().slice(-8)}`;
   const today = new Date().toLocaleDateString('en-US', { 
     year: 'numeric', 
@@ -160,7 +161,7 @@ const Receipt: React.FC<ReceiptProps> = ({ patient, treatments, medicines = [], 
         }}>
           {/* Clinic Header */}
           <div className="text-center mb-8 border-b-2 border-gray-800 pb-6">
-            <h1 className="text-4xl font-black text-gray-900 mb-2">DentalCloud<span className="text-indigo-600">Pro</span></h1>
+            <h1 className="text-4xl font-black text-gray-900 mb-2">{appName}</h1>
             <p className="text-sm text-gray-600">Professional Dental Care Services</p>
             <p className="text-xs text-gray-500 mt-2">Email: info@dentflowpro.com | Phone: (555) 123-4567</p>
           </div>
@@ -244,7 +245,7 @@ const Receipt: React.FC<ReceiptProps> = ({ patient, treatments, medicines = [], 
           {/* Footer */}
           <div className="mt-12 pt-6 border-t-2 border-gray-800 text-center">
             <p className="text-xs text-gray-600 mb-2">
-              Thank you for choosing DentalCloud Pro for your dental care needs.
+              Thank you for choosing {appName} for your dental care needs.
             </p>
             <p className="text-xs text-gray-500">
               This is a computer-generated receipt. No signature required.
@@ -270,7 +271,7 @@ const Receipt: React.FC<ReceiptProps> = ({ patient, treatments, medicines = [], 
         }}>
           {/* Clinic Header */}
           <div className="text-center mb-8 border-b-2 border-gray-800 pb-6">
-            <h1 className="text-4xl font-black text-gray-900 mb-2">DentalCloud<span className="text-indigo-600">Pro</span></h1>
+            <h1 className="text-4xl font-black text-gray-900 mb-2">{appName}</h1>
             <p className="text-sm text-gray-600">Professional Dental Care Services</p>
             <p className="text-xs text-gray-500 mt-2">Email: info@dentflowpro.com | Phone: (555) 123-4567</p>
           </div>
@@ -354,7 +355,7 @@ const Receipt: React.FC<ReceiptProps> = ({ patient, treatments, medicines = [], 
           {/* Footer */}
           <div className="mt-12 pt-6 border-t-2 border-gray-800 text-center" style={{ marginTop: '48px', paddingTop: '24px', borderTop: '2px solid #1f2937' }}>
             <p className="text-xs text-gray-600 mb-2">
-              Thank you for choosing DentalCloud Pro for your dental care needs.
+              Thank you for choosing {appName} for your dental care needs.
             </p>
             <p className="text-xs text-gray-500">
               This is a computer-generated receipt. No signature required.

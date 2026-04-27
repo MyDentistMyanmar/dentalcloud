@@ -260,6 +260,7 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('messaging_enabled');
     return saved === null ? true : saved === 'true';
   });
+  const [appName, setAppName] = useState<string>('DentalCloud Pro');
   
   const handleCurrencyChange = (newCurrency: 'USD' | 'MMK') => {
     setCurrency(newCurrency);
@@ -286,6 +287,11 @@ const App: React.FC = () => {
     setClinicalFeeEnabled(enabled);
     setClinicalFeeAmount(normalizedAmount);
     setApplyClinicalFeeOnRegistration(enabled);
+  };
+
+  const handleSaveAppName = async (name: string) => {
+    await api.appSettings.saveAppName(name);
+    setAppName(name);
   };
   
   const handleRemoveAllMessages = async () => {
@@ -567,6 +573,15 @@ const App: React.FC = () => {
       })
       .catch((err) => {
         console.warn('Failed to load clinical fee settings:', err);
+      });
+
+    api.appSettings.getAppName()
+      .then((name) => {
+        if (!mounted) return;
+        setAppName(name);
+      })
+      .catch((err) => {
+        console.warn('Failed to load app name:', err);
       });
 
     return () => {
@@ -1557,7 +1572,7 @@ const App: React.FC = () => {
           
           <div style="background: #f3f4f6; padding: 20px; text-align: center; border-top: 1px solid #e5e7eb;">
             <p style="color: #6b7280; font-size: 13px; margin: 0;">
-              This is an automated recall notification from DentalCloud Clinic Management System.
+              This is an automated recall notification from ${appName} Clinic Management System.
             </p>
           </div>
         </div>
@@ -2009,7 +2024,7 @@ const App: React.FC = () => {
           <Loader2 className="animate-spin text-indigo-600 w-10 h-10" />
         </div>
       }>
-        <LoginView onLoginSuccess={handleLoginSuccess} />
+        <LoginView onLoginSuccess={handleLoginSuccess} appName={appName} />
       </Suspense>
     );
   }
@@ -2057,7 +2072,7 @@ const App: React.FC = () => {
           <Loader2 className="animate-spin text-indigo-600 w-10 h-10" />
         </div>
       }>
-        <LoginView onLoginSuccess={handleLoginSuccess} />
+        <LoginView onLoginSuccess={handleLoginSuccess} appName={appName} />
       </Suspense>
     );
   }
@@ -2153,7 +2168,7 @@ const App: React.FC = () => {
       {/* Mobile Header */}
       {!isDoctor && (
       <header className="md:hidden bg-gray-900 text-white p-4 flex items-center justify-between sticky top-0 z-50">
-        <span className="text-lg font-black tracking-tight">DentalCloud<span className="text-indigo-400">Pro</span></span>
+        <span className="text-lg font-black tracking-tight">{appName}</span>
         <button 
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
           className="p-2 hover:bg-gray-800 rounded-lg transition-colors"
@@ -2178,7 +2193,7 @@ const App: React.FC = () => {
         className={`bg-gray-900 fixed md:sticky top-0 h-screen z-50 md:z-40 border-r border-gray-800 flex flex-col overflow-hidden transition-transform duration-300 md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
         <div className="p-8 flex items-center justify-center flex-shrink-0">
-          <span className="text-xl font-black text-white tracking-tight text-center">DentalCloud<span className="text-indigo-400">Pro</span></span>
+          <span className="text-xl font-black text-white tracking-tight text-center">{appName}</span>
         </div>
         
         <nav className="sidebar-scrollbar mt-2 px-6 space-y-2 flex-1 min-h-0 overflow-y-auto overscroll-contain pb-4">
@@ -2381,16 +2396,16 @@ const App: React.FC = () => {
                   onSave={handleUpdateDoctorProfile}
                 />
               ) : (
-                <SettingsView 
-                    currency={currency} 
-                    onCurrencyChange={handleCurrencyChange} 
-                    locations={locations} 
+                <SettingsView
+                    currency={currency}
+                    onCurrencyChange={handleCurrencyChange}
+                    locations={locations}
                     currentLocationId={currentLocationId}
                     onLocationChange={handleLocationChange}
-                    onAddLocation={handleCreateLocation} 
-                    loyaltyRules={loyaltyRules} 
-                    onUpdateLoyaltyRule={handleUpdateLoyaltyRule} 
-                    onCreateLoyaltyRule={handleCreateLoyaltyRule} 
+                    onAddLocation={handleCreateLocation}
+                    loyaltyRules={loyaltyRules}
+                    onUpdateLoyaltyRule={handleUpdateLoyaltyRule}
+                    onCreateLoyaltyRule={handleCreateLoyaltyRule}
                     onDeleteLoyaltyRule={handleDeleteLoyaltyRule}
                     onResetAllLoyaltyPoints={handleResetAllLoyaltyPoints}
                     loyaltyEnabled={loyaltyEnabled}
@@ -2401,7 +2416,9 @@ const App: React.FC = () => {
                     clinicalFeeEnabled={clinicalFeeEnabled}
                     clinicalFeeAmount={clinicalFeeAmount}
                     onSaveClinicalFeeSettings={handleSaveClinicalFeeSettings}
-                    isAdmin={isAdmin} 
+                    isAdmin={isAdmin}
+                    appName={appName}
+                    onSaveAppName={handleSaveAppName}
                 />
               )
             )}
@@ -3245,6 +3262,7 @@ const App: React.FC = () => {
             medicines={selectedMedicineSalesForReceipt}
             paymentAmount={lastPaymentAmount}
             currency={currency}
+            appName={appName}
             onClose={() => {
               setShowReceipt(false);
               setSelectedTreatmentsForReceipt([]);

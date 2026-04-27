@@ -68,6 +68,9 @@ CREATE TABLE app_settings (
   clinical_fee_enabled BOOLEAN DEFAULT FALSE,
   clinical_fee_amount DECIMAL(12,2) DEFAULT 0 CHECK (clinical_fee_amount >= 0),
   
+  -- Custom app name (defaults to "DentalCloud Pro")
+  app_name VARCHAR(255) DEFAULT 'DentalCloud Pro',
+  
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
