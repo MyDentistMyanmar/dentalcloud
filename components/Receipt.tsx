@@ -161,7 +161,7 @@ const Receipt: React.FC<ReceiptProps> = ({ patient, treatments, medicines = [], 
         }}>
           {/* Clinic Header */}
           <div className="text-center mb-8 border-b-2 border-gray-800 pb-6">
-            <h1 className="text-4xl font-black text-gray-900 mb-2">{appName}</h1>
+            <h1 className="text-2xl font-black text-gray-900 mb-2">{appName}</h1>
             <p className="text-sm text-gray-600">Professional Dental Care Services</p>
             <p className="text-xs text-gray-500 mt-2">Email: info@dentflowpro.com | Phone: (555) 123-4567</p>
           </div>
@@ -271,7 +271,7 @@ const Receipt: React.FC<ReceiptProps> = ({ patient, treatments, medicines = [], 
         }}>
           {/* Clinic Header */}
           <div className="text-center mb-8 border-b-2 border-gray-800 pb-6">
-            <h1 className="text-4xl font-black text-gray-900 mb-2">{appName}</h1>
+            <h1 className="text-2xl font-black text-gray-900 mb-2">{appName}</h1>
             <p className="text-sm text-gray-600">Professional Dental Care Services</p>
             <p className="text-xs text-gray-500 mt-2">Email: info@dentflowpro.com | Phone: (555) 123-4567</p>
           </div>

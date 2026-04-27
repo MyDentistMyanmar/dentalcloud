@@ -261,6 +261,11 @@ const App: React.FC = () => {
     return saved === null ? true : saved === 'true';
   });
   const [appName, setAppName] = useState<string>('DentalCloud Pro');
+
+  // Sync browser tab title with app name in real-time
+  useEffect(() => {
+    document.title = appName;
+  }, [appName]);
   
   const handleCurrencyChange = (newCurrency: 'USD' | 'MMK') => {
     setCurrency(newCurrency);
@@ -1090,11 +1095,12 @@ const App: React.FC = () => {
     try {
       console.log('Creating patient with location_id:', currentLocationId);
       const registrationFee = applyClinicalFeeOnRegistration ? Math.max(0, Number(clinicalFeeAmount || 0)) : 0;
-      await api.patients.create({
+      const patientInput = {
         ...newPatientData,
         location_id: currentLocationId,
-        balance: registrationFee
-      });
+        balance: registrationFee,
+      } as Parameters<typeof api.patients.create>[0];
+      await api.patients.create(patientInput);
       setShowPatientModal(false);
       fetchInitialData(); 
       setNewPatientData({ 
@@ -2168,7 +2174,7 @@ const App: React.FC = () => {
       {/* Mobile Header */}
       {!isDoctor && (
       <header className="md:hidden bg-gray-900 text-white p-4 flex items-center justify-between sticky top-0 z-50">
-        <span className="text-lg font-black tracking-tight">{appName}</span>
+        <span className="text-lg font-black tracking-tight bg-gradient-to-r from-indigo-300 via-purple-300 to-pink-300 bg-clip-text text-transparent">{appName}</span>
         <button 
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
           className="p-2 hover:bg-gray-800 rounded-lg transition-colors"
@@ -2193,7 +2199,7 @@ const App: React.FC = () => {
         className={`bg-gray-900 fixed md:sticky top-0 h-screen z-50 md:z-40 border-r border-gray-800 flex flex-col overflow-hidden transition-transform duration-300 md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
         <div className="p-8 flex items-center justify-center flex-shrink-0">
-          <span className="text-xl font-black text-white tracking-tight text-center">{appName}</span>
+          <span className="text-xl font-black tracking-tight text-center bg-gradient-to-r from-indigo-300 via-purple-300 to-pink-300 bg-clip-text text-transparent">{appName}</span>
         </div>
         
         <nav className="sidebar-scrollbar mt-2 px-6 space-y-2 flex-1 min-h-0 overflow-y-auto overscroll-contain pb-4">

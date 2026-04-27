@@ -316,7 +316,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, appName = 'Dental
             <div className="w-14 h-14 bg-white overflow-hidden rounded-xl flex items-center justify-center border border-white/20 shadow-inner">
               <img src="/assets/WinterArcLogo.png" alt="WinterArc Logo" className="w-full h-full object-cover" />
             </div>
-            <h1 className="text-xl font-black text-white tracking-tight">{appName}</h1>
+            <h1 className="text-xl font-black tracking-tight bg-gradient-to-r from-indigo-300 via-purple-300 to-pink-300 bg-clip-text text-transparent">{appName}</h1>
           </div>
           
           <div className="max-w-xs">
