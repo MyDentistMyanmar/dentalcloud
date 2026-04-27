@@ -947,6 +947,7 @@ How can I assist you today?`,
   const [helpContent, setHelpContent] = useState<string>('');
   const [assistantMemory, setAssistantMemory] = useState<AssistantMemoryProfile>(() => loadAssistantMemory());
   const [showMemoryPanel, setShowMemoryPanel] = useState<boolean>(false);
+  const [showChatSidebar, setShowChatSidebar] = useState<boolean>(false);
   const [memoryMarkdown, setMemoryMarkdown] = useState<string>(() => buildMemoryMarkdown(loadAssistantMemory()));
   const [memoryLoaded, setMemoryLoaded] = useState<boolean>(false);
   const latestMemoryRef = useRef<AssistantMemoryProfile>(assistantMemory);
@@ -4949,12 +4950,12 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                 Memory
               </button>
               <button
-                onClick={createNewSession}
+                onClick={() => setShowChatSidebar(true)}
                 className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-indigo-700"
-                title="Start new conversation"
+                title="Open chat history"
               >
-                <Plus className="h-4 w-4" />
-                New Chat
+                <MessageCircle className="h-4 w-4" />
+                Chats
               </button>
             </div>
           </div>
@@ -5016,66 +5017,7 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
         </div>
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[360px_minmax(0,1fr)]">
-        <aside className="hidden min-h-0 flex-col border-r border-gray-200 bg-white lg:flex">
-          <div className="space-y-3 border-b border-gray-200 px-4 py-4">
-            <button
-              onClick={createNewSession}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-3 py-2.5 text-sm font-medium text-white transition hover:bg-indigo-700"
-            >
-              <Plus className="h-4 w-4" />
-              New chat
-            </button>
-            <div className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">
-              {chatSessions.length} saved chat{chatSessions.length === 1 ? '' : 's'}
-            </div>
-          </div>
-
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {chatSessions.length === 0 ? (
-              <div className="px-6 py-10 text-center">
-                <MessageCircle className="mx-auto h-10 w-10 text-gray-300" />
-                <p className="mt-3 text-sm font-medium text-gray-700">No conversations yet</p>
-                <p className="mt-1 text-xs text-gray-500">Start a new AI chat to begin.</p>
-              </div>
-            ) : (
-              chatSessions.map(session => (
-                  <button
-                    key={session.id}
-                    type="button"
-                    onClick={() => switchSession(session.id)}
-                    className={`group flex w-full gap-3 border-b border-gray-100 px-4 py-3 text-left transition-colors ${
-                      currentSessionId === session.id
-                        ? 'bg-indigo-50'
-                        : 'hover:bg-gray-50'
-                    }`}
-                  >
-                    <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full ${
-                      currentSessionId === session.id ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600'
-                    }`}>
-                      <Bot className="h-4 w-4" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-semibold text-gray-900">{session.title}</div>
-                      <div className="mt-0.5 text-xs text-gray-500">{session.messages.length} messages</div>
-                    </div>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          deleteSession(session.id);
-                        }}
-                        className="shrink-0 rounded-lg p-2 text-gray-400 opacity-0 transition hover:bg-red-50 hover:text-red-600 group-hover:opacity-100 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-300"
-                        title="Delete conversation"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                  </button>
-              ))
-            )}
-          </div>
-        </aside>
-
+      <div className="grid min-h-0 flex-1 grid-cols-1">
         <div className="flex min-h-0 flex-col bg-slate-50">
           <div className="border-b border-gray-200 bg-white px-4 py-3 lg:px-6">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -5103,17 +5045,6 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
           <div className="flex-1 overflow-hidden">
             <div className="h-full overflow-y-auto px-4 py-5 lg:px-6">
               <div className="w-full space-y-4">
-                <div className="flex items-center justify-between lg:hidden">
-                  <p className="text-sm text-slate-500">{chatSessions.length} saved chat{chatSessions.length === 1 ? '' : 's'}</p>
-                  <button
-                    onClick={createNewSession}
-                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700"
-                  >
-                    <Plus className="h-4 w-4" />
-                    New chat
-                  </button>
-                </div>
-
                 {apiStatus === 'mock' && (
                   <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
                     <div className="flex items-start gap-3">
@@ -5154,7 +5085,7 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                       )}
                       
                       <div
-                      className={`group max-w-[min(100%,52rem)] rounded-2xl px-4 py-4 shadow-sm transition ${
+                      className={`group max-w-[min(100%,76rem)] rounded-2xl px-5 py-4 shadow-sm transition ${
                           message.role === 'user'
                             ? 'bg-indigo-600 text-white'
                             : 'border border-gray-200 bg-white text-gray-900'
@@ -5304,8 +5235,8 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                     onChange={(e) => setInputMessage(e.target.value)}
                     onKeyDown={handleKeyPress}
                     placeholder={inputPlaceholder}
-                    className="min-h-[96px] flex-1 resize-none rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700 outline-none transition placeholder:text-gray-400 focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-100"
-                    rows={3}
+                    className="min-h-[72px] flex-1 resize-none rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700 outline-none transition placeholder:text-gray-400 focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-100"
+                    rows={2}
                     disabled={isLoading || isListening}
                   />
 
@@ -5402,6 +5333,92 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
           </div>
         </div>
       </div>
+
+      {showChatSidebar && (
+        <div className="fixed inset-0 z-50 flex">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setShowChatSidebar(false)}
+            aria-label="Close chat history"
+          />
+          <aside className="relative z-10 flex h-full w-full max-w-sm flex-col bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-200 px-4 py-4">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900">AI Chats</h3>
+                <p className="mt-0.5 text-xs text-gray-500">{chatSessions.length} saved chat{chatSessions.length === 1 ? '' : 's'}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowChatSidebar(false)}
+                className="rounded-lg p-2 text-gray-500 transition hover:bg-gray-100"
+                aria-label="Close chat history"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="border-b border-gray-200 px-4 py-4">
+              <button
+                type="button"
+                onClick={() => {
+                  createNewSession();
+                  setShowChatSidebar(false);
+                }}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-3 py-2.5 text-sm font-medium text-white transition hover:bg-indigo-700"
+              >
+                <Plus className="h-4 w-4" />
+                New chat
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {chatSessions.length === 0 ? (
+                <div className="px-6 py-10 text-center">
+                  <MessageCircle className="mx-auto h-10 w-10 text-gray-300" />
+                  <p className="mt-3 text-sm font-medium text-gray-700">No conversations yet</p>
+                  <p className="mt-1 text-xs text-gray-500">Start a new AI chat to begin.</p>
+                </div>
+              ) : (
+                chatSessions.map(session => (
+                  <button
+                    key={session.id}
+                    type="button"
+                    onClick={() => {
+                      switchSession(session.id);
+                      setShowChatSidebar(false);
+                    }}
+                    className={`group flex w-full gap-3 border-b border-gray-100 px-4 py-3 text-left transition-colors ${
+                      currentSessionId === session.id ? 'bg-indigo-50' : 'hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full ${
+                      currentSessionId === session.id ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      <Bot className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold text-gray-900">{session.title}</div>
+                      <div className="mt-0.5 text-xs text-gray-500">{session.messages.length} messages</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        deleteSession(session.id);
+                      }}
+                      className="shrink-0 rounded-lg p-2 text-gray-400 transition hover:bg-red-50 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-300"
+                      title="Delete conversation"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </button>
+                ))
+              )}
+            </div>
+          </aside>
+        </div>
+      )}
 
       {/* Help Modal */}
       {showHelpModal && (
