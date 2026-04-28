@@ -1945,6 +1945,45 @@ export const api = {
       if (error) {
         throw new Error(error.message);
       }
+    },
+
+    getReceiptInfo: async (): Promise<{ email: string; phone: string }> => {
+      try {
+        const { data, error } = await supabase
+          .from('app_settings')
+          .select('receipt_email, receipt_phone')
+          .eq('id', APP_SETTINGS_SINGLETON_ID)
+          .maybeSingle();
+
+        if (error || !data) {
+          return { email: 'info@dentflowpro.com', phone: '(555) 123-4567' };
+        }
+
+        return {
+          email: data.receipt_email || 'info@dentflowpro.com',
+          phone: data.receipt_phone || '(555) 123-4567'
+        };
+      } catch (error: any) {
+        console.warn('Failed to load receipt info:', error?.message || error);
+        return { email: 'info@dentflowpro.com', phone: '(555) 123-4567' };
+      }
+    },
+
+    saveReceiptInfo: async (info: { email: string; phone: string }): Promise<void> => {
+      const payload = {
+        id: APP_SETTINGS_SINGLETON_ID,
+        receipt_email: info.email?.trim() || null,
+        receipt_phone: info.phone?.trim() || null,
+        updated_at: new Date().toISOString()
+      };
+
+      const { error } = await supabase
+        .from('app_settings')
+        .upsert(payload);
+
+      if (error) {
+        throw new Error(error.message);
+      }
     }
   },
 

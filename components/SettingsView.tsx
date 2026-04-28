@@ -28,6 +28,8 @@ interface SettingsViewProps {
   isAdmin: boolean;
   appName: string;
   onSaveAppName: (name: string) => Promise<void>;
+  receiptInfo: { email: string; phone: string };
+  onSaveReceiptInfo: (info: { email: string; phone: string }) => Promise<void>;
 }
 
 interface ManagerContact {
@@ -62,10 +64,15 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   onSaveClinicalFeeSettings,
   isAdmin,
   appName,
-  onSaveAppName
+  onSaveAppName,
+  receiptInfo,
+  onSaveReceiptInfo
 }) => {
   const [appNameInput, setAppNameInput] = useState<string>(appName);
   const [appNameMessage, setAppNameMessage] = useState<string | null>(null);
+  const [receiptEmailInput, setReceiptEmailInput] = useState<string>(receiptInfo.email);
+  const [receiptPhoneInput, setReceiptPhoneInput] = useState<string>(receiptInfo.phone);
+  const [receiptInfoMessage, setReceiptInfoMessage] = useState<string | null>(null);
   const MANAGER_EMAILS_KEY = 'loli_manager_emails';
 
   const normalizeEmail = (email: string) => email.trim().toLowerCase();
@@ -1144,6 +1151,73 @@ const SettingsView: React.FC<SettingsViewProps> = ({
               {appNameMessage}
             </p>
           )}
+        </div>
+
+        {/* Receipt Info Section */}
+        <div className="border border-gray-200 rounded-xl p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <h3 className="text-lg font-semibold text-gray-800">Receipt Contact Info</h3>
+          </div>
+          
+          <p className="text-sm text-gray-600 mb-4">
+            Customize the contact information displayed on printed receipts and invoices.
+          </p>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="Receipt Email"
+              type="email"
+              value={receiptEmailInput}
+              onChange={(e: any) => {
+                setReceiptEmailInput(e.target.value);
+                setReceiptInfoMessage(null);
+              }}
+              placeholder="info@dentflowpro.com"
+            />
+            <Input
+              label="Receipt Phone"
+              value={receiptPhoneInput}
+              onChange={(e: any) => {
+                setReceiptPhoneInput(e.target.value);
+                setReceiptInfoMessage(null);
+              }}
+              placeholder="(555) 123-4567"
+            />
+          </div>
+
+          <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await onSaveReceiptInfo({
+                    email: receiptEmailInput,
+                    phone: receiptPhoneInput
+                  });
+                  setReceiptInfoMessage('Receipt contact info saved successfully!');
+                } catch (err: any) {
+                  setReceiptInfoMessage('Failed to save receipt info: ' + (err?.message || 'Unknown error'));
+                }
+              }}
+              className="w-full md:w-auto rounded-xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-600/20 transition hover:bg-indigo-700"
+            >
+              Save Receipt Info
+            </button>
+            {receiptInfoMessage && (
+              <p className={`text-xs ${receiptInfoMessage.toLowerCase().includes('failed') ? 'text-red-600' : 'text-emerald-600'}`}>
+                {receiptInfoMessage}
+              </p>
+            )}
+          </div>
+
+          <div className="mt-4 p-3 bg-indigo-50 rounded-lg border border-indigo-100">
+            <p className="text-xs text-indigo-700">
+              <strong>Note:</strong> Changes will be applied to all new receipts and invoices generated after saving.
+            </p>
+          </div>
         </div>
 
         {/* About Us Section */}

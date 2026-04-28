@@ -261,6 +261,10 @@ const App: React.FC = () => {
     return saved === null ? true : saved === 'true';
   });
   const [appName, setAppName] = useState<string>('DentalCloud Pro');
+  const [receiptInfo, setReceiptInfo] = useState<{ email: string; phone: string }>({
+    email: 'info@dentflowpro.com',
+    phone: '(555) 123-4567'
+  });
 
   // Sync browser tab title with app name in real-time
   useEffect(() => {
@@ -297,6 +301,11 @@ const App: React.FC = () => {
   const handleSaveAppName = async (name: string) => {
     await api.appSettings.saveAppName(name);
     setAppName(name);
+  };
+
+  const handleSaveReceiptInfo = async (info: { email: string; phone: string }) => {
+    await api.appSettings.saveReceiptInfo(info);
+    setReceiptInfo(info);
   };
   
   const handleRemoveAllMessages = async () => {
@@ -587,6 +596,15 @@ const App: React.FC = () => {
       })
       .catch((err) => {
         console.warn('Failed to load app name:', err);
+      });
+
+    api.appSettings.getReceiptInfo()
+      .then((info) => {
+        if (!mounted) return;
+        setReceiptInfo(info);
+      })
+      .catch((err) => {
+        console.warn('Failed to load receipt info:', err);
       });
 
     return () => {
@@ -2425,6 +2443,8 @@ const App: React.FC = () => {
                     isAdmin={isAdmin}
                     appName={appName}
                     onSaveAppName={handleSaveAppName}
+                    receiptInfo={receiptInfo}
+                    onSaveReceiptInfo={handleSaveReceiptInfo}
                 />
               )
             )}
@@ -3269,6 +3289,7 @@ const App: React.FC = () => {
             paymentAmount={lastPaymentAmount}
             currency={currency}
             appName={appName}
+            receiptInfo={receiptInfo}
             onClose={() => {
               setShowReceipt(false);
               setSelectedTreatmentsForReceipt([]);

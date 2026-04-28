@@ -11,10 +11,13 @@ interface ReceiptProps {
   paymentAmount?: number;
   currency: Currency;
   appName?: string;
+  receiptInfo?: { email: string; phone: string };
   onClose: () => void;
 }
 
-const Receipt: React.FC<ReceiptProps> = ({ patient, treatments, medicines = [], paymentAmount, currency, appName = 'DentalCloud Pro', onClose }) => {
+const Receipt: React.FC<ReceiptProps> = ({ patient, treatments, medicines = [], paymentAmount, currency, appName = 'DentalCloud Pro', receiptInfo, onClose }) => {
+  const receiptEmail = receiptInfo?.email || 'info@dentflowpro.com';
+  const receiptPhone = receiptInfo?.phone || '(555) 123-4567';
   const receiptNumber = `REC-${Date.now().toString().slice(-8)}`;
   const today = new Date().toLocaleDateString('en-US', { 
     year: 'numeric', 
@@ -163,7 +166,7 @@ const Receipt: React.FC<ReceiptProps> = ({ patient, treatments, medicines = [], 
           <div className="text-center mb-8 border-b-2 border-gray-800 pb-6">
             <h1 className="text-2xl font-black text-gray-900 mb-2">{appName}</h1>
             <p className="text-sm text-gray-600">Professional Dental Care Services</p>
-            <p className="text-xs text-gray-500 mt-2">Email: info@dentflowpro.com | Phone: (555) 123-4567</p>
+            <p className="text-xs text-gray-500 mt-2">Email: {receiptEmail} | Phone: {receiptPhone}</p>
           </div>
 
           {/* Receipt Info */}
@@ -273,7 +276,7 @@ const Receipt: React.FC<ReceiptProps> = ({ patient, treatments, medicines = [], 
           <div className="text-center mb-8 border-b-2 border-gray-800 pb-6">
             <h1 className="text-2xl font-black text-gray-900 mb-2">{appName}</h1>
             <p className="text-sm text-gray-600">Professional Dental Care Services</p>
-            <p className="text-xs text-gray-500 mt-2">Email: info@dentflowpro.com | Phone: (555) 123-4567</p>
+            <p className="text-xs text-gray-500 mt-2">Email: {receiptEmail} | Phone: {receiptPhone}</p>
           </div>
 
           {/* Receipt Info */}
