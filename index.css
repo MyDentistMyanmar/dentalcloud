@@ -303,6 +303,91 @@ body {
   color: var(--hover-600) !important;
 }
 
+/* Gradient utility remap so blue/indigo gradients follow selected theme */
+.from-indigo-50,
+.from-blue-50 {
+  --tw-gradient-from: var(--hover-50) var(--tw-gradient-from-position) !important;
+  --tw-gradient-to: color-mix(in srgb, var(--hover-50) 0%, transparent) var(--tw-gradient-to-position) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+
+.from-indigo-100,
+.from-blue-100 {
+  --tw-gradient-from: var(--hover-100) var(--tw-gradient-from-position) !important;
+  --tw-gradient-to: color-mix(in srgb, var(--hover-100) 0%, transparent) var(--tw-gradient-to-position) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+
+.from-indigo-500,
+.from-blue-500 {
+  --tw-gradient-from: var(--hover-600) var(--tw-gradient-from-position) !important;
+  --tw-gradient-to: color-mix(in srgb, var(--hover-600) 0%, transparent) var(--tw-gradient-to-position) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+
+.from-indigo-600,
+.from-blue-600 {
+  --tw-gradient-from: var(--hover-600) var(--tw-gradient-from-position) !important;
+  --tw-gradient-to: color-mix(in srgb, var(--hover-600) 0%, transparent) var(--tw-gradient-to-position) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+
+.from-indigo-700,
+.from-blue-700 {
+  --tw-gradient-from: var(--hover-700) var(--tw-gradient-from-position) !important;
+  --tw-gradient-to: color-mix(in srgb, var(--hover-700) 0%, transparent) var(--tw-gradient-to-position) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+
+.to-indigo-50,
+.to-blue-50 {
+  --tw-gradient-to: var(--hover-50) var(--tw-gradient-to-position) !important;
+}
+
+.to-indigo-100,
+.to-blue-100 {
+  --tw-gradient-to: var(--hover-100) var(--tw-gradient-to-position) !important;
+}
+
+.to-indigo-500,
+.to-blue-500 {
+  --tw-gradient-to: var(--hover-600) var(--tw-gradient-to-position) !important;
+}
+
+.to-indigo-600,
+.to-blue-600 {
+  --tw-gradient-to: var(--hover-600) var(--tw-gradient-to-position) !important;
+}
+
+.to-indigo-700,
+.to-blue-700 {
+  --tw-gradient-to: var(--hover-700) var(--tw-gradient-to-position) !important;
+}
+
+.hover\:from-indigo-600:hover,
+.hover\:from-blue-600:hover {
+  --tw-gradient-from: var(--hover-600) var(--tw-gradient-from-position) !important;
+  --tw-gradient-to: color-mix(in srgb, var(--hover-600) 0%, transparent) var(--tw-gradient-to-position) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+
+.hover\:from-indigo-700:hover,
+.hover\:from-blue-700:hover {
+  --tw-gradient-from: var(--hover-700) var(--tw-gradient-from-position) !important;
+  --tw-gradient-to: color-mix(in srgb, var(--hover-700) 0%, transparent) var(--tw-gradient-to-position) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+
+.hover\:to-indigo-700:hover,
+.hover\:to-blue-700:hover {
+  --tw-gradient-to: var(--hover-700) var(--tw-gradient-to-position) !important;
+}
+
+.hover\:to-indigo-800:hover,
+.hover\:to-blue-800:hover {
+  --tw-gradient-to: color-mix(in srgb, var(--hover-700) 85%, black) var(--tw-gradient-to-position) !important;
+}
+
 .theme-select option {
   color: #111827;
   background-color: #ffffff;

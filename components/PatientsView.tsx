@@ -346,23 +346,17 @@ const PatientsView: React.FC<PatientsViewProps> = ({
 
           <div className="overflow-hidden rounded-2xl border border-indigo-100 bg-white shadow-sm">
             <div className="bg-gradient-to-r from-indigo-600 via-indigo-500 to-sky-500 px-6 py-6 text-white">
-              <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-col gap-5 lg:flex-row lg:items-center">
                 <div className="flex items-center gap-4">
                   <div className="h-16 w-16 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center text-2xl font-bold">
                     {detailPatient.name?.charAt(0) || '?'}
                   </div>
                   <div>
-                    <p className="text-xs uppercase tracking-[0.18em] text-indigo-100 font-semibold">Patient Profile</p>
+                    <p className="text-xs uppercase tracking-[0.18em] text-white/90 font-semibold">Patient Profile</p>
                     <h3 className="text-2xl font-bold leading-tight">{detailPatient.name || 'N/A'}</h3>
-                    <p className="mt-1 text-sm text-indigo-100">
+                    <p className="mt-1 text-sm text-white/90">
                       Created: {formatCreatedDate(detailPatient.created_at)} • Operator: {detailPatient.patient_type || 'N/A'}
                     </p>
-                  </div>
-                </div>
-                <div className="ml-auto grid grid-cols-1 gap-3 min-w-0">
-                  <div className="rounded-xl border border-white/25 bg-white/15 px-4 py-3">
-                    <p className="text-[11px] uppercase tracking-wider text-indigo-100 font-semibold">Portal Access</p>
-                    <p className="mt-1 text-sm font-bold">{detailPatient.has_account ? 'Active' : 'No Access'}</p>
                   </div>
                 </div>
               </div>
@@ -376,8 +370,8 @@ const PatientsView: React.FC<PatientsViewProps> = ({
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="rounded-xl border border-gray-200 bg-white p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Loyalty Point</p>
-                    <p className="mt-2 text-sm font-semibold text-gray-900">{detailPatient.loyalty_points || 0}</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Portal Access</p>
+                    <p className="mt-2 text-sm font-semibold text-gray-900">{detailPatient.has_account ? 'Active' : 'No Access'}</p>
                   </div>
                   <div className="rounded-xl border border-gray-200 bg-white p-4">
                     <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Balance</p>
@@ -410,9 +404,9 @@ const PatientsView: React.FC<PatientsViewProps> = ({
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Address</p>
                   <p className="mt-2 text-sm text-gray-900">{getPatientAddress(detailPatient)}</p>
                 </div>
-                <div className="rounded-xl border border-gray-200 bg-white p-4">
+                <div className="rounded-xl border border-gray-200 bg-white p-4 lg:col-span-1">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Patient Meta</p>
-                  <div className="mt-2 grid grid-cols-2 gap-3 text-sm">
+                  <div className="mt-2 grid grid-cols-3 gap-3 text-sm">
                     <div>
                       <p className="text-gray-500">Age</p>
                       <p className="font-semibold text-gray-900">{detailPatient.age ?? 'N/A'}</p>
@@ -420,6 +414,10 @@ const PatientsView: React.FC<PatientsViewProps> = ({
                     <div>
                       <p className="text-gray-500">Date</p>
                       <p className="font-semibold text-gray-900">{formatCreatedDate(detailPatient.created_at)}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Loyalty Point</p>
+                      <p className="font-semibold text-gray-900">{detailPatient.loyalty_points || 0}</p>
                     </div>
                   </div>
                 </div>

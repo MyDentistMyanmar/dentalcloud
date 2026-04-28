@@ -189,13 +189,10 @@ const ExpensesView: React.FC<ExpensesViewProps> = ({
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200/60 p-6">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
-              <div className="p-2 bg-gradient-to-br from-red-500 to-orange-500 rounded-xl">
-                <TrendingDown className="w-6 h-6 text-white" />
-              </div>
+            <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">              
               Expense Management
             </h2>
-            <p className="mt-1 text-sm text-gray-500 ml-14">Track and analyze clinic operating expenses</p>
+            <p className="mt-1 text-sm text-gray-500 ">Track and analyze clinic operating expenses</p>
           </div>
           
           <div className="flex flex-wrap items-center gap-3">
