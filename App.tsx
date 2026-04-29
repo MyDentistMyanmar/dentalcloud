@@ -289,7 +289,7 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('messaging_enabled');
     return saved === null ? true : saved === 'true';
   });
-  const [appName, setAppName] = useState<string>('DentalCloud Pro');
+  const [appName, setAppName] = useState<string>('');
   const [appLogoUrl, setAppLogoUrl] = useState<string>('');
   const [receiptInfo, setReceiptInfo] = useState<{ email: string; phone: string }>({
     email: 'info@dentflowpro.com',
@@ -2198,13 +2198,17 @@ const App: React.FC = () => {
       return (
         <img
           src={appLogoUrl}
-          alt={`${appName} logo`}
+          alt="Clinic logo"
           className={variant === 'mobile'
             ? 'max-h-12 max-w-[200px] object-contain'
             : 'max-h-[6.25rem] max-w-full object-contain'
           }
         />
       );
+    }
+
+    if (!appName) {
+      return null;
     }
 
     return (
