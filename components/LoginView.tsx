@@ -8,11 +8,12 @@ import PatientSelfRegistration from './PatientSelfRegistration';
 interface LoginViewProps {
   onLoginSuccess: () => void;
   appName?: string;
+  appLogoUrl?: string;
 }
 
 type LoginMode = 'admin' | 'patient';
 
-const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, appName = 'DentalCloud Pro' }) => {
+const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, appName = 'DentalCloud Pro', appLogoUrl }) => {
   const lastForgotPasswordSubmitRef = React.useRef(0);
   const [loginMode, setLoginMode] = useState<LoginMode>('patient');
   const [username, setUsername] = useState('');
@@ -34,6 +35,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, appName = 'Dental
   // Email confirmation handling
   const [emailConfirmed, setEmailConfirmed] = useState(false);
   const [confirmedEmail, setConfirmedEmail] = useState('');
+  const logoSrc = appLogoUrl || '/assets/WinterArcLogo.png';
 
   useEffect(() => {
     document.documentElement.classList.add('auth-screen');
@@ -319,7 +321,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, appName = 'Dental
         <div>
           <div className="flex items-center gap-3 mb-6">
             <div className="w-14 h-14 bg-white overflow-hidden rounded-xl flex items-center justify-center border border-white/20 shadow-inner">
-              <img src="/assets/WinterArcLogo.png" alt="WinterArc Logo" className="w-full h-full object-cover" />
+              <img src={logoSrc} alt={`${appName} logo`} className="w-full h-full object-contain" />
             </div>
             <h1 className="text-xl font-black tracking-tight bg-gradient-to-r from-blue-200 via-cyan-200 to-sky-300 bg-clip-text text-transparent">{appName}</h1>
           </div>
@@ -416,7 +418,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, appName = 'Dental
         <div className="w-full max-w-sm">
           <div className="text-center mb-6">
             <div className="inline-flex items-center justify-center w-20 h-20 bg-white rounded-2xl mb-4 shadow-xl overflow-hidden border border-gray-100">
-              <img src="/assets/WinterArcLogo.png" alt="WinterArc Logo" className="w-full h-full object-cover" />
+              <img src={logoSrc} alt={`${appName} logo`} className="w-full h-full object-contain" />
             </div>
             <h1 className="text-xl font-black text-gray-900 mb-2 tracking-tight">
               {isRecoveryMode ? 'Reset Patient Password' : loginMode === 'admin' ? 'Welcome Back' : 'Patient Login'}

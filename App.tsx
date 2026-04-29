@@ -304,6 +304,66 @@ const App: React.FC = () => {
   useEffect(() => {
     document.title = appName;
   }, [appName]);
+
+  useEffect(() => {
+    const fallbackLogo = '/assets/WinterArcLogo.png';
+    const logoUrl = appLogoUrl || fallbackLogo;
+    const absoluteLogoUrl = new URL(logoUrl, window.location.origin).toString();
+
+    const setLinkHref = (selector: string, attrs: Record<string, string>) => {
+      let link = document.head.querySelector<HTMLLinkElement>(selector);
+      if (!link) {
+        link = document.createElement('link');
+        document.head.appendChild(link);
+      }
+
+      Object.entries(attrs).forEach(([key, value]) => link!.setAttribute(key, value));
+    };
+
+    setLinkHref('link[rel="icon"]', {
+      rel: 'icon',
+      type: 'image/png',
+      href: absoluteLogoUrl
+    });
+    setLinkHref('link[rel="apple-touch-icon"]', {
+      rel: 'apple-touch-icon',
+      href: absoluteLogoUrl
+    });
+
+    const manifest = {
+      name: appName,
+      short_name: appName,
+      description: 'DentalCloud patient and staff app',
+      start_url: '/',
+      scope: '/',
+      display: 'standalone',
+      background_color: '#ffffff',
+      theme_color: '#2563eb',
+      icons: [
+        {
+          src: absoluteLogoUrl,
+          sizes: '192x192',
+          type: 'image/png',
+          purpose: 'any'
+        },
+        {
+          src: absoluteLogoUrl,
+          sizes: '512x512',
+          type: 'image/png',
+          purpose: 'any'
+        }
+      ]
+    };
+    const manifestUrl = URL.createObjectURL(new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' }));
+    setLinkHref('link[rel="manifest"]', {
+      rel: 'manifest',
+      href: manifestUrl
+    });
+
+    return () => {
+      URL.revokeObjectURL(manifestUrl);
+    };
+  }, [appLogoUrl, appName]);
   
   const handleCurrencyChange = (newCurrency: 'USD' | 'MMK') => {
     setCurrency(newCurrency);
@@ -2193,7 +2253,7 @@ const App: React.FC = () => {
           <Loader2 className="animate-spin text-indigo-600 w-10 h-10" />
         </div>
       }>
-        <LoginView onLoginSuccess={handleLoginSuccess} appName={appName} />
+        <LoginView onLoginSuccess={handleLoginSuccess} appName={appName} appLogoUrl={appLogoUrl} />
       </Suspense>
     );
   }
@@ -2241,7 +2301,7 @@ const App: React.FC = () => {
           <Loader2 className="animate-spin text-indigo-600 w-10 h-10" />
         </div>
       }>
-        <LoginView onLoginSuccess={handleLoginSuccess} appName={appName} />
+        <LoginView onLoginSuccess={handleLoginSuccess} appName={appName} appLogoUrl={appLogoUrl} />
       </Suspense>
     );
   }
