@@ -435,138 +435,142 @@ const PatientsView: React.FC<PatientsViewProps> = ({
     ) : (
       <>
         {/* Desktop Table View */}
-        <div className="hidden md:block overflow-x-auto overflow-y-auto flex-1 min-h-0">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-100">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">No</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Name</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Age</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Contact</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Address</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Balance</th>
-                <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {paginatedPatients.map((patient, index) => (
-                <tr
-                  key={patient.id}
-                  className={`transition-colors group cursor-pointer ${
-                    showTodaysNew
-                      ? isNewPatientToday(patient)
-                        ? 'bg-emerald-50/70 hover:bg-emerald-100/70'
-                        : 'bg-amber-50/70 hover:bg-amber-100/70'
-                      : 'hover:bg-indigo-50/30'
-                  }`}
-                  onClick={() => onSelectPatient(patient)}
-                >
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-medium">
-                    {showAll ? index + 1 : (currentPage - 1) * itemsPerPage + index + 1}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className="theme-accent-soft-bg theme-accent-text h-9 w-9 rounded-full flex items-center justify-center font-bold mr-3">
-                        {patient.name?.charAt(0) || '?'}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="text-sm font-semibold text-gray-900 group-hover:text-indigo-700">{patient.name}</div>
-                        {showTodaysNew && (
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
-                              isNewPatientToday(patient)
-                                ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
-                                : 'bg-amber-100 text-amber-700 border-amber-200'
-                            }`}
-                          >
-                            {isNewPatientToday(patient) ? 'New' : 'Old'}
-                          </span>
+        <div className="hidden md:block overflow-x-auto overflow-y-auto flex-1 min-h-0 p-6 pt-0">
+          <div className="rounded-2xl border border-indigo-200 bg-white shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="min-w-[960px] w-full text-sm">
+                <thead className="bg-indigo-50 border-b border-indigo-200">
+                  <tr className="text-indigo-700">
+                    <th className="px-3 py-3 text-left font-bold uppercase text-xs tracking-wide">No</th>
+                    <th className="px-3 py-3 text-left font-bold uppercase text-xs tracking-wide">Name</th>
+                    <th className="px-3 py-3 text-left font-bold uppercase text-xs tracking-wide">Date</th>
+                    <th className="px-3 py-3 text-left font-bold uppercase text-xs tracking-wide">Age</th>
+                    <th className="px-3 py-3 text-left font-bold uppercase text-xs tracking-wide">Contact</th>
+                    <th className="px-3 py-3 text-left font-bold uppercase text-xs tracking-wide">Address</th>
+                    <th className="px-3 py-3 text-left font-bold uppercase text-xs tracking-wide">Balance</th>
+                    <th className="px-3 py-3 text-right font-bold uppercase text-xs tracking-wide">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedPatients.map((patient, index) => (
+                    <tr
+                      key={patient.id}
+                      className={`transition-colors group cursor-pointer border-b border-gray-100 last:border-b-0 ${
+                        showTodaysNew
+                          ? isNewPatientToday(patient)
+                            ? 'bg-emerald-50/70 hover:bg-emerald-100/70'
+                            : 'bg-amber-50/70 hover:bg-amber-100/70'
+                          : 'hover:bg-indigo-50/30'
+                      }`}
+                      onClick={() => onSelectPatient(patient)}
+                    >
+                      <td className="px-3 py-3 align-top font-semibold text-gray-700">
+                        {showAll ? index + 1 : (currentPage - 1) * itemsPerPage + index + 1}
+                      </td>
+                      <td className="px-3 py-3 align-top">
+                        <div className="flex items-center">
+                          <div className="theme-accent-soft-bg theme-accent-text h-9 w-9 rounded-full flex items-center justify-center font-bold mr-3">
+                            {patient.name?.charAt(0) || '?'}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="text-sm font-semibold text-gray-900 group-hover:text-indigo-700">{patient.name}</div>
+                            {showTodaysNew && (
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
+                                  isNewPatientToday(patient)
+                                    ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                                    : 'bg-amber-100 text-amber-700 border-amber-200'
+                                }`}
+                              >
+                                {isNewPatientToday(patient) ? 'New' : 'Old'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 align-top text-gray-700 whitespace-nowrap">
+                        {formatCreatedDate(patient.created_at)}
+                      </td>
+                      <td className="px-3 py-3 align-top text-gray-700">
+                        {patient.age ?? 'N/A'}
+                      </td>
+                      <td className="px-3 py-3 align-top text-gray-700">
+                        {getPatientContact(patient)}
+                      </td>
+                      <td className="px-3 py-3 align-top text-gray-700 max-w-xs truncate" title={getPatientAddress(patient)}>
+                        {getPatientAddress(patient)}
+                      </td>
+                      <td className="px-3 py-3 align-top">
+                        {patient.balance > 0 ? (
+                          <span className="text-red-600 font-bold bg-red-50 px-2 py-1 rounded border border-red-100">{formatCurrency(patient.balance || 0, currency)}</span>
+                        ) : (
+                          <span className="text-green-600 font-medium">Clear</span>
                         )}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-medium">
-                    {formatCreatedDate(patient.created_at)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                    {patient.age ?? 'N/A'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                    {getPatientContact(patient)}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate" title={getPatientAddress(patient)}>
-                    {getPatientAddress(patient)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    {patient.balance > 0 ? (
-                      <span className="text-red-600 font-bold bg-red-50 px-2 py-1 rounded border border-red-100">{formatCurrency(patient.balance || 0, currency)}</span>
-                    ) : (
-                      <span className="text-green-600 font-medium">Clear</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <div className="relative inline-flex items-center justify-end gap-2" ref={openActionMenuPatientId === patient.id ? actionMenuRef : undefined}>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditModal({ open: true, patient });
-                          setEditData({
-                            name: patient.name,
-                            email: patient.email || '',
-                            phone: patient.phone || '',
-                            medicalHistory: patient.medicalHistory || '',
-                            age: patient.age?.toString() || '',
-                            address: patient.address || '',
-                            city: patient.city || '',
-                            township: patient.township || '',
-                            patient_type: normalizePatientType(patient.patient_type)
-                          });
-                        }}
-                        className="text-indigo-600 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded flex items-center gap-1 transition-colors"
-                        title="Edit patient profile"
-                      >
-                        <Edit size={14} /> Edit
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onSelectPatient(patient);
-                        }}
-                        className="text-indigo-600 hover:text-indigo-900 flex items-center gap-1"
-                      >
-                        View Chart <ChevronRight size={14} />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setOpenActionMenuPatientId((prev) => (prev === patient.id ? null : patient.id));
-                        }}
-                        className="inline-flex items-center justify-center rounded-lg p-2 text-gray-600 hover:bg-gray-100"
-                        title="Open actions"
-                      >
-                        <MoreVertical size={16} />
-                      </button>
-                      {openActionMenuPatientId === patient.id && (
-                        <div className="absolute right-0 top-10 z-20 w-44 rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
+                      </td>
+                      <td className="px-3 py-3 align-top text-right">
+                        <div className="relative inline-flex items-center justify-end gap-2" ref={openActionMenuPatientId === patient.id ? actionMenuRef : undefined}>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              openPatientDetails(patient);
-                              setOpenActionMenuPatientId(null);
+                              setEditModal({ open: true, patient });
+                              setEditData({
+                                name: patient.name,
+                                email: patient.email || '',
+                                phone: patient.phone || '',
+                                medicalHistory: patient.medicalHistory || '',
+                                age: patient.age?.toString() || '',
+                                address: patient.address || '',
+                                city: patient.city || '',
+                                township: patient.township || '',
+                                patient_type: normalizePatientType(patient.patient_type)
+                              });
                             }}
-                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                            className="text-indigo-600 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded flex items-center gap-1 transition-colors"
+                            title="Edit patient profile"
                           >
-                            View Details
+                            <Edit size={14} /> Edit
                           </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSelectPatient(patient);
+                            }}
+                            className="text-indigo-600 hover:text-indigo-900 flex items-center gap-1"
+                          >
+                            View Chart <ChevronRight size={14} />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenActionMenuPatientId((prev) => (prev === patient.id ? null : patient.id));
+                            }}
+                            className="inline-flex items-center justify-center rounded-lg p-2 text-gray-600 hover:bg-gray-100"
+                            title="Open actions"
+                          >
+                            <MoreVertical size={16} />
+                          </button>
+                          {openActionMenuPatientId === patient.id && (
+                            <div className="absolute right-0 top-10 z-20 w-44 rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openPatientDetails(patient);
+                                  setOpenActionMenuPatientId(null);
+                                }}
+                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                              >
+                                View Details
+                              </button>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
 
         {/* Mobile Card View */}
