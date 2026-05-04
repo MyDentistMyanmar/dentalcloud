@@ -460,7 +460,7 @@ const PatientMessagingView: React.FC<PatientMessagingViewProps> = ({ currentUser
         <section
           className={`${
             selectedConversation ? 'flex' : 'hidden md:flex'
-          } min-h-0 flex-col bg-white`}
+          } min-h-0 flex-1 flex-col bg-white`}
         >
           {selectedConversation ? (
             <>

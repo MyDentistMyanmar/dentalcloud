@@ -432,7 +432,7 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ onLogout, messaging
       </div>
 
       {/* Main Content */}
-      <div className={activeTab === 'messages' ? 'h-[calc(100dvh-9.5rem)] min-h-[560px] overflow-hidden' : 'flex-1 overflow-y-auto pb-24 pt-4'}>
+      <div className={activeTab === 'messages' ? 'h-[calc(100dvh-8rem)] min-h-0 overflow-hidden' : 'flex-1 overflow-y-auto pb-24 pt-4'}>
         {error && patient && (
           <div className="px-4 mb-4">
             <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-start justify-between gap-3">
