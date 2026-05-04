@@ -325,76 +325,81 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-white overflow-hidden">
-    <div className="p-6 border-b border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white sticky top-0 z-10">
+    {/* Header: Title + Action Buttons (no search) */}
+    <div className="px-4 md:px-6 py-3 md:py-4 border-b border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 bg-white sticky top-0 z-10">
       <div>
-        <h2 className="text-xl font-bold text-gray-800">Appointment Schedule</h2>
-        <p className="text-sm text-gray-500">Manage patient appointments and scheduling</p>
+        <h2 className="text-lg md:text-xl font-bold text-gray-800">Appointment Schedule</h2>
+        <p className="text-xs md:text-sm text-gray-500">Manage patient appointments and scheduling</p>
       </div>
-      <div className="flex flex-col gap-3 w-full md:w-auto md:items-end">
-        <div className="relative w-full md:w-80">
-          <input
-            type="text"
-            placeholder="Search appointments..."
-            value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value);
-              resetAppointmentPages();
-            }}
-            className="pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full"
+      <div className="flex flex-wrap gap-2 w-full md:w-auto">
+        <div className="inline-flex flex-1 md:flex-initial rounded-lg border border-gray-200 bg-gray-50 p-1">
+          <button
+            onClick={() => setViewMode('current')}
+            className={`inline-flex flex-1 md:flex-initial items-center justify-center gap-1.5 px-3 py-1.5 text-xs rounded-md transition-colors ${
+              viewMode === 'current' ? 'bg-white text-indigo-700 shadow-sm font-semibold' : 'text-gray-600 hover:text-gray-900'
+            }`}
+            title="List view"
+          >
+            <List className="w-3.5 h-3.5" />
+            List
+          </button>
+          <button
+            onClick={() => setViewMode('calendar')}
+            className={`inline-flex flex-1 md:flex-initial items-center justify-center gap-1.5 px-3 py-1.5 text-xs rounded-md transition-colors ${
+              viewMode === 'calendar' ? 'bg-white text-indigo-700 shadow-sm font-semibold' : 'text-gray-600 hover:text-gray-900'
+            }`}
+            title="Calendar view"
+          >
+            <CalendarDays className="w-3.5 h-3.5" />
+            Calendar
+          </button>
+        </div>
+        {onOpenAppointmentLog && (
+          <button
+            onClick={onOpenAppointmentLog}
+            className="flex-1 md:flex-initial flex items-center justify-center gap-2 border border-indigo-200 bg-indigo-50 text-indigo-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-100 transition-colors"
+          >
+            <FileText className="w-4 h-4" /> <span className="hidden sm:inline">Appointment Log</span>
+          </button>
+        )}
+        {canExport && (
+          <ExportMenu
+            disabled={appointments.length === 0 || exporting}
+            onExportPDF={handleDownloadPDF}
+            onExportExcel={handleDownloadExcel}
+            className="flex-1 md:flex-initial"
           />
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-        </div>
-        <div className="flex flex-wrap gap-2 w-full md:w-auto">
-          <div className="inline-flex flex-1 md:flex-initial rounded-lg border border-gray-200 bg-gray-50 p-1">
-            <button
-              onClick={() => setViewMode('current')}
-              className={`inline-flex flex-1 md:flex-initial items-center justify-center gap-1.5 px-3 py-1.5 text-xs rounded-md transition-colors ${
-                viewMode === 'current' ? 'bg-white text-indigo-700 shadow-sm font-semibold' : 'text-gray-600 hover:text-gray-900'
-              }`}
-              title="List view"
-            >
-              <List className="w-3.5 h-3.5" />
-              List
-            </button>
-            <button
-              onClick={() => setViewMode('calendar')}
-              className={`inline-flex flex-1 md:flex-initial items-center justify-center gap-1.5 px-3 py-1.5 text-xs rounded-md transition-colors ${
-                viewMode === 'calendar' ? 'bg-white text-indigo-700 shadow-sm font-semibold' : 'text-gray-600 hover:text-gray-900'
-              }`}
-              title="Calendar view"
-            >
-              <CalendarDays className="w-3.5 h-3.5" />
-              Calendar
-            </button>
-          </div>
-          {onOpenAppointmentLog && (
-            <button
-              onClick={onOpenAppointmentLog}
-              className="flex-1 md:flex-initial flex items-center justify-center gap-2 border border-indigo-200 bg-indigo-50 text-indigo-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-100 transition-colors"
-            >
-              <FileText className="w-4 h-4" /> <span className="hidden sm:inline">Appointment Log</span>
-            </button>
-          )}
-          {canExport && (
-            <ExportMenu
-              disabled={appointments.length === 0 || exporting}
-              onExportPDF={handleDownloadPDF}
-              onExportExcel={handleDownloadExcel}
-              className="flex-1 md:flex-initial"
-            />
-          )}
-          {canCreate && (
-            <button
-              onClick={onAddAppointment}
-              className="flex-1 md:flex-initial flex items-center justify-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
-            >
-              <Plus className="w-4 h-4" /> <span className="hidden sm:inline">New Appointment</span>
-            </button>
-          )}
-        </div>
-        <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 w-full md:w-auto">
+        )}
+        {canCreate && (
+          <button
+            onClick={onAddAppointment}
+            className="flex-1 md:flex-initial flex items-center justify-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" /> <span className="hidden sm:inline">New Appointment</span>
+          </button>
+        )}
+      </div>
+    </div>
+
+    {/* Toolbar: Search + Date Filters (below header) */}
+    <div className="px-4 md:px-6 py-2 md:py-3 border-b border-gray-100 bg-gray-50/50 flex flex-col md:flex-row gap-2 md:gap-3 items-start md:items-center">
+      <div className="relative w-full md:w-72 lg:w-80">
+        <input
+          type="text"
+          placeholder="Search appointments..."
+          value={searchTerm}
+          onChange={(e) => {
+            setSearchTerm(e.target.value);
+            resetAppointmentPages();
+          }}
+          className="pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full bg-white"
+        />
+        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+        <div className="inline-flex rounded-lg border border-gray-200 bg-white p-1">
           <button
             onClick={() => {
               applyQuickDateFilter('all');
@@ -426,9 +431,9 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
             Today
           </button>
         </div>
-        <div className="grid grid-cols-[minmax(180px,1fr)_auto] gap-2 w-full md:w-[360px]">
-          <label className="flex flex-col gap-1 text-[11px] font-semibold text-gray-500">
-            Filter day
+        <div className="flex items-center gap-2">
+          <label className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-500 whitespace-nowrap">
+            <span>Filter day</span>
             <input
               type="date"
               value={dateFilter}
@@ -440,12 +445,12 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
                   clearDateFilter();
                 }
               }}
-              className="h-9 rounded-lg border border-gray-200 px-2 text-sm font-normal text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="h-8 rounded-lg border border-gray-200 px-2 text-sm font-normal text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
             />
           </label>
           <button
             onClick={clearDateFilter}
-            className="self-end h-9 inline-flex items-center justify-center rounded-lg border border-gray-200 px-3 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+            className="h-8 inline-flex items-center justify-center rounded-lg border border-gray-200 px-2.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors bg-white"
           >
             Clear
           </button>
