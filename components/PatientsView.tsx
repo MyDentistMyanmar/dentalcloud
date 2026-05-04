@@ -286,7 +286,7 @@ const PatientsView: React.FC<PatientsViewProps> = ({
 
   return (
   <div className="flex flex-col h-full bg-white overflow-hidden">
-    <div className="p-6 border-b border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white sticky top-0 z-10">
+    <div className="p-6 border-b border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white sticky top-0 z-30">
       <div>
         <h2 className="text-xl font-bold text-gray-800">Patient Directory</h2>
         <p className="text-sm text-gray-500">Manage all registered clinical patients</p>

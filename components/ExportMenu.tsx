@@ -62,7 +62,7 @@ const ExportMenu: React.FC<ExportMenuProps> = ({
       </button>
 
       {isOpen && !disabled && (
-        <div className="absolute right-0 top-full z-20 mt-2 min-w-[180px] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg">
+        <div className="absolute right-0 top-full z-50 mt-2 min-w-[180px] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg">
           <button
             type="button"
             onClick={() => handleAction(onExportPDF)}

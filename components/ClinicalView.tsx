@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { User, X, Upload, Trash2, FileText, Receipt as ReceiptIcon, Package, RotateCcw, Award, Zap, Key, Edit, Download, Eye, MoreVertical, Calendar, CheckCircle2, AlertCircle, ArrowLeft } from 'lucide-react';
+import { User, X, Upload, Trash2, FileText, Receipt as ReceiptIcon, Package, RotateCcw, Award, Zap, Key, Edit, Download, Eye, MoreVertical, Calendar, CheckCircle2, AlertCircle, ArrowLeft, Search } from 'lucide-react';
 import { ToothSelector } from './ToothSelector';
 import { Patient, TreatmentType, ClinicalRecord, PatientFile, LoyaltyTransaction, LoyaltyRule, Doctor, Appointment } from '../types';
 import { formatCurrency, getCurrencySymbol, Currency } from '../utils/currency';
@@ -113,6 +113,7 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
   const [menuPosition, setMenuPosition] = useState<{ top: number; right: number } | null>(null);
   const [deleteModal, setDeleteModal] = React.useState(false);
   const [fileToDelete, setFileToDelete] = React.useState<{name: string, path: string} | null>(null);
+  const [treatmentSearchTerm, setTreatmentSearchTerm] = React.useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [showNextAppointmentModal, setShowNextAppointmentModal] = React.useState(false);
   const [isSavingNextAppointment, setIsSavingNextAppointment] = React.useState(false);
@@ -132,6 +133,16 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
     }
     return [...treatmentTypeOptions, currentType];
   }, [treatmentTypeOptions, nextAppointmentForm.type]);
+  const filteredTreatmentTypes = React.useMemo(() => {
+    const query = treatmentSearchTerm.trim().toLowerCase();
+    if (!query) return treatmentTypes;
+
+    return treatmentTypes.filter((treatment) => {
+      const name = (treatment.name || '').toLowerCase();
+      const category = (treatment.category || '').toLowerCase();
+      return name.includes(query) || category.includes(query);
+    });
+  }, [treatmentTypes, treatmentSearchTerm]);
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
@@ -396,12 +407,41 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
                 emptyMessage="No doctors found"
               />
             </div>
+            <div className="mb-4">
+              <label className="block text-[10px] text-indigo-700 uppercase font-bold tracking-wider mb-1.5">Search Treatments</label>
+              <div className="relative">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-indigo-300" />
+                <input
+                  type="search"
+                  value={treatmentSearchTerm}
+                  onChange={(e) => setTreatmentSearchTerm(e.target.value)}
+                  placeholder="Search by treatment name or category..."
+                  className="w-full rounded-xl border border-indigo-200 bg-white py-2.5 pl-10 pr-10 text-sm text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                  aria-label="Search treatments"
+                />
+                {treatmentSearchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setTreatmentSearchTerm('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-lg p-1 text-gray-400 transition-colors hover:bg-indigo-50 hover:text-indigo-600"
+                    aria-label="Clear treatment search"
+                  >
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
+              {treatmentSearchTerm.trim() && (
+                <p className="mt-1.5 text-xs text-indigo-700">
+                  Showing {filteredTreatmentTypes.length} of {treatmentTypes.length} treatments
+                </p>
+              )}
+            </div>
             <div className="max-h-[420px] overflow-y-auto pr-2 custom-scrollbar">
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-               {treatmentTypes.map(t => {
-                 const displayCost = useFlatRate 
-                   ? t.cost 
-                   : (t.cost * (selectedTeeth.length || 1));
+               {filteredTreatmentTypes.map(t => {
+                  const displayCost = useFlatRate
+                    ? t.cost
+                    : (t.cost * (selectedTeeth.length || 1));
                  const costLabel = useFlatRate 
                    ? `${formatCurrency(t.cost, currency)} (flat rate)` 
                    : `${formatCurrency(t.cost, currency)} / tooth`;
@@ -424,9 +464,14 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
                          <span className="block mt-0.5 font-semibold text-green-600 group-hover:text-green-200">Flat: {formatCurrency(displayCost, currency)}</span>
                        )}
                      </span>
-                   </button>
-                 );
-               })}
+                    </button>
+                  );
+                })}
+                {filteredTreatmentTypes.length === 0 && (
+                  <div className="col-span-full rounded-xl border border-dashed border-indigo-200 bg-white/70 p-6 text-center text-sm text-indigo-700">
+                    No treatments match your search.
+                  </div>
+                )}
               </div>
             </div>
           </div>
