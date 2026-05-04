@@ -4,7 +4,7 @@ import { auth } from '../services/auth';
 import { api } from '../services/api';
 import { otpService } from '../services/otp';
 import { Patient, Appointment, ClinicalRecord, Doctor, PatientFile } from '../types';
-import { Modal, Input } from './Shared';
+import { Modal, Input, TimeInput } from './Shared';
 import { SearchableSelect } from './SearchableSelect';
 import Receipt from './Receipt';
 import PatientMessagingView from './PatientMessagingView';
@@ -1006,12 +1006,11 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ onLogout, messaging
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">Time</label>
-                <Input 
-                  type="time" 
+                <TimeInput
+                  label="Time"
                   required 
                   value={newAppointment.time} 
-                  onChange={(e: any) => setNewAppointment({...newAppointment, time: e.target.value})} 
+                  onChange={(time) => setNewAppointment({...newAppointment, time})}
                 />
               </div>
             </div>

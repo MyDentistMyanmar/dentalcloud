@@ -4,7 +4,7 @@ import { ToothSelector } from './ToothSelector';
 import { Patient, TreatmentType, ClinicalRecord, PatientFile, LoyaltyTransaction, LoyaltyRule, Doctor, Appointment } from '../types';
 import { formatCurrency, getCurrencySymbol, Currency } from '../utils/currency';
 import { formatTeethWithPosition } from '../utils/toothNumbering';
-import { Modal, Input } from './Shared';
+import { Modal, Input, TimeInput } from './Shared';
 import { SearchableSelect } from './SearchableSelect';
 
 export interface UploadProgress {
@@ -1186,12 +1186,11 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
                 value={nextAppointmentForm.date || ''}
                 onChange={(e: any) => setNextAppointmentForm((prev) => ({ ...prev, date: e.target.value }))}
               />
-              <Input
+              <TimeInput
                 label="Time"
-                type="time"
                 required
                 value={nextAppointmentForm.time || ''}
-                onChange={(e: any) => setNextAppointmentForm((prev) => ({ ...prev, time: e.target.value }))}
+                onChange={(time) => setNextAppointmentForm((prev) => ({ ...prev, time }))}
               />
             </div>
 

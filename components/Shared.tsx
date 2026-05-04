@@ -143,6 +143,68 @@ export const Input = ({ label, ...props }: InputProps) => (
   </div>
 );
 
+const formatTypedTime = (rawValue: string, completeOnly = false) => {
+  const raw = rawValue.trim();
+  if (!raw) return '';
+
+  const digitsOnly = raw.replace(/\D/g, '');
+  if (!completeOnly && (/^\d{4}$/.test(digitsOnly) || (/^\d{3}$/.test(digitsOnly) && Number(digitsOnly[0]) > 2))) {
+    const hours = digitsOnly.length === 3 ? digitsOnly.slice(0, 1) : digitsOnly.slice(0, 2);
+    const minutes = digitsOnly.slice(-2);
+    const hourNumber = Number(hours);
+    const minuteNumber = Number(minutes);
+
+    if (hourNumber <= 23 && minuteNumber <= 59) {
+      return `${String(hourNumber).padStart(2, '0')}:${minutes}`;
+    }
+  }
+
+  const colonMatch = raw.match(/^(\d{1,2}):(\d{2})$/);
+  if (colonMatch) {
+    const hourNumber = Number(colonMatch[1]);
+    const minuteNumber = Number(colonMatch[2]);
+
+    if (hourNumber <= 23 && minuteNumber <= 59) {
+      return `${String(hourNumber).padStart(2, '0')}:${colonMatch[2]}`;
+    }
+  }
+
+  if (completeOnly && /^\d{3,4}$/.test(digitsOnly)) {
+    const hours = digitsOnly.length === 3 ? digitsOnly.slice(0, 1) : digitsOnly.slice(0, 2);
+    const minutes = digitsOnly.slice(-2);
+    const hourNumber = Number(hours);
+    const minuteNumber = Number(minutes);
+
+    if (hourNumber <= 23 && minuteNumber <= 59) {
+      return `${String(hourNumber).padStart(2, '0')}:${minutes}`;
+    }
+  }
+
+  return raw;
+};
+
+type TimeInputProps = Omit<InputProps, 'type' | 'value' | 'onChange'> & {
+  value?: string;
+  onChange: (value: string) => void;
+};
+
+export const TimeInput = ({ value = '', onChange, onBlur, placeholder = 'HH:MM', ...props }: TimeInputProps) => (
+  <Input
+    {...props}
+    type="text"
+    inputMode="numeric"
+    placeholder={placeholder}
+    pattern="^([01]?[0-9]|2[0-3]):?[0-5][0-9]$"
+    maxLength={5}
+    value={value}
+    onChange={(e) => onChange(formatTypedTime(e.target.value))}
+    onBlur={(e) => {
+      onChange(formatTypedTime(e.target.value, true));
+      onBlur?.(e);
+    }}
+  />
+);
+
 export const NavItem = ({ icon, label, active, onClick }: { icon: React.ReactNode, label: string, active: boolean, onClick: () => void }) => (
   <button 
     onClick={onClick}

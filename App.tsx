@@ -27,7 +27,7 @@ import {
   DollarSign
 } from 'lucide-react';
 
-import { Modal, Input, NavItem, Toast, ConfirmDialog } from './components/Shared';
+import { Modal, Input, TimeInput, NavItem, Toast, ConfirmDialog } from './components/Shared';
 import { SearchableSelect } from './components/SearchableSelect';
 import { 
   Patient, 
@@ -3144,12 +3144,11 @@ const App: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">Time</label>
-                <Input 
-                  type="time" 
+                <TimeInput
+                  label="Time"
                   required 
                   value={newAppointmentData.time} 
-                  onChange={(e: any) => setNewAppointmentData({...newAppointmentData, time: e.target.value})} 
+                  onChange={(time) => setNewAppointmentData({...newAppointmentData, time})}
                 />
               </div>
             </div>
