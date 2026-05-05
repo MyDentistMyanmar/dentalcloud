@@ -144,6 +144,23 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
       return name.includes(query) || category.includes(query);
     });
   }, [treatmentTypes, treatmentSearchTerm]);
+  const canApplyTreatment = useFlatRate || selectedTeeth.length > 0;
+  const firstApplicableTreatment = React.useMemo(
+    () => filteredTreatmentTypes.find(() => canApplyTreatment),
+    [filteredTreatmentTypes, canApplyTreatment]
+  );
+  const treatmentSelectorMessage = React.useMemo(() => {
+    if (treatmentTypes.length === 0) {
+      return 'No treatments are configured yet. Add services in Treatment Config first.';
+    }
+    if (!canApplyTreatment) {
+      return 'Select teeth first or enable Flat Rate before applying a treatment.';
+    }
+    if (treatmentSearchTerm.trim() && filteredTreatmentTypes.length === 0) {
+      return 'No treatments match your search.';
+    }
+    return `${filteredTreatmentTypes.length} treatment${filteredTreatmentTypes.length === 1 ? '' : 's'} available`;
+  }, [canApplyTreatment, filteredTreatmentTypes.length, treatmentSearchTerm, treatmentTypes.length]);
   const menuRef = useRef<HTMLDivElement>(null);
   const treatmentSelectorRef = useRef<HTMLDivElement>(null);
   const buttonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -251,6 +268,14 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
   const formatDoctorName = (name?: string) => {
     if (!name) return '—';
     return /^dr\.?\s/i.test(name) ? name : `Dr. ${name}`;
+  };
+
+  const handleTreatmentSelect = (treatment: TreatmentType) => {
+    if (!canApplyTreatment) return;
+
+    onTreatmentSubmit(treatment);
+    setTreatmentSearchTerm('');
+    setShowTreatmentDropdown(false);
   };
 
   const handleQuickDateApply = (daysAhead: number) => {
@@ -391,12 +416,12 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
         </div>
         
         {selectedPatient && (
-          <div className="mt-6 p-6 bg-indigo-50 rounded-lg border border-indigo-100">
-            <div className="flex justify-between items-center mb-4">
-              <h4 className="font-bold text-indigo-900">
+          <div className="mt-6 p-4 md:p-5 bg-indigo-50 rounded-lg border border-indigo-100">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+              <h4 className="font-bold text-indigo-900 leading-tight">
                 {selectedTeeth.length > 0 ? `Apply to Teeth: ${selectedTeeth.join(', ')}` : 'Select Teeth to Perform Treatment'}
               </h4>
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label className="flex items-center gap-2 cursor-pointer self-start sm:self-auto">
                 <input
                   type="checkbox"
                   checked={useFlatRate}
@@ -431,23 +456,38 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
                 <input
                   type="search"
                   value={treatmentSearchTerm}
+                  disabled={treatmentTypes.length === 0}
                   onChange={(e) => {
                     setTreatmentSearchTerm(e.target.value);
                     setShowTreatmentDropdown(true);
                   }}
-                  onFocus={() => setShowTreatmentDropdown(true)}
+                  onFocus={() => {
+                    if (treatmentTypes.length > 0) setShowTreatmentDropdown(true);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      setShowTreatmentDropdown(false);
+                      return;
+                    }
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      if (firstApplicableTreatment) handleTreatmentSelect(firstApplicableTreatment);
+                    }
+                  }}
                   placeholder="Search by treatment name or category..."
-                  className="w-full rounded-xl border border-indigo-200 bg-white py-2.5 pl-10 pr-24 text-sm text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                  className="w-full rounded-xl border border-indigo-200 bg-white py-2.5 pl-10 pr-24 text-sm text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
                   aria-label="Search treatments"
+                  aria-describedby="treatment-selector-message"
                 />
                 <button
                   type="button"
+                  disabled={treatmentTypes.length === 0}
                   onClick={() => setShowTreatmentDropdown((open) => !open)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg border border-indigo-100 bg-indigo-50 px-2.5 py-1 text-xs font-bold text-indigo-700 hover:bg-indigo-100"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg border border-indigo-100 bg-indigo-50 px-2.5 py-1 text-xs font-bold text-indigo-700 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
                   aria-expanded={showTreatmentDropdown}
                   aria-label="Open treatment dropdown"
                 >
-                  {filteredTreatmentTypes.length}
+                  {treatmentSearchTerm.trim() ? filteredTreatmentTypes.length : 'All'}
                 </button>
                 {treatmentSearchTerm && (
                   <button
@@ -463,9 +503,27 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
                   </button>
                 )}
               </div>
+              <p
+                id="treatment-selector-message"
+                className={`mt-1.5 text-xs font-semibold ${
+                  treatmentTypes.length === 0 || !canApplyTreatment || filteredTreatmentTypes.length === 0
+                    ? 'text-amber-700'
+                    : 'text-indigo-700'
+                }`}
+              >
+                {treatmentSelectorMessage}
+              </p>
               {showTreatmentDropdown && (
                 <div className="absolute left-0 right-0 top-full z-40 mt-2 rounded-xl border border-indigo-100 bg-white shadow-xl">
-                  <div className="max-h-72 overflow-y-auto p-2 custom-scrollbar">
+                  <div className="flex items-center justify-between gap-3 border-b border-indigo-50 px-3 py-2">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-indigo-500">
+                      Treatments
+                    </span>
+                    <span className="text-xs font-bold text-gray-500">
+                      {filteredTreatmentTypes.length} of {treatmentTypes.length}
+                    </span>
+                  </div>
+                  <div className="max-h-80 overflow-y-auto p-2 custom-scrollbar">
                     {filteredTreatmentTypes.length === 0 ? (
                       <div className="rounded-lg border border-dashed border-indigo-100 bg-indigo-50 px-3 py-4 text-center text-sm font-semibold text-indigo-700">
                         No treatments match your search.
@@ -485,19 +543,16 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
                             key={t.id}
                             type="button"
                             disabled={isDisabled}
-                            onClick={() => {
-                              onTreatmentSubmit(t);
-                              setShowTreatmentDropdown(false);
-                            }}
-                            className="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            onClick={() => handleTreatmentSelect(t)}
+                            className="flex w-full flex-col gap-1 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
                           >
                             <span className="min-w-0">
-                              <span className="block truncate text-sm font-bold text-gray-900">{t.name}</span>
+                              <span className="block break-words text-sm font-bold text-gray-900">{t.name}</span>
                               {t.category && (
-                                <span className="block truncate text-xs font-medium text-gray-400">{t.category}</span>
+                                <span className="block break-words text-xs font-medium text-gray-400">{t.category}</span>
                               )}
                             </span>
-                            <span className="shrink-0 text-right text-xs font-bold text-indigo-700">
+                            <span className="shrink-0 text-left text-xs font-bold text-indigo-700 sm:text-right">
                               {costLabel}
                               {!useFlatRate && selectedTeeth.length > 0 && (
                                 <span className="block text-green-700">Total: {formatCurrency(displayCost, currency)}</span>
