@@ -1149,10 +1149,10 @@ const App: React.FC = () => {
     }
   };
 
-  const handleLocationChange = (locId: string) => {
+  const handleLocationChange = async (locId: string) => {
     setCurrentLocationId(locId);
     localStorage.setItem('currentLocationId', locId);
-    fetchInitialData(locId);
+    await fetchInitialData(locId);
   };
 
   const handleDashboardLocationChange = async (locId: string) => {

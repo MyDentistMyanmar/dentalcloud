@@ -10,7 +10,7 @@ interface SettingsViewProps {
   onCurrencyChange: (currency: 'USD' | 'MMK') => void;
   locations: Location[];
   currentLocationId: string;
-  onLocationChange: (locationId: string) => void;
+  onLocationChange: (locationId: string) => Promise<void>;
   onAddLocation: (loc: Partial<Location>) => void;
   loyaltyRules: LoyaltyRule[];
   onUpdateLoyaltyRule: (id: string, data: Partial<LoyaltyRule>) => void;
@@ -151,7 +151,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({
 
   useEffect(() => {
     setSelectedBranchId(currentLocationId);
-    setIsSwitchingBranch(false);
   }, [currentLocationId]);
 
   const [showRuleModal, setShowRuleModal] = useState(false);
@@ -1061,10 +1060,17 @@ const SettingsView: React.FC<SettingsViewProps> = ({
             </select>
             <button
               type="button"
-              onClick={() => {
+              onClick={async () => {
                 if (!selectedBranchId || selectedBranchId === currentLocationId) return;
                 setIsSwitchingBranch(true);
-                onLocationChange(selectedBranchId);
+                try {
+                  await onLocationChange(selectedBranchId);
+                } catch (err: any) {
+                  console.error('Failed to switch branch:', err);
+                  alert('Failed to switch branch: ' + (err?.message || 'Unknown error'));
+                } finally {
+                  setIsSwitchingBranch(false);
+                }
               }}
               disabled={!selectedBranchId || selectedBranchId === currentLocationId || isSwitchingBranch}
               className="px-6 py-2.5 rounded-lg bg-indigo-600 text-white text-sm font-bold shadow-lg shadow-indigo-600/20 transition hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
