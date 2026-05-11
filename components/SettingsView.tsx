@@ -151,6 +151,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
 
   useEffect(() => {
     setSelectedBranchId(currentLocationId);
+    setIsSwitchingBranch(false);
   }, [currentLocationId]);
 
   const [showRuleModal, setShowRuleModal] = useState(false);
@@ -1064,7 +1065,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                 if (!selectedBranchId || selectedBranchId === currentLocationId) return;
                 setIsSwitchingBranch(true);
                 onLocationChange(selectedBranchId);
-                setTimeout(() => setIsSwitchingBranch(false), 800);
               }}
               disabled={!selectedBranchId || selectedBranchId === currentLocationId || isSwitchingBranch}
               className="px-6 py-2.5 rounded-lg bg-indigo-600 text-white text-sm font-bold shadow-lg shadow-indigo-600/20 transition hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
