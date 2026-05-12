@@ -12,6 +12,8 @@ interface SettingsViewProps {
   currentLocationId: string;
   onLocationChange: (locationId: string) => Promise<void>;
   onAddLocation: (loc: Partial<Location>) => void;
+  onUpdateLocation: (id: string, loc: Partial<Location>) => Promise<void>;
+  onDeleteLocation: (id: string) => Promise<void>;
   loyaltyRules: LoyaltyRule[];
   onUpdateLoyaltyRule: (id: string, data: Partial<LoyaltyRule>) => void;
   onCreateLoyaltyRule: (data: Partial<LoyaltyRule>) => void;
@@ -63,13 +65,15 @@ interface SettingsTab {
   adminOnly: boolean;
 }
 
-const SettingsView: React.FC<SettingsViewProps> = ({ 
-  currency, 
-  onCurrencyChange, 
-  locations, 
+const SettingsView: React.FC<SettingsViewProps> = ({
+  currency,
+  onCurrencyChange,
+  locations,
   currentLocationId,
   onLocationChange,
-  onAddLocation, 
+  onAddLocation,
+  onUpdateLocation,
+  onDeleteLocation,
   loyaltyRules,
   onUpdateLoyaltyRule,
   onCreateLoyaltyRule,
@@ -146,6 +150,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   const [showLocModal, setShowLocModal] = useState(false);
+  const [editingLoc, setEditingLoc] = useState<Location | null>(null);
   const [selectedBranchId, setSelectedBranchId] = useState<string>(currentLocationId);
   const [isSwitchingBranch, setIsSwitchingBranch] = useState(false);
 
@@ -651,6 +656,26 @@ const SettingsView: React.FC<SettingsViewProps> = ({
     setNewLoc({ name: '', address: '', phone: '' });
   };
 
+  const handleEditLoc = (loc: Location) => {
+    setEditingLoc(loc);
+    setNewLoc({ name: loc.name, address: loc.address, phone: loc.phone });
+    setShowLocModal(true);
+  };
+
+  const handleUpdateLoc = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingLoc) return;
+    await onUpdateLocation(editingLoc.id, newLoc);
+    setShowLocModal(false);
+    setEditingLoc(null);
+    setNewLoc({ name: '', address: '', phone: '' });
+  };
+
+  const handleDeleteLoc = async (loc: Location) => {
+    if (!window.confirm(`Are you sure you want to delete "${loc.name}"? This action cannot be undone.`)) return;
+    await onDeleteLocation(loc.id);
+  };
+
   const handleRuleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (editingRuleId) {
@@ -1088,10 +1113,26 @@ const SettingsView: React.FC<SettingsViewProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {locations.map(loc => (
             <div key={loc.id} className="p-4 border border-gray-100 rounded-xl bg-gray-50 flex justify-between items-start">
-              <div>
+              <div className="flex-1 min-w-0">
                 <h4 className="font-bold text-gray-900">{loc.name}</h4>
                 <p className="text-xs text-gray-500 mt-1">{loc.address}</p>
                 <p className="text-xs text-gray-500">{loc.phone}</p>
+              </div>
+              <div className="flex items-center gap-1 ml-3 shrink-0">
+                <button
+                  onClick={() => handleEditLoc(loc)}
+                  className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                  title="Edit location"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                </button>
+                <button
+                  onClick={() => handleDeleteLoc(loc)}
+                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  title="Delete location"
+                >
+                  <Trash2 size={14} />
+                </button>
               </div>
             </div>
           ))}
@@ -1876,12 +1917,14 @@ const SettingsView: React.FC<SettingsViewProps> = ({
       </div>
 
       {showLocModal && (
-        <Modal title="Add New Clinic Location" onClose={() => setShowLocModal(false)}>
-          <form onSubmit={handleAddLoc} className="space-y-4">
+        <Modal title={editingLoc ? "Edit Clinic Location" : "Add New Clinic Location"} onClose={() => { setShowLocModal(false); setEditingLoc(null); setNewLoc({ name: '', address: '', phone: '' }); }}>
+          <form onSubmit={editingLoc ? handleUpdateLoc : handleAddLoc} className="space-y-4">
             <Input label="Location Name" required value={newLoc.name} onChange={e => setNewLoc({...newLoc, name: e.target.value})} placeholder="e.g. Downtown Branch" />
             <Input label="Address" required value={newLoc.address} onChange={e => setNewLoc({...newLoc, address: e.target.value})} />
             <Input label="Phone" required value={newLoc.phone} onChange={e => setNewLoc({...newLoc, phone: e.target.value})} />
-            <button type="submit" className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-indigo-600/20">Create Location</button>
+            <button type="submit" className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-indigo-600/20">
+              {editingLoc ? 'Update Location' : 'Create Location'}
+            </button>
           </form>
         </Modal>
       )}

@@ -2397,7 +2397,7 @@ USER MANAGEMENT:
 
 LOCATION MANAGEMENT:
 - location_get_all(): Get all locations.
-- location_create(name, address, phone, email): Create location.
+- location_create(name, address, phone): Create location.
 
 COMPOUND REQUESTS (Multi-step tasks):
 You can combine multiple actions to fulfill complex user needs.
@@ -4168,8 +4168,7 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                 result = await api.locations.create({
                   name: params.name,
                   address: params.address,
-                  phone: params.phone,
-                  email: params.email
+                  phone: params.phone
                 });
                 currentActionResult = `✅ Location "${result.name}" created successfully.`;
               } catch (err: any) {

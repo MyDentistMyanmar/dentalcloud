@@ -135,6 +135,7 @@ CREATE TABLE patients (
 CREATE TABLE patient_auth (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   patient_id UUID REFERENCES patients(id) ON DELETE CASCADE,
+  location_id UUID REFERENCES locations(id) ON DELETE SET NULL,
   username VARCHAR(255) UNIQUE,
   email VARCHAR(255) UNIQUE,
   phone VARCHAR(20),
@@ -422,6 +423,7 @@ CREATE INDEX idx_patient_auth_email ON patient_auth(email);
 CREATE INDEX idx_patient_auth_phone ON patient_auth(phone);
 CREATE INDEX idx_patient_auth_username ON patient_auth(username);
 CREATE INDEX idx_patient_auth_patient_id ON patient_auth(patient_id);
+CREATE INDEX idx_patient_auth_location_id ON patient_auth(location_id);
 CREATE INDEX idx_patient_auth_supabase_user_id ON patient_auth(supabase_user_id);
 CREATE INDEX idx_otp_codes_email ON otp_codes(email);
 CREATE INDEX idx_otp_codes_expires ON otp_codes(expires_at);

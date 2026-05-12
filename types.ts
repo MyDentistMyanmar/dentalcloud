@@ -5,7 +5,6 @@ export interface Location {
   name: string;
   address: string;
   phone: string;
-  email?: string;
   created_at?: string;
 }
 

@@ -100,6 +100,7 @@ const DoctorHomeView = React.lazy(() => import('./components/DoctorHomeView'));
 const ALL_BRANCHES_VALUE = '__all_branches__';
 const PAYMENT_RECORDS_STORAGE_KEY = 'dentalcloud_payment_records_v1';
 const THEME_STORAGE_KEY = 'dentalcloud_hover_theme_v1';
+const ACTIVE_BRANCH_STORAGE_KEY = 'dentalcloud_active_branch_id_v1';
 
 type PaymentDraft = {
   treatments: ClinicalRecord[];
@@ -208,6 +209,16 @@ const writePaymentRecords = (records: PaymentRecord[]) => {
   localStorage.setItem(PAYMENT_RECORDS_STORAGE_KEY, JSON.stringify(records));
 };
 
+const readPersistedBranchId = (): string => {
+  const dashboardLocation = localStorage.getItem('dashboardLocationId') || '';
+  return (
+    localStorage.getItem(ACTIVE_BRANCH_STORAGE_KEY) ||
+    localStorage.getItem('currentLocationId') ||
+    (dashboardLocation === ALL_BRANCHES_VALUE ? '' : dashboardLocation) ||
+    ''
+  );
+};
+
 const isRecoveryFlowActive = (): boolean => {
   if (typeof window === 'undefined') return false;
 
@@ -248,9 +259,8 @@ const App: React.FC = () => {
   const [allowedViews, setAllowedViews] = useState<ViewState[]>([]);
   const [currentUser, setCurrentUser] = useState<string>('');
   const [locations, setLocations] = useState<Location[]>([]);
-  const [currentLocationId, setCurrentLocationId] = useState<string>(() => {
-    return localStorage.getItem('currentLocationId') || '';
-  });
+  const [currentLocationId, setCurrentLocationId] = useState<string>(() => readPersistedBranchId());
+  const getStoredBranchId = () => readPersistedBranchId();
   const [hoverTheme, setHoverTheme] = useState<HoverTheme>(() => {
     const savedTheme = localStorage.getItem(THEME_STORAGE_KEY) as HoverTheme | null;
     if (savedTheme && THEME_OPTIONS.some(option => option.value === savedTheme)) {
@@ -321,6 +331,7 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const dashboardFetchRequestRef = React.useRef(0);
+  const initialDataFetchRequestRef = React.useRef(0);
   
   // -- Selection State --
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
@@ -494,22 +505,23 @@ const App: React.FC = () => {
     amountTendered: 0,
     discountAmount: 0
   });
-  const [newPatientData, setNewPatientData] = useState<Partial<Patient> & { password?: string }>({ 
-      name: '', 
-      email: '', 
-      phone: '', 
-      medicalHistory: '', 
+  const [newPatientData, setNewPatientData] = useState<Partial<Patient> & { password?: string }>({
+      name: '',
+      email: '',
+      phone: '',
+      medicalHistory: '',
       password: '',
       age: undefined,
       address: '',
       city: '',
       township: '',
-      patient_type: DEFAULT_PATIENT_TYPE_NAME
+      patient_type: DEFAULT_PATIENT_TYPE_NAME,
+      location_id: ''
     });
   const [clinicalFeeEnabled, setClinicalFeeEnabled] = useState(false);
   const [clinicalFeeAmount, setClinicalFeeAmount] = useState(0);
   const [applyClinicalFeeOnRegistration, setApplyClinicalFeeOnRegistration] = useState(false);
-  const [newAppointmentData, setNewAppointmentData] = useState<Partial<Appointment>>({ date: '', time: '', type: '', status: 'Scheduled', patient_id: '', doctor_id: '' });
+  const [newAppointmentData, setNewAppointmentData] = useState<Partial<Appointment>>({ date: '', time: '', type: '', status: 'Scheduled', patient_id: '', doctor_id: '', location_id: currentLocationId || '' });
   const [appointmentPatientMode, setAppointmentPatientMode] = useState<'registered' | 'lead'>('registered');
   const [convertingLeadAppointment, setConvertingLeadAppointment] = useState<Appointment | null>(null);
   const [appointmentClinicalFocus, setAppointmentClinicalFocus] = useState('');
@@ -557,7 +569,7 @@ const App: React.FC = () => {
     return name.startsWith(query) || spec.startsWith(query);
   });
   const [newTreatmentTypeData, setNewTreatmentTypeData] = useState<Partial<TreatmentType>>({ name: '', cost: 0, category: '' });
-  const [newDoctorData, setNewDoctorData] = useState<Partial<DoctorInput>>({ name: '', email: '', phone: '', specialization: '', password: '', schedules: [] });
+  const [newDoctorData, setNewDoctorData] = useState<Partial<DoctorInput>>({ name: '', email: '', phone: '', specialization: '', password: '', schedules: [], location_id: currentLocationId || '' });
   const [newUserData, setNewUserData] = useState<Partial<User>>(getDefaultUserFormData());
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [newMedicineData, setNewMedicineData] = useState<Partial<Medicine>>({
@@ -619,6 +631,10 @@ const App: React.FC = () => {
     () => getTownshipsForCity(newPatientData.city || '').map((township) => ({ value: township, label: township })),
     [newPatientData.city]
   );
+  const branchScopedAppointmentPatients = useMemo(() => {
+    if (!currentLocationId) return patients;
+    return patients.filter((patient) => patient.location_id === currentLocationId);
+  }, [patients, currentLocationId]);
 
   const applySessionState = (session: ReturnType<typeof auth.getSession>) => {
     if (!session) {
@@ -737,6 +753,7 @@ const App: React.FC = () => {
     if (updatedSession.location_id) {
       setCurrentLocationId(updatedSession.location_id);
       localStorage.setItem('currentLocationId', updatedSession.location_id);
+      localStorage.setItem(ACTIVE_BRANCH_STORAGE_KEY, updatedSession.location_id);
       setDashboardLocationId(updatedSession.location_id);
       localStorage.setItem('dashboardLocationId', updatedSession.location_id);
       await fetchInitialData(updatedSession.location_id);
@@ -758,12 +775,13 @@ const App: React.FC = () => {
   // Check authentication on mount
   useEffect(() => {
     const checkAuth = async () => {
+      const storedBranchId = getStoredBranchId();
       const session = auth.getSession();
       if (session) {
         applySessionState(session);
         // Initialize default admin and fetch data
         await auth.initializeDefaultAdmin();
-        fetchInitialData();
+        fetchInitialData(session.location_id || storedBranchId || undefined);
         fetchUsers();
         return;
       }
@@ -773,7 +791,7 @@ const App: React.FC = () => {
         applySessionState(restoredSession);
 
         if (restoredSession.role !== 'patient') {
-          fetchInitialData();
+          fetchInitialData(restoredSession.location_id || storedBranchId || undefined);
           fetchUsers();
         }
         return;
@@ -789,7 +807,7 @@ const App: React.FC = () => {
       resetStaffSession();
     });
     
-  }, [isAuthenticated]);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -891,11 +909,12 @@ const App: React.FC = () => {
       if (session.location_id) {
         setCurrentLocationId(session.location_id);
         localStorage.setItem('currentLocationId', session.location_id);
+        localStorage.setItem(ACTIVE_BRANCH_STORAGE_KEY, session.location_id);
       }
       
       // For patients, don't fetch admin data
       if (session.role !== 'patient') {
-        fetchInitialData();
+        fetchInitialData(session.location_id || localStorage.getItem('currentLocationId') || undefined);
         fetchUsers();
       }
     }
@@ -979,18 +998,11 @@ const App: React.FC = () => {
     const requestId = ++dashboardFetchRequestRef.current;
     const session = auth.getSession();
     const restrictedLocationId = session?.location_id || '';
-    const canViewAllBranches = session?.role === 'admin' && !restrictedLocationId;
     const availableLocations = knownLocations || locations;
-    const requestedScope = canViewAllBranches
-      ? (scopeLocationId || dashboardLocationId || ALL_BRANCHES_VALUE)
-      : (restrictedLocationId || scopeLocationId || currentLocationId || availableLocations[0]?.id || '');
-    const hasMatchingLocation = requestedScope !== ALL_BRANCHES_VALUE && availableLocations.some(loc => loc.id === requestedScope);
-    const sanitizedScope = restrictedLocationId || (
-      canViewAllBranches
-        ? (requestedScope === ALL_BRANCHES_VALUE || hasMatchingLocation ? requestedScope : ALL_BRANCHES_VALUE)
-        : (hasMatchingLocation ? requestedScope : (availableLocations[0]?.id || requestedScope))
-    );
-    const queryLocationId = sanitizedScope === ALL_BRANCHES_VALUE ? undefined : sanitizedScope;
+    const requestedScope = restrictedLocationId || scopeLocationId || currentLocationId || availableLocations[0]?.id || '';
+    const hasMatchingLocation = availableLocations.some(loc => loc.id === requestedScope);
+    const sanitizedScope = restrictedLocationId || (hasMatchingLocation ? requestedScope : (availableLocations[0]?.id || requestedScope));
+    const queryLocationId = sanitizedScope || undefined;
     const storedPayments = readPaymentRecords();
     const scopedPayments = queryLocationId
       ? storedPayments.filter((record) => record.location_id === queryLocationId)
@@ -1020,8 +1032,7 @@ const App: React.FC = () => {
     const session = auth.getSession();
     const restrictedLocationId = session?.location_id || '';
     const queryLocationId = restrictedLocationId || currentLocationId || undefined;
-    const canAccessAllLocations = isAdmin && !restrictedLocationId;
-    const assistantLocationId = canAccessAllLocations ? undefined : queryLocationId;
+    const assistantLocationId = queryLocationId;
 
     const [patData, aptData, docData, typeData, recordsData, medData, expenseData, recallData] = await Promise.all([
       api.patients.getAll(assistantLocationId),
@@ -1045,6 +1056,7 @@ const App: React.FC = () => {
   };
 
   const fetchInitialData = async (overrideLocationId?: string) => {
+    const requestId = ++initialDataFetchRequestRef.current;
     try {
       setLoading(true);
       setError(null);
@@ -1058,23 +1070,33 @@ const App: React.FC = () => {
         api.patientTypes.getAll(),
         api.appointmentTypes.getAll()
       ]);
+      if (requestId !== initialDataFetchRequestRef.current) return;
+
       setLocations(locData);
       setPatientTypes(patientTypeData);
       setAppointmentTypes(appointmentTypeData);
       const session = auth.getSession();
       const restrictedLocationId = session?.location_id || '';
+      const storedLocationId = readPersistedBranchId();
 
       if (restrictedLocationId && currentLocationId !== restrictedLocationId) {
         setCurrentLocationId(restrictedLocationId);
         localStorage.setItem('currentLocationId', restrictedLocationId);
+        localStorage.setItem(ACTIVE_BRANCH_STORAGE_KEY, restrictedLocationId);
       }
       
+      // Resolve branch in stable order: restricted > explicit override > current state > persisted storage.
+      let locId = restrictedLocationId || overrideLocationId || currentLocationId || storedLocationId;
+      if (!restrictedLocationId && locId && !locData.some((loc) => loc.id === locId)) {
+        locId = '';
+      }
+
       // If no location selected but locations exist, select first one
-      let locId = restrictedLocationId || overrideLocationId || currentLocationId;
       if (!locId && locData.length > 0) {
         locId = locData[0].id;
         setCurrentLocationId(locId);
         localStorage.setItem('currentLocationId', locId);
+        localStorage.setItem(ACTIVE_BRANCH_STORAGE_KEY, locId);
       }
       
       // If still no location, try to create a default one
@@ -1088,10 +1110,19 @@ const App: React.FC = () => {
           locId = defaultLocation.id;
           setCurrentLocationId(locId);
           localStorage.setItem('currentLocationId', locId);
+          localStorage.setItem(ACTIVE_BRANCH_STORAGE_KEY, locId);
           setLocations([defaultLocation]);
         } catch (createError) {
           console.error('Failed to create default location:', createError);
         }
+      }
+
+      // Keep branch selection sticky across refreshes:
+      // whenever a location is resolved (stored/override/restricted/default), sync state + storage.
+      if (locId && currentLocationId !== locId) {
+        setCurrentLocationId(locId);
+        localStorage.setItem('currentLocationId', locId);
+        localStorage.setItem(ACTIVE_BRANCH_STORAGE_KEY, locId);
       }
       
       // Only fetch data if we have a valid location
@@ -1108,6 +1139,7 @@ const App: React.FC = () => {
           api.recalls.getAll(locId),
           api.medicines.getSales(locId)
         ]);
+        if (requestId !== initialDataFetchRequestRef.current) return;
 
         const isDoctorSession = session?.role === 'doctor' && !!session?.doctor_id;
         const doctorAppointments = isDoctorSession
@@ -1140,19 +1172,55 @@ const App: React.FC = () => {
         setMedicineSales(salesData);
       }
 
-      await fetchDashboardData(undefined, locData);
+      if (requestId !== initialDataFetchRequestRef.current) return;
+      await fetchDashboardData(locId, locData);
     } catch (err: any) {
+      if (requestId !== initialDataFetchRequestRef.current) return;
       console.error('Error fetching initial data:', err);
       setError(err.message || "Failed to connect to database. Please check your network.");
     } finally {
-      setLoading(false);
+      if (requestId === initialDataFetchRequestRef.current) {
+        setLoading(false);
+      }
     }
   };
 
   const handleLocationChange = async (locId: string) => {
     setCurrentLocationId(locId);
     localStorage.setItem('currentLocationId', locId);
+    localStorage.setItem(ACTIVE_BRANCH_STORAGE_KEY, locId);
+    setDashboardLocationId(locId);
+    localStorage.setItem('dashboardLocationId', locId);
+    setSelectedPatient(null);
+    setShowPatientModal(false);
+    setShowAppointmentModal(false);
+    setShowPaymentModal(false);
+    setShowReceipt(false);
+    setShowTreatmentSelection(false);
+    setShowReceiptPrompt(false);
+    setShowTreatmentTypeModal(false);
+    setShowDoctorModal(false);
+    setShowUserModal(false);
+    setShowMedicineModal(false);
+    setShowMedicineSelectionModal(false);
+    setShowExpenseModal(false);
+    setEditingAppointment(null);
+    setEditingDoctor(null);
+    setEditingMedicine(null);
+    setEditingExpense(null);
+    setEditingTreatmentType(null);
+    setConvertingLeadAppointment(null);
     await fetchInitialData(locId);
+    // Ensure Patients page always reflects the newly selected branch,
+    // even if another parallel data request inside fetchInitialData is flaky.
+    const refreshedPatients = await api.patients.getAll(locId);
+    const refreshedAppointments = await api.appointments.getAll(locId);
+    const refreshedDoctors = await api.doctors.getAll(locId);
+    const refreshedRecalls = await api.recalls.getAll(locId);
+    setPatients(refreshedPatients);
+    setAppointments(refreshedAppointments);
+    setDoctors(refreshedDoctors);
+    setRecalls(refreshedRecalls);
   };
 
   const handleDashboardLocationChange = async (locId: string) => {
@@ -1374,18 +1442,25 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (currentView === 'records') fetchGlobalRecords();
-  }, [currentView]);
+  }, [currentView, currentLocationId]);
 
   const handleCreatePatient = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
+
+    // Validate branch selection
+    if (!newPatientData.location_id) {
+      alert('Please select a branch/location for this patient.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      console.log('Creating patient with location_id:', currentLocationId);
+      console.log('Creating patient with location_id:', newPatientData.location_id);
       const registrationFee = applyClinicalFeeOnRegistration ? Math.max(0, Number(clinicalFeeAmount || 0)) : 0;
       const patientInput = {
         ...newPatientData,
-        location_id: currentLocationId,
+        location_id: newPatientData.location_id,
         balance: registrationFee,
       } as Parameters<typeof api.patients.create>[0];
       const createdPatient = await api.patients.create(patientInput);
@@ -1396,28 +1471,35 @@ const App: React.FC = () => {
         });
       }
       setShowPatientModal(false);
-      fetchInitialData(); 
-      setNewPatientData({ 
-        name: '', 
-        email: '', 
-        phone: '', 
-        medicalHistory: '', 
+      await fetchInitialData(currentLocationId || undefined);
+      setNewPatientData({
+        name: '',
+        email: '',
+        phone: '',
+        medicalHistory: '',
         password: '',
         age: undefined,
         address: '',
         city: '',
         township: '',
-        patient_type: activePatientTypeOptions[0] || DEFAULT_PATIENT_TYPE_NAME
+        patient_type: activePatientTypeOptions[0] || DEFAULT_PATIENT_TYPE_NAME,
+        location_id: ''
       });
       setApplyClinicalFeeOnRegistration(clinicalFeeEnabled);
       setConvertingLeadAppointment(null);
-      if (registrationFee > 0) {
-        setToast({
-          message: `Patient registered with clinical fee: ${formatCurrency(registrationFee, currency)}.`,
-          type: 'success',
-          show: true
-        });
-      }
+      const createdBranch = locations.find((loc) => loc.id === createdPatient.location_id);
+      const viewingDifferentBranch = !!createdPatient.location_id && !!currentLocationId && createdPatient.location_id !== currentLocationId;
+      const baseSuccessMessage = registrationFee > 0
+        ? `Patient registered with clinical fee: ${formatCurrency(registrationFee, currency)}.`
+        : 'Patient registered successfully.';
+      const branchHint = viewingDifferentBranch
+        ? ` Saved to ${createdBranch?.name || 'another branch'}. Switch branch in Settings to view it.`
+        : '';
+      setToast({
+        message: `${baseSuccessMessage}${branchHint}`,
+        type: 'success',
+        show: true
+      });
     } catch (err: any) {
       console.error('Patient creation error:', err);
       alert(`Error creating patient: ${err.message}`);
@@ -1464,7 +1546,7 @@ const App: React.FC = () => {
 
   const resetAppointmentForm = () => {
     setAppointmentPatientMode('registered');
-    setNewAppointmentData({ date: '', time: '', type: appointmentTypeOptions[0] || '', status: 'Scheduled', patient_id: '', doctor_id: '', guest_name: '', guest_phone: '', guest_source: '', guest_notes: '' });
+    setNewAppointmentData({ date: '', time: '', type: appointmentTypeOptions[0] || '', status: 'Scheduled', patient_id: '', doctor_id: '', guest_name: '', guest_phone: '', guest_source: '', guest_notes: '', location_id: currentLocationId || '' });
     setDoctorSearchQuery('');
     setShowDoctorDropdown(false);
     setAppointmentClinicalFocus('');
@@ -1475,6 +1557,11 @@ const App: React.FC = () => {
   const handleCreateAppointment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
+    const targetLocationId = (newAppointmentData.location_id || '').trim() || currentLocationId;
+    if (!targetLocationId) {
+      alert('Please select a branch/location for this appointment.');
+      return;
+    }
     setIsSubmitting(true);
     try {
       const compiledNotes = buildAppointmentClinicalFocusNotes({
@@ -1490,6 +1577,7 @@ const App: React.FC = () => {
         guest_source: appointmentPatientMode === 'lead' ? (newAppointmentData.guest_source || '').trim() : null,
         guest_notes: appointmentPatientMode === 'lead' ? (newAppointmentData.guest_notes || '').trim() : null,
         doctor_id: (newAppointmentData.doctor_id || '').trim() || undefined,
+        location_id: targetLocationId,
         notes: compiledNotes || undefined,
         created_by_user_id: auth.getSession()?.userId || null,
         created_by_user_name: currentUser || auth.getSession()?.username || null
@@ -1497,10 +1585,20 @@ const App: React.FC = () => {
       if (editingAppointment) {
         await api.appointments.update(editingAppointment.id, payload);
       } else {
-        await api.appointments.create({ ...payload, location_id: currentLocationId });
+        await api.appointments.create(payload);
       }
       setShowAppointmentModal(false);
-      fetchInitialData();
+      await fetchInitialData(currentLocationId || undefined);
+      const targetBranch = locations.find((loc) => loc.id === targetLocationId);
+      const viewingDifferentBranch = !!currentLocationId && targetLocationId !== currentLocationId;
+      const branchHint = viewingDifferentBranch
+        ? ` Saved to ${targetBranch?.name || 'another branch'}. Switch branch in Settings to view it.`
+        : '';
+      setToast({
+        message: editingAppointment ? `Appointment updated successfully.${branchHint}` : `Appointment created successfully.${branchHint}`,
+        type: 'success',
+        show: true
+      });
       setEditingAppointment(null);
       resetAppointmentForm();
     } catch (err: any) {
@@ -1561,6 +1659,12 @@ const App: React.FC = () => {
       setIsSubmitting(false);
       return;
     }
+    const targetDoctorLocationId = (newDoctorData.location_id || '').trim() || currentLocationId;
+    if (!targetDoctorLocationId) {
+      alert('Please select a branch/location for this doctor.');
+      setIsSubmitting(false);
+      return;
+    }
     
     // Validate schedules before submitting
     const schedules = (newDoctorData.schedules || []).filter(sched => {
@@ -1592,7 +1696,7 @@ const App: React.FC = () => {
     try {
       const doctorDataToSave = {
         ...newDoctorData,
-        location_id: currentLocationId,
+        location_id: targetDoctorLocationId,
         password: trimmedDoctorPassword || undefined,
         schedules: schedules
       };
@@ -1605,7 +1709,7 @@ const App: React.FC = () => {
       setShowDoctorModal(false);
       fetchInitialData();
       setEditingDoctor(null);
-      setNewDoctorData({ name: '', email: '', phone: '', specialization: '', password: '', schedules: [] });
+      setNewDoctorData({ name: '', email: '', phone: '', specialization: '', password: '', schedules: [], location_id: currentLocationId || '' });
     } catch (err: any) {
       alert(err.message);
     } finally {
@@ -1811,6 +1915,24 @@ const App: React.FC = () => {
   const handleCreateLocation = async (locData: Partial<Location>) => {
     try {
       await api.locations.create(locData);
+      fetchInitialData();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleUpdateLocation = async (id: string, locData: Partial<Location>) => {
+    try {
+      await api.locations.update(id, locData);
+      fetchInitialData();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleDeleteLocation = async (id: string) => {
+    try {
+      await api.locations.delete(id);
       fetchInitialData();
     } catch (err: any) {
       alert(err.message);
@@ -2290,7 +2412,8 @@ const App: React.FC = () => {
       address: '',
       city: '',
       township: '',
-      patient_type: mapLeadSourceToPatientType(appointment.guest_source)
+      patient_type: mapLeadSourceToPatientType(appointment.guest_source),
+      location_id: currentLocationId || ''
     });
     setApplyClinicalFeeOnRegistration(clinicalFeeEnabled);
     setShowAppointmentModal(false);
@@ -2508,6 +2631,7 @@ const App: React.FC = () => {
   }
 
   const session = auth.getSession();
+  const canAdminViewAllBranches = !!(session?.role === 'admin' && !session?.location_id);
   const currentDoctor = isDoctor && session?.doctor_id
     ? doctors.find((doctor) => doctor.id === session.doctor_id) || null
     : null;
@@ -2541,7 +2665,6 @@ const App: React.FC = () => {
     }
   ];
   const doctorViewTitle = 'Doctor Dashboard';
-
   return (
     <div className={isDoctor ? "min-h-screen bg-gray-50 flex flex-col" : "min-h-screen flex bg-gray-50 flex-col md:flex-row"}>
       {/* Toast Notification */}
@@ -2703,7 +2826,7 @@ const App: React.FC = () => {
                   locations={locations}
                   selectedLocationId={dashboardLocationId}
                   allBranchesValue={ALL_BRANCHES_VALUE}
-                  canViewAllBranches={isAdmin && !auth.getSession()?.location_id}
+                  canViewAllBranches={canAdminViewAllBranches}
                   onLocationChange={handleDashboardLocationChange}
                   loading={loading}
                 />
@@ -2729,11 +2852,12 @@ const App: React.FC = () => {
                     address: '',
                     city: '',
                     township: '',
-                    patient_type: activePatientTypeOptions[0] || DEFAULT_PATIENT_TYPE_NAME
+                    patient_type: activePatientTypeOptions[0] || DEFAULT_PATIENT_TYPE_NAME,
+                    location_id: currentLocationId || ''
                   });
                   setApplyClinicalFeeOnRegistration(clinicalFeeEnabled);
                   setShowPatientModal(true);
-                }} 
+                }}
                 onExportPDF={async () => {
                    const freshPatients = await api.patients.getAll(currentLocationId || undefined);
                    const { exportPatientsToPDF } = await import('./utils/pdfExport');
@@ -2781,6 +2905,7 @@ const App: React.FC = () => {
                     status: apt.status,
                     patient_id: apt.patient_id || '',
                     doctor_id: apt.doctor_id,
+                    location_id: apt.location_id || currentLocationId || '',
                     notes: apt.notes,
                     guest_name: apt.guest_name || '',
                     guest_phone: apt.guest_phone || '',
@@ -2819,7 +2944,7 @@ const App: React.FC = () => {
                    await exportAppointmentsToExcel(freshAppointments);
                 }}
             />}
-            {currentView === 'doctors' && canAccessView('doctors') && <DoctorsView doctors={doctors} loading={loading} onAdd={() => {setEditingDoctor(null); setNewDoctorData({ name: '', email: '', phone: '', specialization: '', password: '', schedules: [] }); setShowDoctorModal(true)}} onEdit={(doc) => {setEditingDoctor(doc); setNewDoctorData({ ...doc, password: '' }); setShowDoctorModal(true)}} onDelete={handleDeleteDoctor} />}
+            {currentView === 'doctors' && canAccessView('doctors') && <DoctorsView doctors={doctors} loading={loading} onAdd={() => {setEditingDoctor(null); setNewDoctorData({ name: '', email: '', phone: '', specialization: '', password: '', schedules: [], location_id: currentLocationId || '' }); setShowDoctorModal(true)}} onEdit={(doc) => {setEditingDoctor(doc); setNewDoctorData({ ...doc, password: '' }); setShowDoctorModal(true)}} onDelete={handleDeleteDoctor} />}
             {currentView === 'treatments' && canAccessView('treatments') && <TreatmentConfigView treatmentTypes={treatmentTypes} currency={currency} onAdd={() => {setEditingTreatmentType(null); setNewTreatmentTypeData({ name: '', cost: 0, category: '' }); setShowTreatmentTypeModal(true)}} onEdit={(t) => {setEditingTreatmentType(t); setNewTreatmentTypeData(t); setShowTreatmentTypeModal(true)}} onDelete={(id) => { const treatment = treatmentTypes.find(t => t.id === id); if (treatment) { setServiceToDelete({ id: treatment.id, name: treatment.name }); setDeleteServiceConfirmOpen(true); } }} />}
             {currentView === 'records' && canAccessView('records') && <RecordsView records={globalRecords} appointments={appointments} loading={loading} onRefresh={fetchGlobalRecords} onDeleteAll={isDoctor ? () => alert('Doctor accounts cannot delete patient records.') : handleDeleteAllRecords} currency={currency} isDoctor={isDoctor} initialFilter={recordsInitialFilter} />}
             {currentView === 'inventory' && canAccessView('inventory') && <InventoryView medicines={medicines} topSelling={topSellingMedicines} loading={loading} currency={currency} onAdd={() => {setEditingMedicine(null); setNewMedicineData({ name: '', description: '', unit: 'pack', item_type: 'Medicine', price: 0, stock: 0, min_stock: 0, quantity_step: 1, category: '' }); setShowMedicineModal(true)}} onEdit={(med) => {setEditingMedicine(med); setNewMedicineData(med); setShowMedicineModal(true)}} onDelete={handleDeleteMedicine} />}
@@ -2852,6 +2977,8 @@ const App: React.FC = () => {
                     currentLocationId={currentLocationId}
                     onLocationChange={handleLocationChange}
                     onAddLocation={handleCreateLocation}
+                    onUpdateLocation={handleUpdateLocation}
+                    onDeleteLocation={handleDeleteLocation}
                     loyaltyRules={loyaltyRules}
                     onUpdateLoyaltyRule={handleUpdateLoyaltyRule}
                     onCreateLoyaltyRule={handleCreateLoyaltyRule}
@@ -2918,7 +3045,7 @@ const App: React.FC = () => {
                 recalls={assistantRecalls}
                 locations={locations}
                 currentLocationId={currentLocationId}
-                canAccessAllLocations={isAdmin && !auth.getSession()?.location_id}
+                canAccessAllLocations={false}
                 currentAdminId={auth.getCurrentUser()?.userId}
                 currency={currency}
                 onDataRefresh={refreshAssistantData}
@@ -3069,6 +3196,20 @@ const App: React.FC = () => {
               </div>
             </div>
 
+            <div>
+              <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">Branch / Location</label>
+              <select
+                className="w-full border-gray-200 border rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white"
+                value={newPatientData.location_id || ''}
+                onChange={(e) => setNewPatientData({...newPatientData, location_id: e.target.value})}
+              >
+                <option value="">Select a branch...</option>
+                {locations.map((loc) => (
+                  <option key={loc.id} value={loc.id}>{loc.name}</option>
+                ))}
+              </select>
+            </div>
+
             <div className="rounded-xl border border-indigo-100 bg-indigo-50/70 p-4">
               <p className="text-[10px] font-black uppercase tracking-wide text-indigo-700 mb-2">Clinical Fee on Registration</p>
               <div className="flex items-center gap-6">
@@ -3206,7 +3347,7 @@ const App: React.FC = () => {
                   onChange={(e: any) => setNewAppointmentData({...newAppointmentData, patient_id: e.target.value})}
                 >
                   <option value="">Select a patient</option>
-                  {patients.map(patient => (
+                  {branchScopedAppointmentPatients.map(patient => (
                     <option key={patient.id} value={patient.id}>{patient.name}</option>
                   ))}
                 </select>
@@ -3381,6 +3522,19 @@ const App: React.FC = () => {
                 </select>
               </div>
             </div>
+            <div>
+              <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">Branch / Location</label>
+              <select
+                className="w-full border-gray-200 border rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white"
+                value={newAppointmentData.location_id || ''}
+                onChange={(e: any) => setNewAppointmentData({ ...newAppointmentData, location_id: e.target.value })}
+              >
+                <option value="">Select a branch...</option>
+                {locations.map((loc) => (
+                  <option key={loc.id} value={loc.id}>{loc.name}</option>
+                ))}
+              </select>
+            </div>
             <div className="grid grid-cols-1 gap-4">
               <div>
                 <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">Extra Notes</label>
@@ -3411,6 +3565,19 @@ const App: React.FC = () => {
             <div className="grid grid-cols-2 gap-4">
               <Input label="Email" type="email" value={newDoctorData.email} onChange={(e: any) => setNewDoctorData({...newDoctorData, email: e.target.value})} />
               <Input label="Phone" value={newDoctorData.phone} onChange={(e: any) => setNewDoctorData({...newDoctorData, phone: e.target.value})} />
+            </div>
+            <div>
+              <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">Branch / Location</label>
+              <select
+                className="w-full border-gray-200 border rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white"
+                value={newDoctorData.location_id || ''}
+                onChange={(e: any) => setNewDoctorData({ ...newDoctorData, location_id: e.target.value })}
+              >
+                <option value="">Select a branch...</option>
+                {locations.map((loc) => (
+                  <option key={loc.id} value={loc.id}>{loc.name}</option>
+                ))}
+              </select>
             </div>
             <Input label="Specialization" value={newDoctorData.specialization} onChange={(e: any) => setNewDoctorData({...newDoctorData, specialization: e.target.value})} placeholder="e.g., Orthodontics, Oral Surgery" />
             <div>

@@ -397,6 +397,23 @@ export const api = {
         .single();
       if (error) throw new Error(error.message);
       return result;
+    },
+    update: async (id: string, data: Partial<Location>): Promise<Location> => {
+      const { data: result, error } = await supabase
+        .from('locations')
+        .update(data)
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw new Error(error.message);
+      return result;
+    },
+    delete: async (id: string): Promise<void> => {
+      const { error } = await supabase
+        .from('locations')
+        .delete()
+        .eq('id', id);
+      if (error) throw new Error(error.message);
     }
   },
 
@@ -717,6 +734,7 @@ export const api = {
           .from('patient_auth')
           .insert({
             patient_id: result.id,
+            location_id: finalLocationId,
             username: data.username ? data.username.trim().toLowerCase() : null,
             email: normalizedEmail || null,
             phone: normalizedPhone || null,
@@ -735,6 +753,7 @@ export const api = {
       const normalizedEmail = data.email ? data.email.toLowerCase().trim() : data.email;
       const normalizedPhone = data.phone ? data.phone.trim() : data.phone;
       const payload = {
+        location_id: data.location_id,
         name: data.name,
         email: normalizedEmail,
         phone: normalizedPhone,
@@ -756,11 +775,12 @@ export const api = {
 
       if (error) throw new Error(error.message);
       
-      // If phone number or email was updated, also update it in patient_auth table
-      if (data.phone !== undefined || data.email !== undefined) {
+      // Keep patient_auth in sync for account lookups and branch-scoped access.
+      if (data.phone !== undefined || data.email !== undefined || data.location_id !== undefined) {
         const authUpdateData: any = {};
         if (data.phone !== undefined) authUpdateData.phone = normalizedPhone;
         if (data.email !== undefined) authUpdateData.email = normalizedEmail;
+        if (data.location_id !== undefined) authUpdateData.location_id = data.location_id || null;
         
         const { error: authError } = await supabase
           .from('patient_auth')
@@ -794,6 +814,18 @@ export const api = {
       const normalizedEmail = email ? email.toLowerCase().trim() : email;
       const normalizedPhone = phone ? phone.trim() : phone;
       const normalizedUsername = username ? username.trim().toLowerCase() : username;
+      const { data: patientRecord, error: patientError } = await supabase
+        .from('patients')
+        .select('location_id')
+        .eq('id', patientId)
+        .maybeSingle();
+
+      if (patientError) {
+        throw new Error(patientError.message);
+      }
+
+      const patientLocationId = patientRecord?.location_id || null;
+
       // Check if auth record exists
       const { data: existing } = await supabase
         .from('patient_auth')
@@ -803,7 +835,7 @@ export const api = {
 
       if (existing) {
         // Update
-        const updateData: any = { password, email: normalizedEmail };
+        const updateData: any = { password, email: normalizedEmail, location_id: patientLocationId };
         if (phone !== undefined) updateData.phone = normalizedPhone;
         if (username !== undefined) updateData.username = normalizedUsername ?? null;
         
@@ -818,6 +850,7 @@ export const api = {
           .from('patient_auth')
           .insert({
             patient_id: patientId,
+            location_id: patientLocationId,
             username: normalizedUsername ?? null,
             email: normalizedEmail,
             phone: normalizedPhone || null,
@@ -1033,7 +1066,7 @@ export const api = {
       // 2. Check if patient already exists
       let { data: existingPatient, error: fetchError } = await supabase
         .from('patients')
-        .select('id, name, email, phone')
+        .select('id, name, email, phone, location_id')
         .eq('email', normalizedEmail)
         .single();
 
@@ -1062,6 +1095,7 @@ export const api = {
         .from('patient_auth')
         .upsert({
           patient_id: patient.id,
+          location_id: patient.location_id || defaultLocationId,
           username: normalizedUsername,
           email: normalizedEmail,
           phone: patient.phone || null,
@@ -1095,7 +1129,7 @@ export const api = {
       // 2. Check if patient already exists by email
       let { data: existingPatient, error: fetchError } = await supabase
         .from('patients')
-        .select('id, name, email, phone')
+        .select('id, name, email, phone, location_id')
         .eq('email', normalizedEmail)
         .single();
 
@@ -1134,6 +1168,7 @@ export const api = {
         // Update existing auth record
         const updateData: any = {
           patient_id: patient.id,
+          location_id: patient.location_id || defaultLocationId,
           is_verified: true
         };
         if (supabaseUserId) {
@@ -1159,6 +1194,7 @@ export const api = {
         // Create new auth record
         const authData: any = {
           patient_id: patient.id,
+          location_id: patient.location_id || defaultLocationId,
           username: normalizedUsername,
           email: normalizedEmail,
           phone: normalizedPhone || patient.phone || null,
