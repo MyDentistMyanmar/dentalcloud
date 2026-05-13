@@ -144,6 +144,13 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
     }
   };
 
+  const isNewPatientAppointment = (appointment: Appointment) => !appointment.patient_id;
+  const renderNewPatientBadge = (compact = false) => (
+    <span className={`rounded bg-amber-100 ${compact ? 'px-1.5' : 'px-2'} py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700`}>
+      New Patient
+    </span>
+  );
+
   const activeVisitAppointments = useMemo(
     () => appointments.filter((appointment) => appointment.status !== 'Cancelled'),
     [appointments]
@@ -483,14 +490,12 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
                               <div>
                                 <div className="flex flex-wrap items-center gap-2">
                                   <p className="font-semibold text-gray-900">{appointment.patient_name || 'Unknown Patient'}</p>
-                                  {!appointment.patient_id && (
-                                    <span className="rounded bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">Lead</span>
-                                  )}
+                                  {isNewPatientAppointment(appointment) && renderNewPatientBadge()}
                                 </div>
                                 <p className="text-xs text-gray-500 mt-1">
                                   Dr. {appointment.doctor_name || '-'} • {formatDateDDMMYYYY(appointment.date)} • {formatTime(appointment.time)}
                                 </p>
-                                {!appointment.patient_id && (
+                                {isNewPatientAppointment(appointment) && (
                                   <p className="text-xs text-amber-700 mt-1">
                                     {appointment.guest_phone || 'No phone'}{appointment.guest_source ? ` • ${appointment.guest_source}` : ''}
                                   </p>
@@ -508,7 +513,7 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
                                   View Chart
                                 </button>
                               )}
-                              {!appointment.patient_id && onConvertLead && (
+                              {isNewPatientAppointment(appointment) && onConvertLead && (
                                 <button onClick={() => onConvertLead(appointment)} className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100 transition-colors">
                                   <User className="w-3.5 h-3.5" />
                                   Convert
@@ -540,14 +545,12 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
                               <div>
                                 <div className="flex flex-wrap items-center gap-2">
                                   <p className="font-semibold text-gray-800">{appointment.patient_name || 'Unknown Patient'}</p>
-                                  {!appointment.patient_id && (
-                                    <span className="rounded bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">Lead</span>
-                                  )}
+                                  {isNewPatientAppointment(appointment) && renderNewPatientBadge()}
                                 </div>
                                 <p className="text-xs text-gray-500 mt-1">
                                   Dr. {appointment.doctor_name || '-'} • {formatDateDDMMYYYY(appointment.date)} • {formatTime(appointment.time)}
                                 </p>
-                                {!appointment.patient_id && (
+                                {isNewPatientAppointment(appointment) && (
                                   <p className="text-xs text-amber-700 mt-1">
                                     {appointment.guest_phone || 'No phone'}{appointment.guest_source ? ` • ${appointment.guest_source}` : ''}
                                   </p>
@@ -611,11 +614,9 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
                                   <td className="px-3 py-3 align-top font-medium text-gray-900">
                                     <div className="flex flex-wrap items-center gap-2">
                                       <span>{appointment.patient_name || 'Unknown Patient'}</span>
-                                      {!appointment.patient_id && (
-                                        <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">Lead</span>
-                                      )}
+                                      {isNewPatientAppointment(appointment) && renderNewPatientBadge(true)}
                                     </div>
-                                    {!appointment.patient_id && (
+                                    {isNewPatientAppointment(appointment) && (
                                       <div className="mt-1 text-xs font-normal text-amber-700">
                                         {appointment.guest_phone || 'No phone'}{appointment.guest_source ? ` • ${appointment.guest_source}` : ''}
                                       </div>
@@ -645,11 +646,11 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
                                           Chart
                                         </button>
                                       )}
-                                      {!appointment.patient_id && onConvertLead && (
+                                      {isNewPatientAppointment(appointment) && onConvertLead && (
                                         <button
                                           onClick={() => onConvertLead(appointment)}
                                           className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700 hover:bg-amber-100 transition-colors"
-                                          title="Convert lead to patient"
+                                          title="Convert new patient to registered patient"
                                         >
                                           <User className="w-3.5 h-3.5" />
                                           Convert
@@ -828,15 +829,13 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-1.5 md:gap-2 text-xs md:text-sm font-medium text-gray-900">
                               <span className="truncate">{appointment.patient_name || 'Unknown Patient'}</span>
-                              {!appointment.patient_id && (
-                                <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">Lead</span>
-                              )}
+                              {isNewPatientAppointment(appointment) && renderNewPatientBadge(true)}
                             </div>
                             <div className="text-[11px] md:text-xs text-gray-500 mt-0.5 truncate">
                               {formatTime(appointment.time)} • {appointment.type || 'Checkup'}
                               {appointment.doctor_name ? ` • Dr. ${appointment.doctor_name}` : ''}
                             </div>
-                            {!appointment.patient_id && (
+                            {isNewPatientAppointment(appointment) && (
                               <div className="mt-0.5 text-[11px] md:text-xs text-amber-700 truncate">
                                 {appointment.guest_phone || 'No phone'}{appointment.guest_source ? ` • ${appointment.guest_source}` : ''}
                               </div>
@@ -860,15 +859,15 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
                                 <span className="hidden sm:inline">View Chart</span>
                                 <span className="sm:hidden">Chart</span>
                               </button>
-                            ) : onConvertLead ? (
+                            ) : isNewPatientAppointment(appointment) && onConvertLead ? (
                               <button
                                 onClick={() => onConvertLead(appointment)}
                                 className="inline-flex items-center gap-1 md:gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2 md:px-2.5 py-1 md:py-1.5 text-[11px] md:text-xs font-semibold text-amber-700 hover:bg-amber-100 transition-colors"
-                                title="Convert lead to patient"
+                                title="Convert new patient to registered patient"
                               >
                                 <User className="w-3 h-3 md:w-3.5 md:h-3.5" />
                                 <span className="hidden sm:inline">Convert</span>
-                                <span className="sm:hidden">Lead</span>
+                                <span className="sm:hidden">New Patient</span>
                               </button>
                             ) : null}
                             <select

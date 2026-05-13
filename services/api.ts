@@ -1300,7 +1300,7 @@ export const api = {
       const guestPhone = (data.guest_phone || '').trim();
       const hasGuestContact = !!guestName && !!guestPhone;
       if (!hasRegisteredPatient && !hasGuestContact) {
-        throw new Error('Select a registered patient or enter a lead name and phone number.');
+        throw new Error('Select a registered patient or enter a new patient name and phone number.');
       }
       if (!data.date) throw new Error('date is required');
       if (!data.time) throw new Error('time is required');

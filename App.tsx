@@ -1928,7 +1928,7 @@ const App: React.FC = () => {
   const handleUpdateAppointmentStatus = async (id: string, status: 'Scheduled' | 'Completed' | 'Cancelled') => {
     try {
       await api.appointments.updateStatus(id, status);
-      fetchInitialData();
+      await fetchInitialData(currentLocationId || undefined);
     } catch (err: any) {
       alert(err.message);
     }
@@ -3172,7 +3172,7 @@ const App: React.FC = () => {
 
       {/* Modals */}
       {showPatientModal && (
-        <Modal title={convertingLeadAppointment ? "Convert Lead to Patient" : "Register Clinical Patient"} onClose={() => { setShowPatientModal(false); setConvertingLeadAppointment(null); }}>
+        <Modal title={convertingLeadAppointment ? "Register New Patient" : "Register Clinical Patient"} onClose={() => { setShowPatientModal(false); setConvertingLeadAppointment(null); }}>
           <form onSubmit={handleCreatePatient} className="space-y-5">
             {convertingLeadAppointment && (
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
@@ -3181,7 +3181,7 @@ const App: React.FC = () => {
                   {convertingLeadAppointment.date} at {convertingLeadAppointment.time}
                 </p>
                 <p className="mt-1 text-xs text-amber-700">
-                  This patient profile will be linked back to the existing lead appointment.
+                  This patient profile will be linked back to the existing new patient appointment.
                 </p>
               </div>
             )}
@@ -3378,14 +3378,14 @@ const App: React.FC = () => {
               <div className="space-y-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
                 <div className="grid grid-cols-2 gap-4">
                   <Input
-                    label="Lead Name"
+                    label="New Patient Name"
                     required
                     value={newAppointmentData.guest_name || ''}
                     onChange={(e: any) => setNewAppointmentData({...newAppointmentData, guest_name: e.target.value})}
                     placeholder="Name for follow-up"
                   />
                   <Input
-                    label="Lead Phone"
+                    label="New Patient Phone"
                     required
                     value={newAppointmentData.guest_phone || ''}
                     onChange={(e: any) => setNewAppointmentData({...newAppointmentData, guest_phone: e.target.value})}
@@ -3393,7 +3393,7 @@ const App: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">Lead Source</label>
+                  <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">New Patient Source</label>
                   <select
                     className="w-full border-gray-200 border rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 bg-white"
                     value={newAppointmentData.guest_source || ''}
@@ -3406,7 +3406,7 @@ const App: React.FC = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">Lead Follow-up Notes</label>
+                  <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">New Patient Follow-up Notes</label>
                   <textarea
                     className="w-full border-gray-200 border rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white"
                     rows={2}
