@@ -421,15 +421,20 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
               <h4 className="font-bold text-indigo-900 leading-tight">
                 {selectedTeeth.length > 0 ? `Apply to Teeth: ${selectedTeeth.join(', ')}` : 'Select Teeth to Perform Treatment'}
               </h4>
-              <label className="flex items-center gap-2 cursor-pointer self-start sm:self-auto">
+              <label className={`flex items-center gap-3 cursor-pointer self-start sm:self-auto rounded-2xl border px-5 py-3 shadow-sm transition ${
+                useFlatRate
+                  ? 'border-indigo-600 bg-indigo-600 text-white shadow-indigo-200'
+                  : 'border-indigo-200 bg-white text-indigo-900 hover:border-indigo-400 hover:bg-indigo-50'
+              }`}>
                 <input
                   type="checkbox"
                   checked={useFlatRate}
                   onChange={(e) => onToggleFlatRate(e.target.checked)}
-                  className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                  aria-label="Apply treatment to all teeth"
+                  className="w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
                 />
-                <span className="text-sm font-medium text-indigo-900">
-                  Flat Rate (All Teeth)
+                <span className="text-base font-black">
+                  ALL TEETH
                 </span>
               </label>
             </div>
