@@ -661,6 +661,48 @@ const App: React.FC = () => {
     if (!currentLocationId) return patients;
     return patients.filter((patient) => patient.location_id === currentLocationId);
   }, [patients, currentLocationId]);
+  const recentDoctorByPatientId = useMemo(() => {
+    const latestCompletedByPatient = new Map<string, { doctorId: string; score: number }>();
+    const latestAnyByPatient = new Map<string, { doctorId: string; score: number }>();
+
+    const getAppointmentScore = (appointment: Appointment) => {
+      const dateTime = new Date(`${appointment.date}T${appointment.time || '00:00'}`).getTime();
+      if (Number.isFinite(dateTime)) return dateTime;
+      if (appointment.created_at) {
+        const createdAtTime = new Date(appointment.created_at).getTime();
+        if (Number.isFinite(createdAtTime)) return createdAtTime;
+      }
+      return 0;
+    };
+
+    appointments.forEach((appointment) => {
+      const patientId = (appointment.patient_id || '').trim();
+      const doctorId = (appointment.doctor_id || '').trim();
+      if (!patientId || !doctorId || appointment.status === 'Cancelled') return;
+
+      const score = getAppointmentScore(appointment);
+      const currentAny = latestAnyByPatient.get(patientId);
+      if (!currentAny || score > currentAny.score) {
+        latestAnyByPatient.set(patientId, { doctorId, score });
+      }
+
+      if (appointment.status === 'Completed') {
+        const currentCompleted = latestCompletedByPatient.get(patientId);
+        if (!currentCompleted || score > currentCompleted.score) {
+          latestCompletedByPatient.set(patientId, { doctorId, score });
+        }
+      }
+    });
+
+    const result = new Map<string, string>();
+    latestAnyByPatient.forEach((entry, patientId) => {
+      result.set(patientId, entry.doctorId);
+    });
+    latestCompletedByPatient.forEach((entry, patientId) => {
+      result.set(patientId, entry.doctorId);
+    });
+    return result;
+  }, [appointments]);
 
   const applySessionState = (session: ReturnType<typeof auth.getSession>) => {
     if (!session) {
@@ -1658,6 +1700,19 @@ const App: React.FC = () => {
   const handleDoctorChange = (doctorId: string) => {
     const selectedDoctor = doctors.find((doctor) => doctor.id === doctorId);
     setNewAppointmentData({ ...newAppointmentData, doctor_id: doctorId || undefined });
+    setDoctorSearchQuery(selectedDoctor ? selectedDoctor.name : '');
+  };
+
+  const handleAppointmentPatientChange = (patientId: string) => {
+    const trimmedPatientId = patientId.trim();
+    const preferredDoctorId = trimmedPatientId ? recentDoctorByPatientId.get(trimmedPatientId) || '' : '';
+    const selectedDoctor = doctors.find((doctor) => doctor.id === preferredDoctorId);
+
+    setNewAppointmentData({
+      ...newAppointmentData,
+      patient_id: trimmedPatientId,
+      doctor_id: preferredDoctorId || undefined
+    });
     setDoctorSearchQuery(selectedDoctor ? selectedDoctor.name : '');
   };
 
@@ -3366,7 +3421,7 @@ const App: React.FC = () => {
                   className="w-full border-gray-200 border rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500"
                   required
                   value={newAppointmentData.patient_id || ''}
-                  onChange={(e: any) => setNewAppointmentData({...newAppointmentData, patient_id: e.target.value})}
+                  onChange={(e: any) => handleAppointmentPatientChange(e.target.value)}
                 >
                   <option value="">Select a patient</option>
                   {branchScopedAppointmentPatients.map(patient => (
