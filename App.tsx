@@ -3985,53 +3985,50 @@ const App: React.FC = () => {
       {showPaymentModal && (
         <Modal
           title="Collect Payment"
-          maxWidthClassName="max-w-2xl"
+          maxWidthClassName="max-w-4xl"
           onClose={() => {
             setShowPaymentModal(false);
             setPaymentDraft({ treatments: [], amountTendered: 0, discountAmount: 0 });
           }}
         >
-          <form onSubmit={handlePaymentSubmit} className="space-y-6">
-            <div
-              className="rounded-[2rem] border p-6 shadow-xl"
-              style={{
-                backgroundColor: paymentThemeColors.primary,
-                borderColor: paymentThemeColors.primary,
-                color: paymentThemeColors.onPrimary
-              }}
-            >
-              <p
-                className="text-xs font-black uppercase tracking-[0.24em]"
-                style={{ color: paymentThemeColors.onPrimary, opacity: 0.78 }}
-              >
-                Patient Info
-              </p>
-              <div className="mt-2 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <h4 className="text-2xl font-black tracking-tight">{selectedPatient?.name || 'Unknown Patient'}</h4>
-                  <p className="text-sm font-semibold" style={{ color: paymentThemeColors.onPrimary, opacity: 0.86 }}>
-                    ID: {selectedPatient?.id || '-'}
+          <form onSubmit={handlePaymentSubmit} className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+            <div className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50 p-6">
+              <div>
+                <p className="text-sm font-semibold text-slate-500">Patient</p>
+                <h4 className="mt-1 text-2xl font-black tracking-tight text-slate-950">
+                  {selectedPatient?.name || 'Unknown Patient'}
+                </h4>
+                <p className="mt-1 text-sm font-medium text-slate-500">ID: {selectedPatient?.id || '-'}</p>
+              </div>
+
+              <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+                <p className="text-sm font-semibold text-slate-500">Balance due</p>
+                <p className="mt-2 text-4xl font-black tracking-tight text-slate-950">
+                  {formatCurrency(paymentOriginalAmount, currency)}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
+                  <p className="font-semibold text-slate-500">Applied to balance</p>
+                  <p className="mt-1 text-lg font-black text-slate-900">
+                    {formatCurrency(paymentClearedAmount, currency)}
                   </p>
                 </div>
-                <div className="sm:text-right">
-                  <p
-                    className="text-[11px] font-black uppercase tracking-[0.24em]"
-                    style={{ color: paymentThemeColors.onPrimary, opacity: 0.72 }}
-                  >
-                    Current Outstanding Balance
-                  </p>
-                  <p className="mt-2 text-4xl font-black tracking-tight sm:text-5xl">
-                    {formatCurrency(paymentOriginalAmount, currency)}
+                <div className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
+                  <p className="font-semibold text-slate-500">New balance</p>
+                  <p className="mt-1 text-lg font-black text-slate-900">
+                    {formatCurrency(Math.max(0, paymentOriginalAmount - paymentClearedAmount), currency)}
                   </p>
                 </div>
               </div>
             </div>
 
-            <div className="space-y-5 rounded-[2rem] border border-slate-200 bg-slate-50 p-6">
-              <div>
-                <label className="mb-2 block text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">
-                  Amount Tendered ({getCurrencySymbol(currency)})
-                </label>
+            <div className="space-y-5">
+              <label className="block">
+                <span className="mb-2 block text-sm font-bold text-slate-700">
+                  Amount received ({getCurrencySymbol(currency)})
+                </span>
                 <input
                   type="number"
                   inputMode="decimal"
@@ -4048,14 +4045,13 @@ const App: React.FC = () => {
                       amountTendered: Math.max(0, Math.min(paymentOriginalAmount, normalizedValue))
                     }));
                   }}
-                  className="payment-flat-number-input w-full rounded-2xl border border-slate-300 bg-white px-5 py-4 text-3xl font-black tracking-tight text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                  className="payment-flat-number-input w-full rounded-2xl border border-slate-300 bg-white px-5 py-5 text-4xl font-black tracking-tight text-slate-950 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
                 />
-                <p className="mt-2 text-sm text-slate-500">Defaulted to the full balance for quick settlement. Reduce it here for a partial collection.</p>
-              </div>
+              </label>
 
-              <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4">
-                <span className="shrink-0 text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">
-                  Discount Amount ({getCurrencySymbol(currency)})
+              <label className="block">
+                <span className="mb-2 block text-sm font-bold text-slate-700">
+                  Discount, if any ({getCurrencySymbol(currency)})
                 </span>
                 <input
                   type="number"
@@ -4075,35 +4071,37 @@ const App: React.FC = () => {
                       };
                     });
                   }}
-                  className="payment-flat-number-input min-w-0 flex-1 border-0 bg-transparent text-right text-xl font-black text-slate-900 outline-none placeholder:text-slate-300"
+                  className="payment-flat-number-input w-full rounded-2xl border border-slate-300 bg-white px-5 py-4 text-2xl font-black text-slate-950 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
                 />
-              </div>
+              </label>
 
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4">
-                <p className="text-[11px] font-black uppercase tracking-[0.24em] text-emerald-700">Final Amount</p>
-                <div className="mt-2 flex items-end justify-between gap-4">
-                  <p className="text-3xl font-black tracking-tight text-emerald-900">
-                    {formatCurrency(paymentFinalAmount, currency)}
-                  </p>
+              <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <p className="text-sm font-bold text-emerald-700">Patient pays now</p>
+                    <p className="mt-1 text-4xl font-black tracking-tight text-emerald-950">
+                      {formatCurrency(paymentFinalAmount, currency)}
+                    </p>
+                  </div>
                   <p className="text-sm font-semibold text-emerald-700">
-                    {paymentDiscountAmount > 0 ? 'Amount tendered minus discount' : 'No discount applied'}
+                    {paymentDiscountAmount > 0 ? `${formatCurrency(paymentDiscountAmount, currency)} discount applied` : 'No discount'}
                   </p>
                 </div>
               </div>
-            </div>
 
-            <button
-              type="submit"
-              disabled={paymentAmountTendered <= 0 || paymentFinalAmount <= 0 || paymentClearedAmount <= 0}
-              className="w-full rounded-2xl py-4 text-base font-black shadow-lg transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
-              style={{
-                backgroundColor: paymentThemeColors.primary,
-                color: paymentThemeColors.onPrimary,
-                boxShadow: `0 18px 36px -18px ${paymentThemeColors.primaryHover}`
-              }}
-            >
-              Confirm Payment
-            </button>
+              <button
+                type="submit"
+                disabled={paymentAmountTendered <= 0 || paymentFinalAmount <= 0 || paymentClearedAmount <= 0}
+                className="w-full rounded-2xl py-5 text-lg font-black shadow-lg transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
+                style={{
+                  backgroundColor: paymentThemeColors.primary,
+                  color: paymentThemeColors.onPrimary,
+                  boxShadow: `0 18px 36px -18px ${paymentThemeColors.primaryHover}`
+                }}
+              >
+                Confirm Payment
+              </button>
+            </div>
           </form>
         </Modal>
       )}
