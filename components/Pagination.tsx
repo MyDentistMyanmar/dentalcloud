@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp } from 'lucide-react';
 
 interface PaginationProps {
   totalItems: number;
@@ -19,23 +19,31 @@ const Pagination: React.FC<PaginationProps> = ({
   onToggleShowAll
 }) => {
   const totalPages = Math.ceil(totalItems / itemsPerPage);
-  const startItem = (currentPage - 1) * itemsPerPage + 1;
-  const endItem = Math.min(currentPage * itemsPerPage, totalItems);
+  const safeCurrentPage = Math.min(Math.max(currentPage, 1), Math.max(totalPages, 1));
+  const startItem = (safeCurrentPage - 1) * itemsPerPage + 1;
+  const endItem = Math.min(safeCurrentPage * itemsPerPage, totalItems);
+  const remainingItems = Math.max(totalItems - endItem, 0);
+  const visiblePageCount = Math.min(totalPages, 5);
 
   if (totalItems === 0) return null;
 
+  const handlePageChange = (page: number) => {
+    onPageChange(Math.min(Math.max(page, 1), totalPages));
+  };
+
   return (
-    <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 bg-gray-50">
-      <div className="text-sm text-gray-600">
+    <div className="flex flex-col gap-3 border-t border-gray-100 bg-gray-50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4">
+      <div className="text-center text-xs text-gray-600 sm:text-left sm:text-sm">
         Showing <span className="font-semibold text-gray-900">{showAll ? totalItems : `${startItem}-${endItem}`}</span> of{' '}
         <span className="font-semibold text-gray-900">{totalItems}</span> items
       </div>
       
-      <div className="flex items-center gap-3">
+      <div className="flex w-full min-w-0 flex-col items-stretch gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-3">
         {totalItems > itemsPerPage && (
           <button
             onClick={onToggleShowAll}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-indigo-200"
+            type="button"
+            className="flex min-h-10 w-full min-w-0 items-center justify-center gap-2 rounded-lg border border-indigo-200 px-3 py-2 text-center text-sm font-medium text-indigo-600 transition-colors hover:bg-indigo-50 sm:w-auto sm:px-4"
           >
             {showAll ? (
               <>
@@ -45,41 +53,49 @@ const Pagination: React.FC<PaginationProps> = ({
             ) : (
               <>
                 <ChevronDown size={16} />
-                See More ({totalItems - endItem} more)
+                {remainingItems > 0 ? `See More (${remainingItems} more)` : 'See More'}
               </>
             )}
           </button>
         )}
         
         {!showAll && totalPages > 1 && (
-          <div className="flex items-center gap-2">
+          <div className="grid w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 sm:w-auto sm:flex">
             <button
-              onClick={() => onPageChange(currentPage - 1)}
-              disabled={currentPage === 1}
-              className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              onClick={() => handlePageChange(safeCurrentPage - 1)}
+              disabled={safeCurrentPage === 1}
+              type="button"
+              aria-label="Previous page"
+              className="flex min-h-10 items-center justify-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Previous
+              <ChevronLeft className="h-4 w-4 sm:hidden" />
+              <span className="hidden sm:inline">Previous</span>
             </button>
             
-            <div className="flex gap-1">
-              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+            <div className="flex justify-center gap-1 px-0.5">
+              {Array.from({ length: visiblePageCount }, (_, i) => {
                 let pageNum: number;
                 if (totalPages <= 5) {
                   pageNum = i + 1;
-                } else if (currentPage <= 3) {
+                } else if (safeCurrentPage <= 3) {
                   pageNum = i + 1;
-                } else if (currentPage >= totalPages - 2) {
+                } else if (safeCurrentPage >= totalPages - 2) {
                   pageNum = totalPages - 4 + i;
                 } else {
-                  pageNum = currentPage - 2 + i;
+                  pageNum = safeCurrentPage - 2 + i;
                 }
+
+                const isNearbyMobilePage = Math.abs(pageNum - safeCurrentPage) <= 1;
                 
                 return (
                   <button
                     key={pageNum}
-                    onClick={() => onPageChange(pageNum)}
-                    className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                      currentPage === pageNum
+                    onClick={() => handlePageChange(pageNum)}
+                    type="button"
+                    aria-label={`Page ${pageNum}`}
+                    aria-current={safeCurrentPage === pageNum ? 'page' : undefined}
+                    className={`${isNearbyMobilePage ? 'flex' : 'hidden sm:flex'} h-10 min-w-10 items-center justify-center rounded-lg px-3 text-sm font-medium transition-colors ${
+                      safeCurrentPage === pageNum
                         ? 'bg-indigo-600 text-white'
                         : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50'
                     }`}
@@ -91,11 +107,14 @@ const Pagination: React.FC<PaginationProps> = ({
             </div>
             
             <button
-              onClick={() => onPageChange(currentPage + 1)}
-              disabled={currentPage === totalPages}
-              className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              onClick={() => handlePageChange(safeCurrentPage + 1)}
+              disabled={safeCurrentPage === totalPages}
+              type="button"
+              aria-label="Next page"
+              className="flex min-h-10 items-center justify-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Next
+              <span className="hidden sm:inline">Next</span>
+              <ChevronRight className="h-4 w-4 sm:hidden" />
             </button>
           </div>
         )}
