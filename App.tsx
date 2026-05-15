@@ -21,7 +21,6 @@ import {
   Menu,
   X,
   MessageCircle,
-  Monitor,
   AlertTriangle,
   BellRing,
   DollarSign
@@ -304,13 +303,13 @@ const App: React.FC = () => {
     return 'blue';
   });
   
-  // State for mobile device detection
-  const [isMobileDevice, setIsMobileDevice] = useState(window.innerWidth < 768);
+  const [isCompactScreen, setIsCompactScreen] = useState(() => (
+    typeof window !== 'undefined' ? window.innerWidth < 1024 : false
+  ));
   
-  // Effect to handle window resize events
   useEffect(() => {
     const handleResize = () => {
-      setIsMobileDevice(window.innerWidth < 768);
+      setIsCompactScreen(window.innerWidth < 1024);
     };
     
     window.addEventListener('resize', handleResize);
@@ -2687,28 +2686,6 @@ const App: React.FC = () => {
     );
   }
 
-  // Show mobile warning modal if admin is on mobile device
-  if (isAuthenticated && isAdmin && isMobileDevice) {
-    return (
-      <div className="fixed inset-0 bg-gray-900 flex items-center justify-center p-4 z-50">
-        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center border border-gray-200">
-          <div className="mx-auto flex items-center justify-center w-16 h-16 rounded-full bg-red-100 mb-6">
-            <AlertTriangle className="h-8 w-8 text-red-600" />
-          </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-3">Not Designed for Mobile</h2>
-          <p className="text-gray-600 mb-6">
-            This application is only designed for tablets and desktops.
-            Please access the admin dashboard from a larger screen device.
-          </p>
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-800 rounded-lg border border-amber-200">
-            <Monitor className="w-4 h-4" />
-            <span className="text-sm font-medium">Desktop/Tablet Only</span>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   // Show login if not authenticated
   if (!isAuthenticated) {
     return (
@@ -2773,7 +2750,7 @@ const App: React.FC = () => {
   ];
   const doctorViewTitle = 'Doctor Dashboard';
   return (
-    <div className={isDoctor ? "min-h-screen bg-gray-50 flex flex-col" : "min-h-screen flex bg-gray-50 flex-col md:flex-row"}>
+    <div className={isDoctor ? "min-h-screen bg-gray-50 flex flex-col" : "min-h-screen flex bg-gray-50 flex-col lg:flex-row"}>
       {/* Toast Notification */}
       {toast.show && (
         <Toast
@@ -2813,7 +2790,7 @@ const App: React.FC = () => {
       
       {/* Mobile Header */}
       {!isDoctor && (
-      <header className="md:hidden theme-nav-bg theme-nav-text p-4 flex items-center justify-between sticky top-0 z-50">
+      <header className="lg:hidden theme-nav-bg theme-nav-text p-4 flex items-center justify-between sticky top-0 z-50">
         {renderAppBrand('mobile')}
         <button 
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -2827,7 +2804,7 @@ const App: React.FC = () => {
       {/* Mobile Overlay */}
       {!isDoctor && isMobileMenuOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 z-40 md:hidden transition-opacity"
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden transition-opacity"
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
@@ -2835,8 +2812,8 @@ const App: React.FC = () => {
       {/* Sidebar Navigation */}
       {!isDoctor && (
       <aside 
-        style={{ width: `${sidebarWidth}px` }}
-        className={`theme-nav-bg fixed md:sticky top-0 h-screen z-50 md:z-40 border-r theme-nav-border flex flex-col overflow-hidden transition-transform duration-300 md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}
+        style={{ width: isCompactScreen ? 'min(82vw, 320px)' : `${sidebarWidth}px` }}
+        className={`theme-nav-bg fixed lg:sticky top-0 h-screen z-50 lg:z-40 border-r theme-nav-border flex flex-col overflow-hidden transition-transform duration-300 lg:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
         <div className="p-8 flex items-center justify-center flex-shrink-0">
           {renderAppBrand('sidebar')}
@@ -2905,7 +2882,7 @@ const App: React.FC = () => {
         {/* Resize Handle */}
         <div
           onMouseDown={handleMouseDown}
-          className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-indigo-500 transition-colors z-30"
+          className="absolute top-0 right-0 hidden h-full w-1 cursor-col-resize transition-colors hover:bg-indigo-500 lg:block z-30"
           style={{ 
             backgroundColor: isResizing ? '#6366f1' : 'transparent'
           }}
@@ -2913,7 +2890,7 @@ const App: React.FC = () => {
       </aside>
       )}
 
-      <main className={isDoctor ? "flex min-w-0 flex-1 flex-col p-0 pb-32" : isWorkspaceView ? "flex min-w-0 flex-1 flex-col p-0 md:h-screen" : "flex-1 min-w-0 p-3 md:p-5"}>
+      <main className={isDoctor ? "flex min-w-0 flex-1 flex-col p-0 pb-32" : isWorkspaceView ? "flex min-w-0 flex-1 flex-col p-0 lg:h-screen" : "flex-1 min-w-0 p-3 md:p-5"}>
         <div className={isDoctor || isWorkspaceView ? "flex min-h-0 flex-1 flex-col" : "w-full"}>
           <Suspense fallback={<div className="flex justify-center p-20"><Loader2 className="animate-spin text-indigo-600 w-10 h-10" /></div>}>
             {currentView === 'dashboard' && canAccessView('dashboard') && (
@@ -3039,7 +3016,7 @@ const App: React.FC = () => {
                 canDelete={!isDoctor}
                 canViewChart={true}
                 canExport={!isDoctor}
-                uiStyle={isDoctor ? 'cards' : 'table'}
+                uiStyle={isDoctor || isCompactScreen ? 'cards' : 'table'}
                 onExportPDF={async () => {
                    const freshAppointments = await api.appointments.getAll(currentLocationId || undefined);
                    const { exportAppointmentsToPDF } = await import('./utils/pdfExport');
@@ -3270,12 +3247,12 @@ const App: React.FC = () => {
               </div>
             )}
             <Input label="Full Patient Name" required value={newPatientData.name} onChange={(e: any) => setNewPatientData({...newPatientData, name: e.target.value})} />
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                <Input label="Primary Email" type="email" value={newPatientData.email} onChange={(e: any) => setNewPatientData({...newPatientData, email: e.target.value})} />
                <Input label="Mobile Contact" required value={newPatientData.phone} onChange={(e: any) => setNewPatientData({...newPatientData, phone: e.target.value})} />
             </div>
             
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">Age</label>
                 <input
@@ -3366,7 +3343,7 @@ const App: React.FC = () => {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">City</label>
                 <SearchableSelect
@@ -3467,7 +3444,7 @@ const App: React.FC = () => {
               </div>
             ) : (
               <div className="space-y-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <Input
                     label="New Patient Name"
                     required
@@ -3584,7 +3561,7 @@ const App: React.FC = () => {
                 )}
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <Input 
                   label="Date" 
@@ -3603,7 +3580,7 @@ const App: React.FC = () => {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">Type</label>
                 <SearchableSelect
@@ -3675,7 +3652,7 @@ const App: React.FC = () => {
         >
           <form onSubmit={handleCreateDoctor} className="space-y-5">
             <Input label="Doctor Name" required value={newDoctorData.name} onChange={(e: any) => setNewDoctorData({...newDoctorData, name: e.target.value})} />
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Input label="Email" type="email" value={newDoctorData.email} onChange={(e: any) => setNewDoctorData({...newDoctorData, email: e.target.value})} />
               <Input label="Phone" value={newDoctorData.phone} onChange={(e: any) => setNewDoctorData({...newDoctorData, phone: e.target.value})} />
             </div>
@@ -3711,7 +3688,7 @@ const App: React.FC = () => {
               <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">Working Schedule</label>
               <div className="space-y-3 border border-gray-200 rounded-xl p-4 bg-gray-50">
                 {(newDoctorData.schedules || []).map((schedule, index) => (
-                  <div key={index} className="flex gap-2 items-end bg-white p-3 rounded-lg border border-gray-200">
+                  <div key={index} className="grid grid-cols-1 gap-3 bg-white p-3 rounded-lg border border-gray-200 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end">
                     <div className="flex-1">
                       <label className="block text-xs text-gray-600 mb-1">Day</label>
                       <select
@@ -3934,7 +3911,7 @@ const App: React.FC = () => {
               onChange={(e: any) => setNewMedicineData({...newMedicineData, description: e.target.value})} 
               placeholder="Optional description"
             />
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">Item Type</label>
                 <select 
@@ -3967,7 +3944,7 @@ const App: React.FC = () => {
                 </select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Input 
                 label="Category" 
                 value={newMedicineData.category || ''} 
@@ -3983,7 +3960,7 @@ const App: React.FC = () => {
                 onChange={(e: any) => setNewMedicineData({...newMedicineData, quantity_step: Math.max(0.01, parseFloat(e.target.value) || 1)})}
               />
             </div>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <Input 
                 label={`Price (${getCurrencySymbol(currency)})`} 
                 type="number" 
@@ -4028,7 +4005,7 @@ const App: React.FC = () => {
               onChange={(e: any) => setNewExpenseData({ ...newExpenseData, description: e.target.value })}
               placeholder="e.g., Supplies, Utilities, Rent"
             />
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Input
                 label="Category"
                 required
