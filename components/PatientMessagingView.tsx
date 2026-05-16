@@ -562,7 +562,7 @@ const PatientMessagingView: React.FC<PatientMessagingViewProps> = ({ currentUser
 
               {/* ── Input Area ─────────────────────────────────────────────── */}
               <div className="border-t border-gray-100 bg-white px-5 py-4">
-                <div className="flex items-end gap-3">
+                <div className="flex items-center gap-3">
                   <div className="relative flex-1">
                     <textarea
                       value={newMessage}
@@ -570,7 +570,7 @@ const PatientMessagingView: React.FC<PatientMessagingViewProps> = ({ currentUser
                       onKeyDown={handleKeyDown}
                       rows={1}
                       placeholder="Type your message..."
-                      className="min-h-[44px] w-full resize-none rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 pr-12 text-sm text-gray-900 outline-none transition-all duration-200 placeholder:text-gray-400 focus:border-[var(--hover-400)] focus:bg-white focus:ring-2 focus:ring-[var(--hover-50)]"
+                      className="min-h-[44px] w-full resize-none rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-[11px] text-sm text-gray-900 outline-none transition-all duration-200 placeholder:text-gray-400 focus:border-[var(--hover-400)] focus:bg-white focus:ring-2 focus:ring-[var(--hover-50)]"
                       style={{ lineHeight: '1.25rem' }}
                     />
                   </div>
