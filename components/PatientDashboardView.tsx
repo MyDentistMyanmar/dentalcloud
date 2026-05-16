@@ -455,32 +455,39 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ onLogout, messaging
             {/* Recall / Countdown Card */}
             <div className="rounded-xl bg-[var(--hover-600)] p-5 shadow-md">
               <div className="flex items-center justify-between mb-3">
-                <p className="text-xs font-semibold uppercase text-white/80">Next Appointment</p>
-                <Calendar className="w-5 h-5 text-white/80" />
+                <p className="text-xs font-semibold uppercase tracking-wider text-white opacity-90">Next Appointment</p>
+                <Calendar className="w-5 h-5 text-white opacity-90" />
               </div>
 
               {nextScheduledAppointment && daysLeft !== null ? (
                 <>
-                  <p className="text-white/70 text-sm">Coming in</p>
+                  <p className="text-white opacity-80 text-sm">Coming in</p>
                   <div className="flex items-baseline gap-2 mt-1">
-                    <span className="text-lg font-bold text-white">{daysLeft}</span>
-                    <span className="text-sm font-semibold text-white/80">{daysLeft === 1 ? 'day' : 'days'}</span>
+                    <span className="text-3xl font-black text-white">{daysLeft}</span>
+                    <span className="text-sm font-semibold text-white opacity-80">{daysLeft === 1 ? 'day' : 'days'}</span>
                   </div>
-                  <p className="text-xs text-white/70 mt-2">
-                    {nextScheduledAppointment.date} at {nextScheduledAppointment.time}
-                  </p>
-                  <p className="text-xs text-white/60 mt-0.5">{nextScheduledAppointment.type}</p>
+                  <div className="mt-3 flex items-center gap-2 text-sm text-white opacity-90">
+                    <span>{nextScheduledAppointment.date} at {nextScheduledAppointment.time}</span>
+                  </div>
+                  {nextScheduledAppointment.type && (
+                    <span className="inline-block mt-2 rounded-md bg-white/20 px-3 py-1 text-xs font-semibold text-white">
+                      {nextScheduledAppointment.type}
+                    </span>
+                  )}
                 </>
               ) : (
                 <>
-                  <p className="text-white/80 text-sm">No upcoming appointment</p>
-                  <p className="text-sm font-semibold text-white mt-1">Book your next check-up today</p>
-                  <button
-                    onClick={() => openCreateAppointmentModal()}
-                    className="mt-4 h-12 px-6 rounded-xl bg-white text-[var(--hover-600)] text-sm font-bold hover:bg-gray-50 transition-colors"
-                  >
-                    Schedule now
-                  </button>
+                  <div className="flex flex-col items-center py-2">
+                    <Calendar className="w-10 h-10 text-white opacity-60 mb-2" />
+                    <p className="text-white opacity-90 text-sm font-semibold">No upcoming appointment</p>
+                    <p className="text-sm text-white opacity-70 mt-1">Book your next check-up today</p>
+                    <button
+                      onClick={() => openCreateAppointmentModal()}
+                      className="mt-4 h-12 px-8 rounded-xl bg-white text-[var(--hover-600)] text-sm font-bold shadow-lg hover:shadow-xl hover:bg-gray-50 transition-all duration-200 active:scale-[0.97]"
+                    >
+                      Schedule now
+                    </button>
+                  </div>
                 </>
               )}
             </div>
