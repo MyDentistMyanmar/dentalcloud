@@ -129,7 +129,6 @@ const DoctorHomeView: React.FC<DoctorHomeViewProps> = ({ appointments, treatment
           <ResponsiveContainer width="100%" height="100%">
             <PieChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
               <Tooltip />
-              <Legend verticalAlign="bottom" height={36} />
               <Pie
                 data={chartData}
                 dataKey="count"
@@ -156,6 +155,18 @@ const DoctorHomeView: React.FC<DoctorHomeViewProps> = ({ appointments, treatment
               </Pie>
             </PieChart>
           </ResponsiveContainer>
+          {/* Custom color legend */}
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5 px-1">
+            {chartData.map((entry, index) => (
+              <div key={entry.name} className="flex items-center gap-1.5 text-xs text-gray-700">
+                <span
+                  className="inline-block h-2.5 w-2.5 rounded-sm flex-shrink-0"
+                  style={{ backgroundColor: pieColors[index % pieColors.length] }}
+                />
+                <span className="truncate max-w-[140px]">{entry.name}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>
