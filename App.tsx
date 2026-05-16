@@ -4066,7 +4066,7 @@ const App: React.FC = () => {
                 <h4 className="mt-1 text-2xl font-black tracking-tight text-slate-950">
                   {selectedPatient?.name || 'Unknown Patient'}
                 </h4>
-                <p className="mt-1 text-sm font-medium text-slate-500">ID: {selectedPatient?.id || '-'}</p>
+                <p className="mt-1 text-sm font-medium text-slate-500">ID: {selectedPatient?.patient_unique_id || selectedPatient?.id || '-'}</p>
               </div>
 
               <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">

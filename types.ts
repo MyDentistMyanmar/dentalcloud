@@ -10,6 +10,7 @@ export interface Location {
 
 export interface Patient {
   id: string;
+  patient_unique_id?: string;
   location_id: string;
   name: string;
   email: string;

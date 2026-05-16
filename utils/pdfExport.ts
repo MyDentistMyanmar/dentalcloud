@@ -29,8 +29,9 @@ export const exportPatientsToPDF = (patients: Patient[], currency: Currency) => 
   // Table
   autoTable(doc, {
     startY: 40,
-    head: [['Patient Name', 'Age', 'Type', 'Contact', 'Email', 'Location', 'Medical Status', 'Balance', 'Points', 'Joined']],
+    head: [['Patient ID', 'Patient Name', 'Age', 'Type', 'Contact', 'Email', 'Location', 'Medical Status', 'Balance', 'Points', 'Joined']],
     body: exportPatients.map(patient => [
+      patient.patient_unique_id || patient.id.substring(0, 8),
       patient.name,
       patient.age || '-',
       patient.patient_type || '-',

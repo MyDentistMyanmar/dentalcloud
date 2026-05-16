@@ -89,6 +89,7 @@ const detectConversationsDoctorUserSupport = async (): Promise<boolean> => {
 // Utility: map DB snake_case fields to app camelCase
 const mapPatient = (row: any): Patient => ({
   ...row,
+  patient_unique_id: row?.patient_unique_id ?? undefined,
   township: row?.township ?? row?.state_region ?? undefined,
   loyalty_points: row?.loyalty_points ?? 0,
   medicalHistory: row?.medical_history ?? row?.medicalHistory,

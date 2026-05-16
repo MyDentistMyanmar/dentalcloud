@@ -92,6 +92,7 @@ const saveWorkbook = async (
 
 export const exportPatientsToExcel = async (patients: Patient[], currency: Currency) => {
   const columns: ExcelColumn[] = [
+    { header: 'Patient ID', width: 14 },
     { header: 'Patient Name', width: 24 },
     { header: 'Age', width: 8, format: 'integer' },
     { header: 'Patient Type', width: 15 },
@@ -107,6 +108,7 @@ export const exportPatientsToExcel = async (patients: Patient[], currency: Curre
     { header: 'Join Date', width: 15 }
   ];
   const rows = patients.map((patient) => ({
+    'Patient ID': patient.patient_unique_id || patient.id.substring(0, 8),
     'Patient Name': patient.name,
     Age: patient.age || 'N/A',
     'Patient Type': patient.patient_type || 'N/A',

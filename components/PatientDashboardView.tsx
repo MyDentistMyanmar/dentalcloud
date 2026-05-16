@@ -734,7 +734,7 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ onLogout, messaging
                   </div>
                   <div>
                     <h3 className="text-base font-semibold text-gray-900">{patient.name}</h3>
-                    <p className="text-xs text-gray-500">ID: {patient.id.substring(0, 8)}...</p>
+                    <p className="text-xs text-gray-500">ID: {patient.patient_unique_id || patient.id.substring(0, 8)}</p>
                   </div>
                 </div>
 

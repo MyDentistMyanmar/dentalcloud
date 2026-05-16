@@ -132,6 +132,7 @@ const PatientsView: React.FC<PatientsViewProps> = ({
         (patient.name || '').toLowerCase().includes(term) ||
         (patient.email || '').toLowerCase().includes(term) ||
         (patient.phone || '').toLowerCase().includes(term) ||
+        (patient.patient_unique_id || '').toLowerCase().includes(term) ||
         searchableAddress.includes(term) ||
         searchableAge.includes(term) ||
         searchableCreatedDate.includes(term) ||
@@ -426,7 +427,11 @@ const PatientsView: React.FC<PatientsViewProps> = ({
                 </div>
                 <div className="rounded-xl border border-gray-200 bg-white p-4 lg:col-span-1">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Patient Meta</p>
-                  <div className="mt-2 grid grid-cols-3 gap-3 text-sm">
+                  <div className="mt-2 grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-gray-500">Patient ID</p>
+                      <p className="font-semibold text-gray-900">{detailPatient.patient_unique_id || 'N/A'}</p>
+                    </div>
                     <div>
                       <p className="text-gray-500">Age</p>
                       <p className="font-semibold text-gray-900">{detailPatient.age ?? 'N/A'}</p>

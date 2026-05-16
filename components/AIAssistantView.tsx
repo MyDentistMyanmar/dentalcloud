@@ -4923,7 +4923,7 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                   currentActionResult = `🔍 No patients found matching "${params.name}".`;
                 } else if (matches.length === 1) {
                   const patient = matches[0];
-                  currentActionResult = `👤 Found patient: ${patient.name} (ID: ${patient.id})\nPhone: ${patient.phone}\nBalance: ${patient.balance} MMK`;
+                  currentActionResult = `👤 Found patient: ${patient.name} (ID: ${patient.patient_unique_id || patient.id.substring(0, 8)})\nPhone: ${patient.phone}\nBalance: ${patient.balance} MMK`;
                 } else {
                   currentActionResult = `👥 Multiple patients found:\n${matches.slice(0, 5).map(p => `• ${p.name} (${p.phone})`).join('\n')}`;
                 }
