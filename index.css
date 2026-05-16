@@ -1,11 +1,11 @@
-html,
+﻿html,
 body,
 #root {
   min-height: 100%;
 }
 
 
-/* Prevent double-tap zoom on mobile devices — improves form-filling UX */
+/* Prevent double-tap zoom on mobile devices â€” improves form-filling UX */
 html {
   touch-action: manipulation;
 }
@@ -81,6 +81,10 @@ body {
 :root,
 [data-hover-theme='blue'] {
   --hover-50: #eef2ff;
+  --hover-200: #c7d2fe;
+  --hover-300: #a5b4fc;
+  --hover-500: #6366f1;
+  --hover-800: #3730a3;
   --hover-100: #e0e7ff;
   --hover-400: #818cf8;
   --hover-600: #4f46e5;
@@ -89,6 +93,10 @@ body {
 
 [data-hover-theme='green'] {
   --hover-50: #eef9e8;
+  --hover-200: #b9e5a6;
+  --hover-300: #8fd772;
+  --hover-500: #339d12;
+  --hover-800: #0d4f00;
   --hover-100: #dcf2d2;
   --hover-400: #5cc63a;
   --hover-600: #1b8d00;
@@ -97,6 +105,10 @@ body {
 
 [data-hover-theme='yellow'] {
   --hover-50: #fefce8;
+  --hover-200: #fde68a;
+  --hover-300: #fcd34d;
+  --hover-500: #f59e0b;
+  --hover-800: #854d0e;
   --hover-100: #fef9c3;
   --hover-400: #eab308;
   --hover-600: #ca8a04;
@@ -105,6 +117,10 @@ body {
 
 [data-hover-theme='brown'] {
   --hover-50: #faf6f2;
+  --hover-200: #e2cdb7;
+  --hover-300: #cfa985;
+  --hover-500: #9a6948;
+  --hover-800: #4a3020;
   --hover-100: #f1e6da;
   --hover-400: #b9845a;
   --hover-600: #7a5138;
@@ -113,6 +129,10 @@ body {
 
 [data-hover-theme='dark'] {
   --hover-50: #f1f5f9;
+  --hover-200: #cbd5e1;
+  --hover-300: #94a3b8;
+  --hover-500: #475569;
+  --hover-800: #0f172a;
   --hover-100: #e2e8f0;
   --hover-400: #64748b;
   --hover-600: #334155;
@@ -571,3 +591,101 @@ body {
   -moz-appearance: textfield;
   appearance: textfield;
 }
+
+/* ===== Aurora Animations ===== */
+
+@keyframes aurora-float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(10px, -15px) scale(1.05); }
+  50% { transform: translate(-5px, -25px) scale(0.95); }
+  75% { transform: translate(-10px, -10px) scale(1.02); }
+}
+
+@keyframes aurora-shimmer {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes aurora-pulse-glow {
+  0%, 100% { opacity: 0.4; filter: blur(60px); transform: scale(1); }
+  50% { opacity: 0.7; filter: blur(50px); transform: scale(1.15); }
+}
+
+@keyframes aurora-drift {
+  0% { transform: translateX(-10%) translateY(0) rotate(0deg); }
+  33% { transform: translateX(5%) translateY(-8%) rotate(120deg); }
+  66% { transform: translateX(10%) translateY(5%) rotate(240deg); }
+  100% { transform: translateX(-10%) translateY(0) rotate(360deg); }
+}
+
+@keyframes aurora-fade-in {
+  0% { opacity: 0; transform: translateY(16px) scale(0.97); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes glass-shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+.animate-aurora-float {
+  animation: aurora-float 8s ease-in-out infinite;
+}
+
+.animate-aurora-shimmer {
+  background-size: 200% 200%;
+  animation: aurora-shimmer 6s ease-in-out infinite;
+}
+
+.animate-aurora-pulse-glow {
+  animation: aurora-pulse-glow 4s ease-in-out infinite;
+}
+
+.animate-aurora-drift {
+  animation: aurora-drift 20s linear infinite;
+}
+
+.animate-aurora-fade-in {
+  animation: aurora-fade-in 0.7s ease-out both;
+}
+
+.animate-glass-shimmer {
+  background-size: 200% 100%;
+  animation: glass-shimmer 3s ease-in-out infinite;
+}
+
+/* Aurora glass card style */
+.aurora-glass {
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.06);
+}
+
+.aurora-glass-strong {
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+}
+
+/* Aurora gradient text */
+.aurora-text {
+  background: linear-gradient(135deg, var(--hover-600), var(--hover-400), #c084fc, var(--hover-600));
+  background-size: 300% 300%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: aurora-shimmer 4s ease-in-out infinite;
+}
+
+/* Aurora glow ring */
+.aurora-glow-ring {
+  box-shadow:
+    0 0 20px color-mix(in srgb, var(--hover-400) 30%, transparent),
+    0 0 60px color-mix(in srgb, var(--hover-600) 20%, transparent);
+}
+

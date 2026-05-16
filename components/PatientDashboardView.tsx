@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { Home, Calendar, FileText, User, LogOut, Plus, Trash2, Download, Eye, EyeOff, MessageCircle, X, Info, FolderOpen } from 'lucide-react';
 import { auth } from '../services/auth';
 import { api } from '../services/api';
@@ -451,66 +451,117 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ onLogout, messaging
         )}
 
         {activeTab === 'home' && (
-          <div className="px-4 space-y-5">
-            {/* Recall / Countdown Card */}
-            <div className="rounded-xl bg-[var(--hover-600)] p-5 shadow-md">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-xs font-semibold uppercase tracking-wider text-white opacity-90">Next Appointment</p>
-                <Calendar className="w-5 h-5 text-white opacity-90" />
-              </div>
+          <div className="relative px-4 pb-6 space-y-5 overflow-hidden">
+            {/* â”€â”€ Aurora Background Orbs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+            <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden" aria-hidden="true">
+              <div
+                className="animate-aurora-pulse-glow absolute -left-20 -top-20 h-72 w-72 rounded-full"
+                style={{ background: 'color-mix(in srgb, var(--hover-400) 25%, transparent)', filter: 'blur(60px)' }}
+              />
+              <div
+                className="animate-aurora-drift absolute -right-20 top-10 h-96 w-96 rounded-full"
+                style={{ background: 'color-mix(in srgb, var(--hover-600) 20%, transparent)', filter: 'blur(70px)' }}
+              />
+              <div
+                className="animate-aurora-float absolute bottom-0 left-1/3 h-64 w-64 rounded-full"
+                style={{ background: 'color-mix(in srgb, #c084fc 15%, transparent)', filter: 'blur(50px)' }}
+              />
+            </div>
 
-              {nextScheduledAppointment && daysLeft !== null ? (
-                <>
-                  <p className="text-white opacity-80 text-sm">Coming in</p>
+            {/* â”€â”€ Welcome Hero â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+            <div className="animate-aurora-fade-in relative z-10 aurora-glass-strong rounded-2xl p-6" style={{ animationDelay: '0ms' }}>
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <p className="text-xs font-semibold uppercase tracking-[0.15em] text-gray-400/80">
+                    Welcome back
+                  </p>
+                  <h1 className="mt-1.5 text-2xl font-bold tracking-tight">
+                    <span className="aurora-text">{patient.name}</span>
+                  </h1>
+                  <p className="mt-1 text-sm text-gray-400/90">
+                    Your smile journey continues here
+                  </p>
+                </div>
+                <div
+                  className="relative flex h-16 w-16 items-center justify-center rounded-2xl aurora-glow-ring"
+                  style={{
+                    background: 'linear-gradient(135deg, var(--hover-100), var(--hover-50))'
+                  }}
+                >
+                  <span className="text-2xl font-black" style={{ color: 'var(--hover-600)' }}>
+                    {patient.name.charAt(0).toUpperCase()}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* â”€â”€ Next Appointment Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+            <div className="animate-aurora-fade-in relative z-10" style={{ animationDelay: '80ms' }}>
+              <div
+                className="relative overflow-hidden rounded-2xl p-[1px]"
+                style={{
+                  background: 'linear-gradient(135deg, var(--hover-400), var(--hover-600), #c084fc, var(--hover-400))',
+                  backgroundSize: '300% 300%',
+                  animation: 'aurora-shimmer 6s ease-in-out infinite'
+                }}
+              >
+                <div className="aurora-glass-strong rounded-2xl p-5" style={{ background: 'rgba(255,255,255,0.85)' }}>
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--hover-600)' }}>
+                      Next Appointment
+                    </p>
+                    <Calendar className="w-5 h-5" style={{ color: 'var(--hover-400)' }} />
+                  </div>
+                  <p className="text-sm" style={{ color: 'var(--hover-700)' }}>Coming in</p>
                   <div className="flex items-baseline gap-2 mt-1">
-                    <span className="text-3xl font-black text-white">{daysLeft}</span>
-                    <span className="text-sm font-semibold text-white opacity-80">{daysLeft === 1 ? 'day' : 'days'}</span>
+                    <span className="text-3xl font-black" style={{ color: 'var(--hover-600)' }}>
+                      {daysLeft ?? '--'}
+                    </span>
+                    <span className="text-sm font-semibold" style={{ color: 'var(--hover-500)' }}>
+                      {daysLeft === 1 ? 'day' : 'days'}
+                    </span>
                   </div>
-                  <div className="mt-3 flex items-center gap-2 text-sm text-white opacity-90">
-                    <span>{nextScheduledAppointment.date} at {nextScheduledAppointment.time}</span>
+                  <div className="mt-3 flex items-center gap-2 text-sm" style={{ color: 'var(--hover-600)' }}>
+                    <Calendar className="w-4 h-4" style={{ color: 'var(--hover-400)' }} />
+                    <span>{nextScheduledAppointment?.date ?? 'No date'} &middot; {nextScheduledAppointment?.time ?? '--'}</span>
                   </div>
-                  {nextScheduledAppointment.type && (
-                    <span className="inline-block mt-2 rounded-md bg-white/20 px-3 py-1 text-xs font-semibold text-white">
+                  {nextScheduledAppointment?.type && (
+                    <span className="inline-block mt-2 rounded-md px-3 py-1 text-xs font-semibold"
+                      style={{
+                        background: 'color-mix(in srgb, var(--hover-200) 40%, transparent)',
+                        color: 'var(--hover-700)'
+                      }}
+                    >
                       {nextScheduledAppointment.type}
                     </span>
                   )}
-                </>
-              ) : (
-                <>
-                  <div className="flex flex-col items-center py-2">
-                    <Calendar className="w-10 h-10 text-white opacity-60 mb-2" />
-                    <p className="text-white opacity-90 text-sm font-semibold">No upcoming appointment</p>
-                    <p className="text-sm text-white opacity-70 mt-1">Book your next check-up today</p>
-                    <button
-                      onClick={() => openCreateAppointmentModal()}
-                      className="mt-4 h-12 px-8 rounded-xl bg-white text-[var(--hover-600)] text-sm font-bold shadow-lg hover:shadow-xl hover:bg-gray-50 transition-all duration-200 active:scale-[0.97]"
-                    >
-                      Schedule now
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Quick Stats */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-white rounded-xl p-4">
-                <div className="text-lg font-bold text-[var(--hover-600)]">{appointments.length}</div>
-                <div className="text-xs text-gray-500 mt-1">Appointments</div>
-              </div>
-              <div className="bg-white rounded-xl p-4">
-                <div className="text-lg font-bold text-[var(--hover-600)]">{treatmentRecords.length}</div>
-                <div className="text-xs text-gray-500 mt-1">Treatments</div>
+                </div>
               </div>
             </div>
 
-            {/* Upcoming Appointments */}
-            <div className="bg-white rounded-xl shadow-sm">
-              <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center">
-                <h2 className="text-sm font-semibold text-gray-900">Upcoming Appointments</h2>
+            {/* â”€â”€ Quick Stats â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+            <div className="animate-aurora-fade-in grid grid-cols-2 gap-3" style={{ animationDelay: '160ms' }}>
+              <div className="aurora-glass-strong rounded-xl p-4">
+                <p className="text-lg font-bold aurora-text">{appointments.length}</p>
+                <p className="text-xs text-gray-500 mt-1">Appointments</p>
+              </div>
+              <div className="aurora-glass-strong rounded-xl p-4">
+                <p className="text-lg font-bold aurora-text">{treatmentRecords.length}</p>
+                <p className="text-xs text-gray-500 mt-1">Treatments</p>
+              </div>
+            </div>
+
+            {/* â”€â”€ Upcoming Appointments â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+            <div className="animate-aurora-fade-in aurora-glass-strong rounded-xl" style={{ animationDelay: '240ms' }}>
+              <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: 'var(--hover-100)' }}>
+                <h2 className="text-sm font-semibold" style={{ color: 'var(--hover-800)' }}>Upcoming Appointments</h2>
                 <button
                   onClick={() => setActiveTab('appointments')}
-                  className="h-9 px-3 text-xs font-semibold text-[var(--hover-600)] bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                  className="h-9 px-3 text-xs font-semibold rounded-lg transition-all duration-200 active:scale-[0.97]"
+                  style={{
+                    color: 'var(--hover-600)',
+                    background: 'color-mix(in srgb, var(--hover-200) 30%, transparent)'
+                  }}
                 >
                   View All
                 </button>
@@ -522,36 +573,49 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ onLogout, messaging
                       .filter(apt => apt.status === 'Scheduled')
                       .slice(0, 3)
                       .map(apt => (
-                        <div key={apt.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                          <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                            <Calendar className="w-5 h-5 text-gray-600" />
+                        <div key={apt.id} className="flex items-center gap-3 p-3 rounded-lg"
+                          style={{ background: 'color-mix(in srgb, var(--hover-100) 20%, transparent)' }}
+                        >
+                          <div className="flex items-center justify-center w-10 h-10 rounded-lg flex-shrink-0"
+                            style={{ background: 'color-mix(in srgb, var(--hover-200) 30%, transparent)' }}
+                          >
+                            <Calendar className="w-5 h-5" style={{ color: 'var(--hover-500)' }} />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-900 truncate">{apt.date}</p>
-                            <p className="text-xs text-gray-500 truncate">{apt.time} &middot; {apt.type}</p>
+                            <p className="text-sm font-medium truncate" style={{ color: 'var(--hover-800)' }}>{apt.date}</p>
+                            <p className="text-xs truncate" style={{ color: 'var(--hover-500)' }}>{apt.time} &middot; {apt.type}</p>
                           </div>
-                          <span className="px-2.5 py-1 bg-gray-100 text-gray-700 text-xs rounded-full flex-shrink-0 font-medium">
+                          <span className="px-2.5 py-1 text-xs rounded-full font-medium flex-shrink-0"
+                            style={{
+                              background: 'color-mix(in srgb, var(--hover-200) 30%, transparent)',
+                              color: 'var(--hover-600)'
+                            }}
+                          >
                             {apt.status}
                           </span>
                         </div>
                       ))}
                   </div>
                 ) : (
-                  <div className="text-center py-6">
-                    <Calendar className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-                    <p className="text-sm text-gray-500">No upcoming appointments</p>
+                  <div className="flex flex-col items-center py-6 text-center">
+                    <Calendar className="w-10 h-10" style={{ color: 'var(--hover-300)' }} />
+                    <p className="text-sm mt-2" style={{ color: 'var(--hover-500)' }}>No upcoming appointments</p>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Recent Treatments */}
-            <div className="bg-white rounded-xl shadow-sm">
-              <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center">
-                <h2 className="text-sm font-semibold text-gray-900">Recent Treatments</h2>
+            {/* â”€â”€ Recent Treatments â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+            <div className="animate-aurora-fade-in aurora-glass-strong rounded-xl" style={{ animationDelay: '320ms' }}>
+              <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: 'var(--hover-100)' }}>
+                <h2 className="text-sm font-semibold" style={{ color: 'var(--hover-800)' }}>Recent Treatments</h2>
                 <button
                   onClick={() => setActiveTab('records')}
-                  className="h-9 px-3 text-xs font-semibold text-[var(--hover-600)] bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                  className="h-9 px-3 text-xs font-semibold rounded-lg transition-all duration-200 active:scale-[0.97]"
+                  style={{
+                    color: 'var(--hover-600)',
+                    background: 'color-mix(in srgb, var(--hover-200) 30%, transparent)'
+                  }}
                 >
                   View All
                 </button>
@@ -562,17 +626,25 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ onLogout, messaging
                     {treatmentRecords
                       .slice(0, 3)
                       .map(record => (
-                        <div key={record.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                          <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                            <FileText className="w-5 h-5 text-gray-600" />
+                        <div key={record.id} className="flex items-center gap-3 p-3 rounded-lg"
+                          style={{ background: 'color-mix(in srgb, var(--hover-100) 20%, transparent)' }}
+                        >
+                          <div className="flex items-center justify-center w-10 h-10 rounded-lg flex-shrink-0"
+                            style={{ background: 'color-mix(in srgb, var(--hover-200) 30%, transparent)' }}
+                          >
+                            <FileText className="w-5 h-5" style={{ color: 'var(--hover-500)' }} />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-900 truncate">{record.description}</p>
-                            <p className="text-xs text-gray-500 truncate">{record.date}</p>
+                            <p className="text-sm font-medium truncate" style={{ color: 'var(--hover-800)' }}>{record.description}</p>
+                            <p className="text-xs truncate" style={{ color: 'var(--hover-500)' }}>{record.date}</p>
                           </div>
                           <button
                             onClick={() => handleDownloadReceipt(record)}
-                            className="h-9 px-3 text-xs font-medium text-[var(--hover-600)] hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
+                            className="h-9 px-3 text-xs font-medium rounded-lg transition-all duration-200 active:scale-[0.97] flex-shrink-0"
+                            style={{
+                              color: 'var(--hover-600)',
+                              background: 'color-mix(in srgb, var(--hover-200) 30%, transparent)'
+                            }}
                           >
                             Details
                           </button>
@@ -580,12 +652,39 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ onLogout, messaging
                       ))}
                   </div>
                 ) : (
-                  <div className="text-center py-6">
-                    <FileText className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-                    <p className="text-sm text-gray-500">No treatment records yet</p>
+                  <div className="flex flex-col items-center py-6 text-center">
+                    <FileText className="w-10 h-10" style={{ color: 'var(--hover-300)' }} />
+                    <p className="text-sm mt-2" style={{ color: 'var(--hover-500)' }}>No treatment records yet</p>
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* â”€â”€ Book Appointment CTA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+            <div className="animate-aurora-fade-in" style={{ animationDelay: '400ms' }}>
+              <button
+                onClick={() => openCreateAppointmentModal()}
+                className="relative w-full overflow-hidden rounded-2xl p-[1px]"
+                style={{
+                  background: 'linear-gradient(135deg, var(--hover-400), var(--hover-600), #c084fc, var(--hover-400))',
+                  backgroundSize: '300% 300%',
+                  animation: 'aurora-shimmer 6s ease-in-out infinite'
+                }}
+              >
+                <div className="aurora-glass-strong rounded-2xl px-6 py-4 flex items-center justify-between" style={{ background: 'rgba(255,255,255,0.88)' }}>
+                  <div className="text-left">
+                    <p className="text-sm font-bold" style={{ color: 'var(--hover-800)' }}>Book Your Next Visit</p>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--hover-500)' }}>Schedule an appointment today</p>
+                  </div>
+                  <div className="flex items-center justify-center w-10 h-10 rounded-xl"
+                    style={{ background: 'color-mix(in srgb, var(--hover-200) 30%, transparent)' }}
+                  >
+                    <svg className="w-5 h-5" style={{ color: 'var(--hover-600)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                  </div>
+                </div>
+              </button>
             </div>
           </div>
         )}
