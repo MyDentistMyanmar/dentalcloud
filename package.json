@@ -13,9 +13,11 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.90.1",
     "framer-motion": "^12.38.0",
+    "html5-qrcode": "^2.3.8",
     "jspdf": "^4.0.0",
     "jspdf-autotable": "^5.0.7",
     "lucide-react": "^0.562.0",
+    "qrcode.react": "^4.2.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "react-markdown": "^10.1.0",
