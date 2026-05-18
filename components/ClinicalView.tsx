@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { User, X, Upload, Trash2, FileText, Receipt as ReceiptIcon, Package, RotateCcw, Award, Zap, Key, Edit, Download, Eye, MoreVertical, Calendar, CheckCircle2, AlertCircle, ArrowLeft, Search } from 'lucide-react';
 import { ToothSelector } from './ToothSelector';
-import { Patient, TreatmentType, ClinicalRecord, PatientFile, LoyaltyTransaction, LoyaltyRule, Doctor, Appointment, TreatmentChargeLine } from '../types';
+import { Patient, TreatmentType, ClinicalRecord, PatientFile, LoyaltyTransaction, LoyaltyRule, Doctor, Appointment, TreatmentChargeLine, AppointmentType } from '../types';
 import { formatCurrency, getCurrencySymbol, Currency } from '../utils/currency';
 import { formatTeethWithPosition } from '../utils/toothNumbering';
 import { Modal, Input, TimeInput } from './Shared';
@@ -43,6 +43,7 @@ interface ClinicalViewProps {
   onUpdatePatient?: (id: string, data: Partial<Patient>) => Promise<void>;
   onUpdateAccount?: (patient: Patient, password: string) => void;
   onCreateAppointment?: (data: Partial<Appointment>) => Promise<void>;
+  appointmentTypes: AppointmentType[];
   loyaltyEnabled: boolean;
   compactToothSelector?: boolean;
   doctorMobileView?: boolean;
@@ -79,16 +80,26 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
   onUpdatePatient,
   onUpdateAccount,
   onCreateAppointment,
+  appointmentTypes,
   loyaltyEnabled,
   compactToothSelector = false,
   doctorMobileView = false,
   loyaltyRules = [],
   loyaltyTransactions = []
 }) => {
-  const treatmentTypeOptions = React.useMemo(() => {
-    const unique = [...new Set(treatmentTypes.map((type) => (type.name || '').trim()).filter(Boolean))];
-    return unique.sort((a, b) => a.localeCompare(b));
-  }, [treatmentTypes]);
+  const appointmentTypeOptions = React.useMemo(() => {
+    const activeNames = appointmentTypes
+      .filter((type) => type.is_active)
+      .map((type) => (type.name || '').trim())
+      .filter(Boolean);
+
+    if (activeNames.length > 0) {
+      return activeNames;
+    }
+
+    const treatmentFallback = [...new Set(treatmentTypes.map((type) => (type.name || '').trim()).filter(Boolean))];
+    return treatmentFallback.sort((a, b) => a.localeCompare(b));
+  }, [appointmentTypes, treatmentTypes]);
 
   const getDefaultNextAppointmentDate = () => {
     const nextDate = new Date();
@@ -127,13 +138,13 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
     doctor_id: '',
     notes: ''
   });
-  const treatmentTypeOptionsForAppointment = React.useMemo(() => {
+  const appointmentTypeOptionsForAppointment = React.useMemo(() => {
     const currentType = (nextAppointmentForm.type || '').trim();
-    if (!currentType || treatmentTypeOptions.includes(currentType)) {
-      return treatmentTypeOptions;
+    if (!currentType || appointmentTypeOptions.includes(currentType)) {
+      return appointmentTypeOptions;
     }
-    return [...treatmentTypeOptions, currentType];
-  }, [treatmentTypeOptions, nextAppointmentForm.type]);
+    return [...appointmentTypeOptions, currentType];
+  }, [appointmentTypeOptions, nextAppointmentForm.type]);
   const filteredTreatmentTypes = React.useMemo(() => {
     const query = treatmentSearchTerm.trim().toLowerCase();
     if (!query) return treatmentTypes;
@@ -183,12 +194,12 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
     setNextAppointmentForm({
       date: getDefaultNextAppointmentDate(),
       time: '',
-      type: treatmentTypeOptions[0] || '',
+      type: appointmentTypeOptions[0] || '',
       status: 'Scheduled',
       doctor_id: selectedDoctorId || '',
       notes: ''
     });
-  }, [selectedPatient?.id, selectedDoctorId, treatmentTypeOptions]);
+  }, [selectedPatient?.id, selectedDoctorId, appointmentTypeOptions]);
 
   const canRedeem = (selectedPatient?.loyalty_points || 0) > 0;
 
@@ -375,7 +386,7 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
       setNextAppointmentForm({
         date: getDefaultNextAppointmentDate(),
         time: '',
-        type: treatmentTypeOptions[0] || '',
+        type: appointmentTypeOptions[0] || '',
         status: 'Scheduled',
         doctor_id: selectedDoctorId || '',
         notes: ''
@@ -1513,12 +1524,12 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
                 <SearchableSelect
                   value={nextAppointmentForm.type || ''}
                   onChange={(selectedType) => setNextAppointmentForm((prev) => ({ ...prev, type: selectedType }))}
-                  options={treatmentTypeOptionsForAppointment.map((typeName) => ({ value: typeName, label: typeName }))}
-                  placeholder="Select treatment type"
-                  emptyMessage="No treatment type found"
+                  options={appointmentTypeOptionsForAppointment.map((typeName) => ({ value: typeName, label: typeName }))}
+                  placeholder="Select appointment type"
+                  emptyMessage="No appointment type found"
                 />
-                {treatmentTypeOptions.length === 0 && (
-                  <p className="text-xs text-amber-600 mt-1">No treatment types configured yet. Add services in Treatment Config first.</p>
+                {appointmentTypeOptions.length === 0 && (
+                  <p className="text-xs text-amber-600 mt-1">No appointment types configured yet. Add appointment types in Settings first.</p>
                 )}
               </div>
             </div>

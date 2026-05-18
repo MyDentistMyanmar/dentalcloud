@@ -3197,6 +3197,7 @@ const App: React.FC = () => {
                   }
                 }}
                 onCreateAppointment={handleCreateAppointmentFromClinical}
+                appointmentTypes={appointmentTypes}
                 loyaltyEnabled={loyaltyEnabled}
                 compactToothSelector={true}
                 doctorMobileView={isDoctor}
