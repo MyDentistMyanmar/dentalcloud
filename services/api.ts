@@ -243,23 +243,26 @@ const completeScheduledAppointmentForTreatment = async (params: {
 
   const { data: scheduledAppointments, error: fetchError } = await supabase
     .from('appointments')
-    .select('id, patient_id, location_id, doctor_id, time, status')
+    .select('id, patient_id, location_id, doctor_id, date, time, status')
     .eq('location_id', locationId)
     .eq('patient_id', patientId)
-    .eq('date', treatmentDate)
     .eq('status', 'Scheduled')
+    .gte('date', treatmentDate)
+    .order('date', { ascending: true })
     .order('time', { ascending: true });
 
   if (fetchError) throw new Error(fetchError.message);
   if (!scheduledAppointments || scheduledAppointments.length === 0) return [];
 
   const normalizedDoctorId = doctorId && String(doctorId).trim() !== '' ? String(doctorId) : null;
+  const sameDayAppointments = scheduledAppointments.filter((appointment: any) => appointment.date === treatmentDate);
+  const candidateAppointments = sameDayAppointments.length > 0 ? sameDayAppointments : scheduledAppointments;
   const appointmentToComplete =
     (normalizedDoctorId
-      ? scheduledAppointments.find((appointment: any) => appointment.doctor_id === normalizedDoctorId)
+      ? candidateAppointments.find((appointment: any) => appointment.doctor_id === normalizedDoctorId)
       : undefined) ||
-    scheduledAppointments.find((appointment: any) => !appointment.doctor_id) ||
-    scheduledAppointments[0];
+    candidateAppointments.find((appointment: any) => !appointment.doctor_id) ||
+    candidateAppointments[0];
 
   const { error: updateError } = await supabase
     .from('appointments')

@@ -2340,7 +2340,7 @@ const App: React.FC = () => {
             : appointment
         ));
         setToast({
-          message: `${newRecords.length} treatment ${newRecords.length === 1 ? 'record' : 'records'} saved and today's appointment was marked completed.`,
+          message: `${newRecords.length} treatment ${newRecords.length === 1 ? 'record' : 'records'} saved and the linked appointment was marked completed.`,
           type: 'success',
           show: true
         });
