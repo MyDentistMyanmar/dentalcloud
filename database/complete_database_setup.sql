@@ -9,6 +9,14 @@
 -- (users table with plain-text password comparison) rather than Supabase Auth.
 -- The anon key is the only credential used by the app's supabase client.
 -- If you integrate Supabase Auth in the future, tighten these policies.
+-- 
+-- IMPORTANT: This script also ensures the auth.users table exists with all
+-- required columns for Supabase Auth (GoTrue). Self-hosted Supabase's GoTrue
+-- container creates the auth schema and tables automatically on startup, but
+-- if it starts before the database is fully ready the auth.users migration may
+-- be skipped, causing "relation auth.users does not exist" or "column
+-- user.confirmed_at does not exist" errors. Section 9 below idempotently
+-- creates and repairs auth.users to prevent this.
 -- ============================================================================
 
 -- ============================================================================
@@ -879,7 +887,92 @@ BEGIN
 END $$;
 
 -- ============================================================================
--- 8. VERIFICATION
+-- 9. SUPABASE AUTH (GoTrue) SCHEMA GUARD
+-- ============================================================================
+-- Self-hosted Supabase's GoTrue container should create the auth schema and
+-- auth.users table automatically on startup via its internal migrations. However,
+-- if the GoTrue container starts before the database is fully initialized,
+-- the auth.users migration may be skipped. This section idempotently creates
+-- and repairs the auth.users table to prevent this.
+-- Ensure the auth schema exists
+CREATE SCHEMA IF NOT EXISTS auth;
+-- Ensure the auth.users table exists with all columns GoTrue expects
+CREATE TABLE IF NOT EXISTS auth.users (
+    instance_id UUID,
+    id UUID NOT NULL PRIMARY KEY,
+    aud VARCHAR(255),
+    role VARCHAR(255),
+    email VARCHAR(255),
+    encrypted_password VARCHAR(255),
+    email_confirmed_at TIMESTAMPTZ,
+    invited_at TIMESTAMPTZ,
+    confirmation_token VARCHAR(255),
+    confirmation_sent_at TIMESTAMPTZ,
+    recovery_token VARCHAR(255),
+    recovery_sent_at TIMESTAMPTZ,
+    email_change_token_new VARCHAR(255),
+    email_change VARCHAR(255),
+    email_change_sent_at TIMESTAMPTZ,
+    last_sign_in_at TIMESTAMPTZ,
+    raw_app_meta_data JSONB,
+    raw_user_meta_data JSONB,
+    is_super_admin BOOLEAN,
+    created_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ,
+    phone VARCHAR(255),
+    phone_confirmed_at TIMESTAMPTZ,
+    phone_change VARCHAR(255),
+    phone_change_token VARCHAR(255),
+    phone_change_sent_at TIMESTAMPTZ,
+    email_change_token_current VARCHAR(255),
+    email_change_confirm_status SMALLINT DEFAULT 0,
+    banned_until TIMESTAMPTZ,
+    reauthentication_token VARCHAR(255),
+    reauthentication_sent_at TIMESTAMPTZ,
+    is_sso_user BOOLEAN DEFAULT FALSE NOT NULL,
+    deleted_at TIMESTAMPTZ,
+    is_anonymous BOOLEAN DEFAULT FALSE NOT NULL,
+    confirmed_at TIMESTAMPTZ
+);
+-- Add any missing columns idempotently
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMPTZ;
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS email_confirmed_at TIMESTAMPTZ;
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS last_sign_in_at TIMESTAMPTZ;
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS raw_app_meta_data JSONB;
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS raw_user_meta_data JSONB;
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS is_super_admin BOOLEAN;
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS email_change VARCHAR(255);
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS phone_change VARCHAR(255);
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS phone_change_token VARCHAR(255);
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS phone_change_sent_at TIMESTAMPTZ;
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS email_change_token_current VARCHAR(255);
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS email_change_confirm_status SMALLINT;
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS banned_until TIMESTAMPTZ;
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS reauthentication_token VARCHAR(255);
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS reauthentication_sent_at TIMESTAMPTZ;
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS is_sso_user BOOLEAN;
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS is_anonymous BOOLEAN;
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS invited_at TIMESTAMPTZ;
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS confirmation_token VARCHAR(255);
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS confirmation_sent_at TIMESTAMPTZ;
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS recovery_token VARCHAR(255);
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS recovery_sent_at TIMESTAMPTZ;
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS email_change_token_new VARCHAR(255);
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS email_change_sent_at TIMESTAMPTZ;
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS phone_confirmed_at TIMESTAMPTZ;
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS instance_id UUID;
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS aud VARCHAR(255);
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS role VARCHAR(255);
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS encrypted_password VARCHAR(255);
+-- Create indexes for performance
+CREATE INDEX IF NOT EXISTS idx_auth_users_email ON auth.users(email);
+CREATE INDEX IF NOT EXISTS idx_auth_users_phone ON auth.users(phone);
+-- Verify
+SELECT 'auth.users guard complete - table is ready' AS status;
+
+-- ============================================================================
+-- 10. VERIFICATION
 -- ============================================================================
 SELECT '=== DATABASE SETUP COMPLETE ===' as status;
 
