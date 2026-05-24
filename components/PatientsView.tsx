@@ -531,19 +531,26 @@ const PatientsView: React.FC<PatientsViewProps> = ({
       <div className="flex flex-wrap items-center gap-2">
         {/* Period quick-select */}
         <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
-          {(['all', 'new'] as const).map((opt) => (
-            <button
-              key={opt}
-              onClick={() => { setDateQuickFilter(opt); setDateFilter(''); setCurrentPage(1); }}
-              className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors ${
-                dateQuickFilter === opt
-                  ? 'bg-white text-indigo-700 shadow-sm border border-gray-200'
-                  : 'text-gray-500 hover:text-gray-800'
-              }`}
-            >
-              {opt === 'all' ? 'All' : 'New'}
-            </button>
-          ))}
+          <button
+            onClick={() => { setDateQuickFilter('all'); setDateFilter(''); setCurrentPage(1); }}
+            className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors ${
+              dateQuickFilter === 'all' && !dateFilter
+                ? 'bg-white text-indigo-700 shadow-sm border border-gray-200'
+                : 'text-gray-500 hover:text-gray-800'
+            }`}
+          >
+            All
+          </button>
+          <button
+            onClick={() => { setDateQuickFilter('new'); setDateFilter(''); setCurrentPage(1); }}
+            className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors ${
+              dateQuickFilter === 'new' && !dateFilter
+                ? 'bg-white text-indigo-700 shadow-sm border border-gray-200'
+                : 'text-gray-500 hover:text-gray-800'
+            }`}
+          >
+            New
+          </button>
         </div>
         {/* Date picker */}
         <div className="relative">
@@ -553,8 +560,8 @@ const PatientsView: React.FC<PatientsViewProps> = ({
             value={dateFilter}
             onChange={(e) => {
               const v = e.target.value;
-              if (v) { setDateQuickFilter('custom' as const); setDateFilter(v); }
-              else { setDateQuickFilter('all' as const); setDateFilter(''); }
+              if (v) { setDateQuickFilter(v === todayISO ? 'new' : 'custom'); setDateFilter(v); }
+              else { setDateQuickFilter('all'); setDateFilter(''); }
               setCurrentPage(1);
             }}
             className="h-7 w-[140px] rounded-lg border border-gray-200 pl-7 pr-2 text-[11px] font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
@@ -733,7 +740,6 @@ const PatientsView: React.FC<PatientsViewProps> = ({
                 <tbody>
                   {paginatedPatients.map((patient, index) => {
                         const patientRecords = treatmentRecordsByPatientIdMap.get(patient.id) || [];
-                        const latestRecord = patientRecords.length > 0 ? patientRecords[0] : null;
                         return (
                     <tr
                       key={patient.id}
@@ -780,14 +786,38 @@ const PatientsView: React.FC<PatientsViewProps> = ({
                       <td className="px-3 py-3 align-top text-gray-700 max-w-xs truncate" title={getPatientAddress(patient)}>
                         {getPatientAddress(patient)}
                       </td>
-                      <td className="px-3 py-3 align-top text-gray-700 max-w-[120px]">
-                        <div className="text-xs font-medium text-indigo-700 truncate" title={latestRecord?.description || '-'} >
-                          {latestRecord?.description || '-'}
+                      <td className="px-3 py-3 align-top text-gray-700 max-w-[200px]">
+                        <div className="text-[11px] font-medium text-gray-700 leading-tight max-h-[48px] overflow-y-auto space-y-0.5" title={patientRecords.map(r => r.description).filter(Boolean).join(', ')}>
+                          {patientRecords.length > 0 ? (
+                            patientRecords.slice(0, 4).map((r, i) => (
+                              <div key={i} className="flex items-start gap-1">
+                                <span className="text-indigo-400 mt-0.5 shrink-0">•</span>
+                                <span className="truncate">{r.description}</span>
+                              </div>
+                            ))
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                          {patientRecords.length > 4 && (
+                            <div className="text-[10px] text-gray-400 font-medium mt-0.5">+{patientRecords.length - 4} more</div>
+                          )}
                         </div>
                       </td>
                       <td className="px-3 py-3 align-top text-gray-700">
-                        <div className="text-xs font-medium truncate max-w-[100px]" title={latestRecord?.doctor_name?.trim() || '-'} >
-                          {latestRecord?.doctor_name?.trim() ? 'Dr. ' + latestRecord.doctor_name.trim() : '-'}
+                        <div className="text-[11px] font-medium text-gray-700 leading-tight max-h-[48px] overflow-y-auto space-y-0.5">
+                          {patientRecords.length > 0 ? (
+                            [...new Set(patientRecords.map(r => r.doctor_name?.trim()).filter(Boolean))].slice(0, 2).map((name, i) => (
+                              <div key={i} className="flex items-start gap-1">
+                                <span className="text-gray-400 mt-0.5 shrink-0">•</span>
+                                <span className="truncate">Dr. {name}</span>
+                              </div>
+                            ))
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                          {[...new Set(patientRecords.map(r => r.doctor_name?.trim()).filter(Boolean))].length > 2 && (
+                            <div className="text-[10px] text-gray-400 font-medium mt-0.5">+{[...new Set(patientRecords.map(r => r.doctor_name?.trim()).filter(Boolean))].length - 2} more</div>
+                          )}
                         </div>
                       </td>
                       <td className="px-3 py-3 align-top">
