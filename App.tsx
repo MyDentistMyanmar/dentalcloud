@@ -2924,6 +2924,8 @@ const App: React.FC = () => {
                 currency={currency} 
                 loyaltyEnabled={loyaltyEnabled} 
                 loyaltyRules={loyaltyRules}
+                doctors={doctors}
+                treatmentRecords={globalRecords}
                 onSelectPatient={handlePatientSelect} 
                 onAddPatient={() => {
                   setNewPatientData({
@@ -2972,6 +2974,13 @@ const App: React.FC = () => {
                   } catch (err: any) {
                     alert('Error: ' + err.message);
                   }
+                }}
+                onGenerateReport={() => {
+                  setToast({
+                    message: 'Patient reports feature coming soon!',
+                    type: 'info',
+                    show: true
+                  });
                 }}
             />}
             {currentView === 'appointments' && canAccessView('appointments') && <AppointmentsView 

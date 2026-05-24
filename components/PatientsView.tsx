@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { Search, Plus, Loader2, ChevronRight, Award, User, ShieldCheck, ShieldAlert, Key, Edit, MoreVertical, ArrowLeft, ScanLine } from 'lucide-react';
+import { Search, Plus, Loader2, ChevronRight, Award, User, ShieldCheck, ShieldAlert, Key, Edit, MoreVertical, ArrowLeft, ScanLine, FileText, Calendar, Clock } from 'lucide-react';
 import { Patient, LoyaltyRule, Appointment, ClinicalRecord, PatientType } from '../types';
 import { formatCurrency, Currency } from '../utils/currency';
 import { exportPatientsToPDF } from '../utils/pdfExport';
@@ -27,8 +27,11 @@ interface PatientsViewProps {
   onUpdatePatientAuth?: (patient: Patient, password: string) => void;
   onExportPDF?: () => Promise<void>;
   onExportExcel?: () => Promise<void>;
+  onGenerateReport?: () => void;
   loyaltyEnabled: boolean;
   loyaltyRules?: LoyaltyRule[];
+  doctors?: { id: string; name: string }[];
+  treatmentRecords?: ClinicalRecord[];
 }
 
 const PatientsView: React.FC<PatientsViewProps> = ({ 
@@ -46,12 +49,18 @@ const PatientsView: React.FC<PatientsViewProps> = ({
   onExportPDF,
   onExportExcel,
   loyaltyEnabled, 
-  loyaltyRules = [] 
+  loyaltyRules = [],
+  onGenerateReport,
+  doctors = [],
+  treatmentRecords = []
 }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [showTodaysNew, setShowTodaysNew] = useState(false);
+  const [dateQuickFilter, setDateQuickFilter] = useState<'all' | 'today' | 'custom' | 'new'>('all');
+  const [dateFilter, setDateFilter] = useState('');
+  const [doctorFilter, setDoctorFilter] = useState('');
+  const [treatmentFilter, setTreatmentFilter] = useState('');
   const [authModal, setAuthModal] = useState<{ open: boolean, patient: Patient | null }>({ open: false, patient: null });
   const [editModal, setEditModal] = useState<{ open: boolean, patient: Patient | null }>({ open: false, patient: null });
   const [redeemModal, setRedeemModal] = useState<{ open: boolean, patient: Patient | null }>({ open: false, patient: null });
@@ -117,11 +126,76 @@ const PatientsView: React.FC<PatientsViewProps> = ({
     return `${day}/${month}/${year}`;
   };
 
+  // Build a map of patient_id -> treatment records for quick lookup
+  const treatmentRecordsByPatientIdMap = useMemo(() => {
+    const map = new Map<string, ClinicalRecord[]>();
+    treatmentRecords.forEach((record) => {
+      if (!map.has(record.patient_id)) {
+        map.set(record.patient_id, []);
+      }
+      map.get(record.patient_id)!.push(record);
+    });
+    return map;
+  }, [treatmentRecords]);
+
+  // Unique doctor names from treatment records
+  const doctorOptions = useMemo(() => {
+    const names = new Set<string>();
+    treatmentRecords.forEach((record) => {
+      if (record.doctor_name?.trim()) {
+        names.add(record.doctor_name.trim());
+      }
+    });
+    return Array.from(names).sort();
+  }, [treatmentRecords]);
+
+  // Unique treatment descriptions from records
+  const treatmentOptions = useMemo(() => {
+    const names = new Set<string>();
+    treatmentRecords.forEach((record) => {
+      if (record.description?.trim()) {
+        names.add(record.description.trim());
+      }
+    });
+    return Array.from(names).sort();
+  }, [treatmentRecords]);
+
   // Filtered data based on selected scope and search term
   const filteredPatients = useMemo(() => {
-    const scopedPatients = showTodaysNew
-      ? patients.filter((patient) => isNewPatientToday(patient))
-      : patients;
+    let scopedPatients = patients;
+
+    // Apply date quick filter
+    if (dateQuickFilter === 'new') {
+      scopedPatients = scopedPatients.filter((patient) => isNewPatientToday(patient));
+    } else if (dateQuickFilter === 'custom' && dateFilter) {
+      scopedPatients = scopedPatients.filter((patient) => {
+        if (!patient.created_at) return false;
+        const dateStr = patient.created_at.substring(0, 10);
+        return dateStr === dateFilter;
+      });
+    }
+
+    // Apply doctor filter
+    if (doctorFilter) {
+      const patientIdsWithDoctor = new Set<string>();
+      treatmentRecords.forEach((record) => {
+        if (record.doctor_name?.trim() === doctorFilter && record.patient_id) {
+          patientIdsWithDoctor.add(record.patient_id);
+        }
+      });
+      scopedPatients = scopedPatients.filter((patient) => patientIdsWithDoctor.has(patient.id));
+    }
+
+    // Apply treatment filter
+    if (treatmentFilter) {
+      const patientIdsWithTreatment = new Set<string>();
+      treatmentRecords.forEach((record) => {
+        if (record.description?.trim() === treatmentFilter && record.patient_id) {
+          patientIdsWithTreatment.add(record.patient_id);
+        }
+      });
+      scopedPatients = scopedPatients.filter((patient) => patientIdsWithTreatment.has(patient.id));
+    }
 
     if (!searchTerm) return scopedPatients;
     const term = searchTerm.toLowerCase();
@@ -145,7 +219,7 @@ const PatientsView: React.FC<PatientsViewProps> = ({
         searchableRawCreatedDate.includes(term)
       );
     });
-  }, [patients, searchTerm, showTodaysNew, todayISO]);
+  }, [patients, searchTerm, dateQuickFilter, dateFilter, doctorFilter, treatmentFilter, todayISO, treatmentRecords]);
 
   const cityOptions = useMemo(
     () => getMyanmarCities().map((city) => ({ value: city, label: city })),
@@ -205,7 +279,7 @@ const PatientsView: React.FC<PatientsViewProps> = ({
   // Reset to first page when patients change
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [patients, showTodaysNew]);
+  }, [patients, dateQuickFilter, doctorFilter, treatmentFilter]);
 
   const [exporting, setExporting] = useState(false);
 
@@ -430,19 +504,15 @@ const PatientsView: React.FC<PatientsViewProps> = ({
             className="pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:w-64"/>
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={() => {
-              setShowTodaysNew((prev) => !prev);
-              setCurrentPage(1);
-            }}
-            className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-sm font-medium transition-colors border ${
-              showTodaysNew
-                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-            }`}
-          >
-            Today's new
-          </button>
+          {onGenerateReport && (
+            <button
+              onClick={onGenerateReport}
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-2 border border-indigo-200 bg-indigo-50 text-indigo-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-100 transition-colors"
+              title="Generate patient reports"
+            >
+              <FileText className="w-4 h-4" /> <span className="hidden sm:inline">Reports</span>
+            </button>
+          )}
           <ExportMenu
             disabled={patients.length === 0 || exporting}
             onExportPDF={handleDownloadPDF}
@@ -461,6 +531,82 @@ const PatientsView: React.FC<PatientsViewProps> = ({
             <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Add Patient</span>
           </button>
         </div>
+      </div>
+    </div>
+    {/* Toolbar: Date + Doctor + Treatment Filters */}
+    <div className="px-4 md:px-6 py-2 md:py-3 border-b border-gray-100 bg-gray-50/50 flex flex-col md:flex-row gap-2 md:gap-3 items-start md:items-center">
+      <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+        {/* Date Quick Filters */}
+        <div className="inline-flex rounded-lg border border-gray-200 bg-white p-1">
+          <button
+            onClick={() => { setDateQuickFilter('all'); setDateFilter(''); setCurrentPage(1); }}
+            className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded-md transition-colors ${
+              dateQuickFilter === 'all' ? 'bg-white text-indigo-700 shadow-sm font-semibold' : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            All
+          </button>
+          <button
+            onClick={() => { setDateQuickFilter('new'); setDateFilter(''); setCurrentPage(1); }}
+            className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded-md transition-colors ${
+              dateQuickFilter === 'new' ? 'bg-emerald-50 text-emerald-700 shadow-sm font-semibold' : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            New Patients
+          </button>
+        </div>
+        {/* Date Pick Filter */}
+        <label className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-500 whitespace-nowrap">
+          <Calendar className="w-3.5 h-3.5 text-gray-400" />
+          <input
+            type="date"
+            value={dateFilter}
+            onChange={(e) => {
+              const nextDate = e.target.value;
+              if (nextDate) {
+                setDateQuickFilter('custom');
+                setDateFilter(nextDate);
+              } else {
+                setDateQuickFilter('all');
+                setDateFilter('');
+              }
+              setCurrentPage(1);
+            }}
+            className="h-8 rounded-lg border border-gray-200 px-2 text-sm font-normal text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+          />
+        </label>
+        {(dateQuickFilter !== 'all' || dateFilter) && (
+          <button
+            onClick={() => { setDateQuickFilter('all'); setDateFilter(''); setDoctorFilter(''); setTreatmentFilter(''); setCurrentPage(1); }}
+            className="h-8 inline-flex items-center justify-center rounded-lg border border-gray-200 px-2.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors bg-white"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+      <div className="flex flex-wrap items-center gap-2 w-full md:w-auto md:ml-auto">
+        {/* Doctor Filter */}
+        <select
+          value={doctorFilter}
+          onChange={(e) => { setDoctorFilter(e.target.value); setCurrentPage(1); }}
+          className="h-8 rounded-lg border border-gray-200 px-2 text-xs font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white max-w-[150px]"
+        >
+          <option value=''>All Doctors</option>
+          {doctorOptions.map((name) => (
+            <option key={name} value={name}>{name}</option>
+          ))}
+        </select>
+        {/* Treatment Filter */}
+        <select
+          value={treatmentFilter}
+          onChange={(e) => { setTreatmentFilter(e.target.value); setCurrentPage(1); }}
+          className="h-8 rounded-lg border border-gray-200 px-2 text-xs font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white max-w-[180px]"
+        >
+          <option value=''>All Treatments</option>
+          {treatmentOptions.map((name) => (
+            <option key={name} value={name}>{name}</option>
+          ))}
+        </select>
       </div>
     </div>
     {detailPatient ? (
@@ -585,7 +731,7 @@ const PatientsView: React.FC<PatientsViewProps> = ({
         <div className="hidden md:block flex-1 min-h-0 p-6 pt-0 overflow-hidden">
           <div className="h-full rounded-2xl border border-indigo-200 bg-white shadow-sm overflow-hidden">
             <div className="h-full overflow-auto">
-              <table className="min-w-[960px] w-full text-sm">
+              <table className="min-w-[1100px] w-full text-sm">
                 <thead className="bg-indigo-50 border-b border-indigo-200">
                   <tr className="text-indigo-700">
                     <th className="sticky top-0 z-20 bg-indigo-50 px-3 py-3 text-left font-bold uppercase text-xs tracking-wide">No</th>
@@ -594,17 +740,20 @@ const PatientsView: React.FC<PatientsViewProps> = ({
                     <th className="sticky top-0 z-20 bg-indigo-50 px-3 py-3 text-left font-bold uppercase text-xs tracking-wide">Age</th>
                     <th className="sticky top-0 z-20 bg-indigo-50 px-3 py-3 text-left font-bold uppercase text-xs tracking-wide">Contact</th>
                     <th className="sticky top-0 z-20 bg-indigo-50 px-3 py-3 text-left font-bold uppercase text-xs tracking-wide">Address</th>
+                    <th className="sticky top-0 z-20 bg-indigo-50 px-3 py-3 text-left font-bold uppercase text-xs tracking-wide">Treatment</th>
+                    <th className="sticky top-0 z-20 bg-indigo-50 px-3 py-3 text-left font-bold uppercase text-xs tracking-wide">Doctor</th>
                     <th className="sticky top-0 z-20 bg-indigo-50 px-3 py-3 text-left font-bold uppercase text-xs tracking-wide">Balance</th>
                     <th className="sticky top-0 z-20 bg-indigo-50 px-3 py-3 text-right font-bold uppercase text-xs tracking-wide">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {paginatedPatients.map((patient, index) => (
+                  {paginatedPatients.map((patient, index) => {
+                        const patientRecords = treatmentRecordsByPatientIdMap.get(patient.id) || [];
+                        const latestRecord = patientRecords.length > 0 ? patientRecords[0] : null;
+                        return (
                     <tr
                       key={patient.id}
-                      className={`transition-colors group cursor-pointer border-b border-gray-100 last:border-b-0 ${
-                        showTodaysNew
-                          ? isNewPatientToday(patient)
+                      className={`transition-colors group cursor-pointer border-b border-gray-100 last:border-b-0 ${dateQuickFilter === 'new' ? isNewPatientToday(patient)
                             ? 'bg-emerald-50/70 hover:bg-emerald-100/70'
                             : 'bg-amber-50/70 hover:bg-amber-100/70'
                           : 'hover:bg-indigo-50/30'
@@ -621,7 +770,7 @@ const PatientsView: React.FC<PatientsViewProps> = ({
                           </div>
                           <div className="flex items-center gap-2">
                             <div className="text-sm font-semibold text-gray-900 group-hover:text-indigo-700">{patient.name}</div>
-                            {showTodaysNew && (
+                            {dateQuickFilter === 'new' && (
                               <span
                                 className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
                                   isNewPatientToday(patient)
@@ -646,6 +795,16 @@ const PatientsView: React.FC<PatientsViewProps> = ({
                       </td>
                       <td className="px-3 py-3 align-top text-gray-700 max-w-xs truncate" title={getPatientAddress(patient)}>
                         {getPatientAddress(patient)}
+                      </td>
+                      <td className="px-3 py-3 align-top text-gray-700 max-w-[120px]">
+                        <div className="text-xs font-medium text-indigo-700 truncate" title={latestRecord?.description || '-'} >
+                          {latestRecord?.description || '-'}
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 align-top text-gray-700">
+                        <div className="text-xs font-medium truncate max-w-[100px]" title={latestRecord?.doctor_name?.trim() || '-'} >
+                          {latestRecord?.doctor_name?.trim() ? 'Dr. ' + latestRecord.doctor_name.trim() : '-'}
+                        </div>
                       </td>
                       <td className="px-3 py-3 align-top">
                         {patient.balance > 0 ? (
@@ -713,7 +872,8 @@ const PatientsView: React.FC<PatientsViewProps> = ({
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  );
+                      })}
                 </tbody>
               </table>
             </div>
@@ -726,7 +886,7 @@ const PatientsView: React.FC<PatientsViewProps> = ({
             <div 
               key={patient.id} 
               className={`p-4 transition-colors ${
-                showTodaysNew
+                dateQuickFilter === 'new'
                   ? isNewPatientToday(patient)
                     ? 'bg-emerald-50/70 hover:bg-emerald-100/70'
                     : 'bg-amber-50/70 hover:bg-amber-100/70'
@@ -742,7 +902,7 @@ const PatientsView: React.FC<PatientsViewProps> = ({
                   <div>
                     <div className="flex items-center gap-2">
                       <div className="font-bold text-gray-900">{patient.name}</div>
-                      {showTodaysNew && (
+                      {dateQuickFilter === 'new' && (
                         <span
                           className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
                             isNewPatientToday(patient)
