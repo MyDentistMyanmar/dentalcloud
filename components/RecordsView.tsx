@@ -46,11 +46,42 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], l
   };
 
   const auditRows = useMemo<AuditRow[]>(() => {
-    const treatmentRows: AuditRow[] = records.map((record) => ({
-      kind: 'treatment',
-      sortDate: `${record.date || ''}T23:59:59`,
-      record
-    }));
+    // Group treatment records by patient + date to show all treatments in one visit
+    const groupedTreatmentMap = new Map<string, ClinicalRecord[]>();
+    records.forEach((record) => {
+      const key = `${record.patient_id || ''}|${record.date || ''}`;
+      if (!groupedTreatmentMap.has(key)) {
+        groupedTreatmentMap.set(key, []);
+      }
+      groupedTreatmentMap.get(key)!.push(record);
+    });
+
+    // For each group, create a merged row with all treatments listed together
+    const treatmentRows: AuditRow[] = [];
+    groupedTreatmentMap.forEach((group) => {
+      const sorted = [...group].sort((a, b) => {
+        const dateCmp = (a.date || '').localeCompare(b.date || '') || a.description.localeCompare(b.description);
+        return dateCmp;
+      });
+      const base = { ...sorted[0] };
+      const allDescriptions = sorted.map((r) => r.description).filter(Boolean);
+      const allTeeth = sorted.flatMap((r) => r.teeth || []);
+      const totalCost = sorted.reduce((sum, r) => sum + (r.cost || 0), 0);
+      const totalEarnings = sorted.reduce((sum, r) => sum + (r.doctorEarnings || 0), 0);
+
+      base.description = allDescriptions.join(' + ');
+      base.teeth = [...new Set(allTeeth)].sort((a, b) => a - b);
+      base.cost = totalCost;
+      base.doctorEarnings = totalEarnings > 0 ? totalEarnings : base.doctorEarnings;
+
+      (base as any)._groupedRecords = sorted;
+
+      treatmentRows.push({
+        kind: 'treatment',
+        sortDate: `${base.date || ''}T23:59:59`,
+        record: base
+      });
+    });
 
     const appointmentRows: AuditRow[] = isDoctor
       ? []
@@ -272,10 +303,29 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], l
                         <td className="px-6 py-4 font-bold text-gray-900">{rec.patient_name || 'Unknown'}</td>
                         <td className="px-6 py-4 text-sm text-gray-700">{rec.doctor_name ? `Dr. ${rec.doctor_name}` : '-'}</td>
                         <td className="px-6 py-4 text-sm text-gray-700">
-                          {rec.description}
+                          <div className="space-y-0.5">
+                            {(rec as any)._groupedRecords ? (
+                              (rec as any)._groupedRecords.map((r: ClinicalRecord, i: number) => (
+                                <div key={i} className="flex items-start gap-1.5">
+                                  <span className="text-indigo-400 mt-0.5 shrink-0">•</span>
+                                  <span>{r.description}</span>
+                                </div>
+                              ))
+                            ) : (
+                              <div className="flex items-start gap-1.5">
+                                <span className="text-indigo-400 mt-0.5 shrink-0">•</span>
+                                <span>{rec.description}</span>
+                              </div>
+                            )}
+                          </div>
                           <span className="block text-xs font-mono text-gray-500 mt-1">
                             {rec.teeth && rec.teeth.length > 0 ? formatTeethWithPosition(rec.teeth) : 'General'}
                           </span>
+                          {(rec as any)._groupedRecords && (rec as any)._groupedRecords.length > 0 && (
+                            <span className="block text-[11px] font-semibold text-gray-600 mt-1.5 pt-1.5 border-t border-gray-100">
+                              Total: {formatCurrency(rec.cost || 0, currency)}
+                            </span>
+                          )}
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-700">Clinical record</td>
                         <td className="px-6 py-4 text-right text-sm font-black text-gray-900">{formatCurrency(rec.cost || 0, currency)}</td>
