@@ -330,6 +330,10 @@ body {
   color: var(--hover-600) !important;
 }
 
+.theme-accent-border {
+  border-color: var(--hover-100) !important;
+}
+
 /* Gradient utility remap so blue/indigo gradients follow selected theme */
 .from-indigo-50,
 .from-blue-50 {

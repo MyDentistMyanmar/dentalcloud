@@ -222,14 +222,14 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], l
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-fade-in">
-      <div className="border-b border-slate-200 bg-gradient-to-br from-slate-50 via-white to-cyan-50/40">
+      <div className="border-b border-slate-200 bg-gradient-to-br from-slate-50 via-white to-blue-50/40">
         <div className="p-4 md:p-6 flex flex-col xl:flex-row xl:items-start xl:justify-between gap-5">
         <div className="flex items-start gap-3">
-          <div className="hidden sm:flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-50 text-cyan-700 border border-cyan-100">
+          <div className="hidden sm:flex h-11 w-11 items-center justify-center rounded-2xl theme-accent-soft-bg theme-accent-text border theme-accent-border">
             <ShieldCheck size={22} />
           </div>
           <div>
-            <p className="text-[11px] font-black uppercase tracking-[0.24em] text-cyan-700 mb-1">Clinical governance</p>
+            <p className="text-[11px] font-black uppercase tracking-[0.24em] theme-accent-text mb-1">Clinical governance</p>
             <h2 className="text-2xl font-bold text-slate-900">{isDoctor ? 'Patient Treatment Records' : 'Clinical Audit Trail'}</h2>
             <p className="text-sm text-slate-500 mt-1 max-w-2xl">
               {isDoctor ? 'Your completed treatments and patient clinical history.' : 'A daily operational record of appointments, treatments, responsible staff, and patient balances.'}
@@ -237,7 +237,7 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], l
             {!isDoctor && (
               <div className="mt-3 flex flex-wrap gap-2 text-xs">
                 <span className="rounded-full border border-slate-200 bg-white px-3 py-1 font-semibold text-slate-700">{filteredRows.length} visible entries</span>
-                <span className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 font-semibold text-blue-700">{filteredSummary.appointments} appointments</span>
+                <span className="rounded-full border theme-accent-border theme-accent-soft-bg px-3 py-1 font-semibold theme-accent-text">{filteredSummary.appointments} appointments</span>
                 <span className="rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 font-semibold text-emerald-700">{filteredSummary.treatments} treatments</span>
               </div>
             )}
@@ -255,7 +255,7 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], l
                   value={dateFrom}
                   max={dateTo}
                   onChange={(e) => handleDateFromChange(e.target.value)}
-                  className="w-full sm:w-36 bg-white text-slate-800 text-sm border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                  className="w-full sm:w-36 bg-white text-slate-800 text-sm border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
               <div>
@@ -265,13 +265,13 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], l
                   value={dateTo}
                   min={dateFrom}
                   onChange={(e) => handleDateToChange(e.target.value)}
-                  className="w-full sm:w-36 bg-white text-slate-800 text-sm border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                  className="w-full sm:w-36 bg-white text-slate-800 text-sm border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
               <button
                 type="button"
                 onClick={handleResetToToday}
-                className="col-span-2 sm:col-span-1 self-end px-4 py-2.5 text-xs rounded-xl border border-cyan-100 bg-cyan-50 text-cyan-700 font-bold hover:bg-cyan-100 transition-colors"
+                className="col-span-2 sm:col-span-1 self-end px-4 py-2.5 text-xs rounded-xl border theme-accent-border theme-accent-soft-bg theme-accent-text font-bold hover:bg-blue-100 transition-colors"
               >
                 Today
               </button>
@@ -290,7 +290,7 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], l
                     setCurrentPage(1);
                   }}
                   className={`px-3.5 py-2 text-xs rounded-lg transition-colors ${
-                    auditFilter === item.value ? 'bg-white text-cyan-800 shadow-sm font-bold' : 'text-slate-600 hover:text-slate-900'
+                    auditFilter === item.value ? 'bg-white theme-accent-text shadow-sm font-bold' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   {item.label}
@@ -309,7 +309,7 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], l
                   setSearchTerm(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 w-full bg-white shadow-sm"
+                className="pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full bg-white shadow-sm"
               />
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             </div>
@@ -329,7 +329,7 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], l
             </button>
             <button
               onClick={onRefresh}
-              className="text-cyan-700 bg-cyan-50 text-sm font-bold flex items-center justify-center gap-2 border border-cyan-100 rounded-xl px-4 py-2 hover:bg-cyan-100 transition-colors"
+              className="theme-accent-text theme-accent-soft-bg text-sm font-bold flex items-center justify-center gap-2 border theme-accent-border rounded-xl px-4 py-2 hover:bg-blue-100 transition-colors"
             >
               <RotateCw size={16} /> Refresh
             </button>
@@ -342,7 +342,7 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], l
 
       {loading ? (
         <div className="p-12 flex flex-col items-center justify-center gap-3 text-slate-500">
-          <Loader2 className="animate-spin text-cyan-700" />
+          <Loader2 className="animate-spin theme-accent-text" />
           <p className="text-sm font-medium">Loading audit records...</p>
         </div>
       ) : (
@@ -377,9 +377,9 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], l
                     if (row.kind === 'appointment') {
                       const appointment = row.appointment;
                       return (
-                        <tr key={`appointment-${appointment.id}`} className="hover:bg-cyan-50/40 transition-colors">
-                          <td className="px-6 py-4 text-sm text-blue-700 font-semibold">
-                            <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-xs font-bold">
+                        <tr key={`appointment-${appointment.id}`} className="hover:bg-blue-50/40 transition-colors">
+                          <td className="px-6 py-4 text-sm theme-accent-text font-semibold">
+                            <span className="inline-flex items-center gap-1.5 rounded-full border theme-accent-border theme-accent-soft-bg px-2.5 py-1 text-xs font-bold">
                               <CalendarDays size={14} /> Appointment
                             </span>
                           </td>
@@ -416,13 +416,13 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], l
                             {(rec as any)._groupedRecords ? (
                               (rec as any)._groupedRecords.map((r: ClinicalRecord, i: number) => (
                                 <div key={i} className="flex items-start gap-1.5">
-                                  <span className="text-cyan-500 mt-0.5 shrink-0">•</span>
+                                  <span className="text-blue-500 mt-0.5 shrink-0">•</span>
                                   <span>{r.description}</span>
                                 </div>
                               ))
                             ) : (
                               <div className="flex items-start gap-1.5">
-                                <span className="text-cyan-500 mt-0.5 shrink-0">•</span>
+                                <span className="text-blue-500 mt-0.5 shrink-0">•</span>
                                 <span>{rec.description}</span>
                               </div>
                             )}
@@ -462,11 +462,11 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], l
                     <div key={`appointment-${appointment.id}`} className="m-3 rounded-2xl border border-slate-200 bg-white p-4 space-y-3 shadow-sm">
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="text-xs font-black uppercase tracking-wider text-blue-600">Appointment</p>
+                          <p className="text-xs font-black uppercase tracking-wider theme-accent-text">Appointment</p>
                           <p className="text-sm font-bold text-slate-900">{appointment.patient_name || 'Unknown'}</p>
                           <p className="text-xs text-slate-500 mt-1">{appointment.date} at {appointment.time}</p>
                         </div>
-                        <p className="rounded-full bg-blue-50 px-2 py-1 text-xs font-black text-blue-700">{appointment.status}</p>
+                        <p className="rounded-full theme-accent-soft-bg px-2 py-1 text-xs font-black theme-accent-text">{appointment.status}</p>
                       </div>
                       <div className="bg-slate-50 rounded-xl p-3">
                         <p className="text-[11px] font-semibold text-slate-500 uppercase mb-1">Recorded By</p>
