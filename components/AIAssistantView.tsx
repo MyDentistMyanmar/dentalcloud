@@ -6084,9 +6084,9 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                     initial={{ opacity: 0, scaleX: 0 }}
                     animate={{ opacity: 1, scaleX: 1 }}
                     exit={{ opacity: 0, scaleX: 0 }}
-                    transition={{ duration: 0.4, ease: 'easeInOut', origin: 'left' }}
+                    transition={{ duration: 0.4, ease: 'easeInOut' }}
                     className="relative overflow-hidden rounded-xl bg-gradient-to-r from-red-500/10 via-rose-500/20 to-red-500/10 mb-6"
-                    style={{ height: '120px' }}
+                    style={{ height: '120px', transformOrigin: 'left' }}
                   >
                     <motion.div
                       className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"

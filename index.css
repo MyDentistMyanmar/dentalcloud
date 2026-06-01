@@ -596,6 +596,60 @@ body {
   appearance: textfield;
 }
 
+/* ===== Native Date/Time Input Containment ===== */
+/*
+  iOS Safari gives native date/time controls a large intrinsic width and
+  internal WebKit value area. On smaller iPhones this can push the picker
+  button/text outside rounded dashboard/filter containers even when the input
+  itself uses w-full or a fixed compact width. Keep the control shrinkable and
+  clip only the native inner value area so Android/desktop behaviour remains
+  visually unchanged.
+*/
+input[type='date'],
+input[type='time'],
+input[type='datetime-local'],
+input[type='month'],
+input[type='week'] {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+input[type='date']::-webkit-date-and-time-value,
+input[type='time']::-webkit-date-and-time-value,
+input[type='datetime-local']::-webkit-date-and-time-value,
+input[type='month']::-webkit-date-and-time-value,
+input[type='week']::-webkit-date-and-time-value {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@supports (-webkit-touch-callout: none) {
+  input[type='date'],
+  input[type='time'],
+  input[type='datetime-local'],
+  input[type='month'],
+  input[type='week'] {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  input[type='date']::-webkit-calendar-picker-indicator,
+  input[type='time']::-webkit-calendar-picker-indicator,
+  input[type='datetime-local']::-webkit-calendar-picker-indicator,
+  input[type='month']::-webkit-calendar-picker-indicator,
+  input[type='week']::-webkit-calendar-picker-indicator {
+    flex-shrink: 0;
+    margin-inline-start: 2px;
+    padding: 0;
+  }
+}
+
 /* ===== Aurora Animations ===== */
 
 @keyframes aurora-float {
