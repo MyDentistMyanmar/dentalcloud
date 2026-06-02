@@ -15,8 +15,9 @@ export const encodePatientQR = (patientUniqueId: string): string => {
  * Returns null if the format doesn't match.
  */
 export const decodePatientQR = (scannedText: string): string | null => {
-  if (!scannedText.startsWith(QR_PATIENT_PREFIX)) return null;
-  return scannedText.slice(QR_PATIENT_PREFIX.length).trim();
+  const normalizedText = scannedText.trim();
+  if (!normalizedText.startsWith(QR_PATIENT_PREFIX)) return null;
+  return normalizedText.slice(QR_PATIENT_PREFIX.length).trim();
 };
 
 interface PatientQRCodeProps {
@@ -55,8 +56,8 @@ const PatientQRCode: React.FC<PatientQRCodeProps> = ({
           size={size}
           bgColor="#ffffff"
           fgColor="#1f2937"
-          level="M"
-          includeMargin={false}
+          level="Q"
+          includeMargin={true}
         />
       </div>
       <p className="text-[10px] text-gray-400 font-medium">

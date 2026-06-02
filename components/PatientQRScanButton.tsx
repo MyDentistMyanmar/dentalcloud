@@ -18,20 +18,37 @@ const PatientQRScanButton: React.FC<PatientQRScanButtonProps> = ({
   const [showQRScanner, setShowQRScanner] = useState(false);
   const [scannerError, setScannerError] = useState<string | null>(null);
   const scannerRef = useRef<HTMLDivElement | null>(null);
-  const html5QrCodeRef = useRef<any>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const hasHandledScanRef = useRef(false);
 
   const stopScanner = () => {
-    if (html5QrCodeRef.current) {
-      try {
-        html5QrCodeRef.current.stop().catch(() => {});
-      } catch (e) {}
-      html5QrCodeRef.current = null;
+    if (animationFrameRef.current !== null) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.srcObject = null;
+      videoRef.current = null;
+    }
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+
+    if (scannerRef.current) {
+      scannerRef.current.innerHTML = '';
     }
   };
 
   const closeScanner = () => {
     setShowQRScanner(false);
     setScannerError(null);
+    hasHandledScanRef.current = false;
     stopScanner();
   };
 
@@ -39,64 +56,129 @@ const PatientQRScanButton: React.FC<PatientQRScanButtonProps> = ({
     if (!showQRScanner) return;
 
     let stopped = false;
+    hasHandledScanRef.current = false;
 
     const startScanner = async () => {
       try {
-        const { Html5Qrcode } = await import('html5-qrcode');
+        if (!scannerRef.current) return;
 
-        const scannerId = 'patient-qr-scanner';
-        let existingEl = document.getElementById(scannerId);
-        if (!existingEl) {
-          const div = document.createElement('div');
-          div.id = scannerId;
-          if (scannerRef.current) {
-            scannerRef.current.innerHTML = '';
-            scannerRef.current.appendChild(div);
-          }
+        scannerRef.current.innerHTML = '';
+
+        const video = document.createElement('video');
+        video.id = 'patient-qr-scanner-video';
+        video.autoplay = true;
+        video.muted = true;
+        video.playsInline = true;
+        video.setAttribute('playsinline', 'true');
+        video.setAttribute('webkit-playsinline', 'true');
+        video.className = 'absolute inset-0 h-full w-full object-cover';
+        scannerRef.current.appendChild(video);
+        videoRef.current = video;
+
+        // iOS Safari can report zero video/container dimensions if the camera starts
+        // before the modal and video element finish layout.
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        if (stopped) return;
+
+        if (!navigator.mediaDevices?.getUserMedia) {
+          throw new Error('Camera scanning is not supported by this browser.');
         }
 
-        const html5QrCode = new Html5Qrcode(scannerId);
-        html5QrCodeRef.current = html5QrCode;
-
-        await html5QrCode.start(
-          { facingMode: 'environment' },
-          {
-            fps: 10,
-            qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-              const size = Math.min(
-                Math.min(viewfinderWidth, viewfinderHeight) * 0.65,
-                280
-              );
-              return { width: size, height: size };
+        let stream: MediaStream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: { ideal: 'environment' },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
             },
-          },
-          (decodedText) => {
-            const rawId = decodePatientQR(decodedText);
-            if (!rawId) {
-              setScannerError('Invalid QR code format. Please scan a valid patient QR code.');
-              return;
-            }
+            audio: false,
+          });
+        } catch (advancedConstraintError) {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'environment' },
+            audio: false,
+          });
+        }
 
-            const matchedPatient = patients.find(
-              (p) => p.patient_unique_id === rawId || p.id === rawId
-            );
+        if (stopped) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
 
-            if (!matchedPatient) {
-              setScannerError(`Patient with ID "${rawId}" not found in the current branch.`);
-              return;
-            }
+        streamRef.current = stream;
+        video.srcObject = stream;
+        await video.play();
 
-            stopScanner();
-            setScannerError(null);
-            setShowQRScanner(false);
-            onSelectPatient(matchedPatient);
-          },
-          () => {
-            // Ignore scan failures and keep trying.
+        const { default: jsQR } = await import('jsqr');
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        if (!context) throw new Error('Unable to prepare QR scanner canvas.');
+
+        const handleDecodedText = (decodedText: string) => {
+          if (hasHandledScanRef.current) return;
+
+          const rawId = decodePatientQR(decodedText);
+          if (!rawId) {
+            setScannerError('QR code detected, but it is not a valid patient QR code.');
+            return;
           }
-        );
+
+          const matchedPatient = patients.find(
+            (p) => p.patient_unique_id === rawId || p.id === rawId
+          );
+
+          if (!matchedPatient) {
+            setScannerError(`Patient with ID "${rawId}" not found in the current branch.`);
+            return;
+          }
+
+          hasHandledScanRef.current = true;
+          stopScanner();
+          setScannerError(null);
+          setShowQRScanner(false);
+          onSelectPatient(matchedPatient);
+        };
+
+        const scanFrame = () => {
+          if (stopped || hasHandledScanRef.current || !videoRef.current) return;
+
+          if (
+            video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+            video.videoWidth > 0 &&
+            video.videoHeight > 0
+          ) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+            const qrCode = jsQR(imageData.data, imageData.width, imageData.height, {
+              inversionAttempts: 'attemptBoth',
+            });
+
+            if (qrCode?.data) {
+              handleDecodedText(qrCode.data);
+              if (hasHandledScanRef.current) return;
+            }
+          }
+
+          animationFrameRef.current = requestAnimationFrame(scanFrame);
+        };
+
+        animationFrameRef.current = requestAnimationFrame(scanFrame);
+
+        const videoTrack = stream.getVideoTracks()[0];
+        if (videoTrack?.applyConstraints) {
+          videoTrack.applyConstraints({
+            advanced: [{ focusMode: 'continuous' } as MediaTrackConstraintSet],
+          }).catch(() => {});
+        }
+
+        setScannerError(null);
       } catch (err: any) {
         if (stopped) return;
+
         if (err?.toString()?.includes('NotAllowedError') || err?.toString()?.includes('Permission')) {
           setScannerError('Camera access denied. Please allow camera permissions and try again.');
         } else if (err?.toString()?.includes('NotFoundError')) {
@@ -141,7 +223,11 @@ const PatientQRScanButton: React.FC<PatientQRScanButtonProps> = ({
                 ref={(el) => { if (!el) return; scannerRef.current = el; }}
                 className="absolute inset-0 w-full h-full"
               />
+              <div className="pointer-events-none absolute left-1/2 top-1/2 h-[62%] w-[62%] -translate-x-1/2 -translate-y-1/2 rounded-2xl border-4 border-emerald-400/90 shadow-[0_0_0_9999px_rgba(0,0,0,0.18)]" />
             </div>
+            <p className="text-xs text-gray-500 text-center">
+              Keep the QR code inside the green box and hold still for a moment.
+            </p>
             <div className="flex justify-center">
               <button
                 onClick={closeScanner}
