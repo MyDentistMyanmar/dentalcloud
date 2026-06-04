@@ -263,8 +263,8 @@ AI commands follow this JSON format:
 ### Supported Commands
 
 #### Patient Management
-- `p_c(n, e, ph, m, lp)`: Create patient (n=name, e=email, ph=phone, m=medicalHistory, lp=loyalty_points)
-- `p_u(id, data)`: Update patient
+- `p_c(n, e, ph, age, patient_type, address, city, township, m, password, balance, location_id)`: Create patient using the current registration form fields (name, email, phone, age, patient type, branch/location, address, city, township, optional portal password, clinical fee/balance, and medical history)
+- `p_u(id, data)`: Update patient profile fields including name, email, phone, age, address, city, township, patient_type, medicalHistory, balance, and loyalty_points
 - `p_d(id)`: Delete patient
 - `p_find(name)`: Find patient by name
 - `pat_bal(pid)`: Get patient balance

@@ -6,6 +6,7 @@ import remarkGfm from 'remark-gfm';
 import { Patient, ClinicalRecord, Appointment, Doctor, TreatmentType, User as UserType, Medicine, Expense, Recall, Location } from '../types';
 import { api } from '../services/api';
 import { Currency } from '../utils/currency';
+import { DEFAULT_PATIENT_TYPE_NAME } from '../constants';
 import { formatTeethWithPosition } from '../utils/toothNumbering';
 import { buildFinancialReport, renderFinancialReportMarkdown, buildInsightsNoNumbers, runReportUpgradeCheck, buildAIReportPayload, payloadToReport, validateAIReportPayload, AIReportPayload } from '../utils/aiReport';
 import {
@@ -610,6 +611,22 @@ const AIAssistantView: React.FC<AIAssistantViewProps> = ({
 
     return undefined;
   };
+
+  const buildPatientCreatePayloadFromAiParams = (params: any, locationId: string | undefined) => ({
+    location_id: locationId,
+    name: params.n || params.name,
+    email: params.e || params.email || '',
+    phone: params.ph || params.phone || '',
+    age: params.age !== undefined && params.age !== null && params.age !== '' ? Number(params.age) : undefined,
+    address: params.address || params.addr || '',
+    city: params.city || '',
+    township: params.township || params.tsp || '',
+    patient_type: params.patient_type || params.pt || params.type || DEFAULT_PATIENT_TYPE_NAME,
+    balance: params.balance !== undefined ? Number(params.balance) : params.clinical_fee !== undefined ? Number(params.clinical_fee) : 0,
+    medicalHistory: params.m || params.medicalHistory || params.medical_history || '',
+    password: params.password || params.portal_password || undefined,
+    username: params.username || undefined
+  });
 
   const resolvePatient = (identifier?: string | null) => {
     const normalized = normalizeLookupText(identifier);
@@ -1583,7 +1600,7 @@ Finding Patients:
 
 Adding Patients (Agent Mode):
 • "Add new patient Michael Brown" 
-• Follow the prompts for email, phone, and medical history
+• The current registration form supports name, email, phone, age, patient type, branch, address, city, township, optional portal password, clinical fee/balance, and medical history
 
 Scheduling Appointments:
 • "Book Sarah Johnson for a checkup next Tuesday at 2 PM"
@@ -2090,7 +2107,13 @@ Need more detailed help?
         i: p.id,
         pid: p.patient_unique_id,
         n: p.name, 
+        e: p.email,
         ph: p.phone, 
+        age: p.age,
+        addr: p.address,
+        city: p.city,
+        township: p.township,
+        pt: p.patient_type,
         b: p.balance,
         lp: p.loyalty_points,
         mh: p.medicalHistory ? p.medicalHistory.substring(0, 100) : '',
@@ -2328,8 +2351,8 @@ BRANCH AWARENESS:
 - If the current scope is "All Branches" and the task changes data, prefer specifying the branch explicitly.
 
 PATIENT MANAGEMENT:
-- p_c(n, e, ph, m, lp): Create patient. n=name, e=email, ph=phone, m=medicalHistory, lp=loyalty_points.
-- p_u(id, data): Update patient profile. id=patient id (or use "name"), data={name, email, phone, medicalHistory, balance, loyalty_points}.
+- p_c(n, e, ph, age, patient_type, address, city, township, m, password, balance, location_id): Create patient using the current registration form fields. n/name=Full Patient Name, e/email=Primary Email, ph/phone=Mobile Contact, age=required age when available, patient_type/pt=Patient Type, address=street address, city=City, township=Township, m/medicalHistory=Relevant Medical History, password/portal_password=optional Patient Portal password, balance/clinical_fee=initial balance when applying clinical fee, location_id/location_name/branch_name=Branch.
+- p_u(id, data): Update patient profile. id=patient id (or use "name"), data={name, email, phone, age, address, city, township, patient_type, medicalHistory, balance, loyalty_points}.
 - p_d(id): Delete patient.
 - p_find(name): Find patient by name (partial match).
 - pat_bal(pid): Get patient balance and loyalty points.
@@ -2456,12 +2479,13 @@ Response:
 
 To perform an action, include a JSON block at the END of your message. 
 IMPORTANT: You can use "name" instead of "pid" or "p_id" for any patient-related action. The system will automatically look up the ID.
+For patient registration, use the updated form fields when the user provides them: age, patient_type, branch/location, address, city, township, optional portal password, clinical fee/balance, and medical history. If the user asks to register a patient but required basics are missing, ask for the missing name/phone/age/branch instead of inventing them.
 For unregistered marketing leads, do not create a patient first. Use apt_c with guest_name and guest_phone, plus guest_source/guest_notes when available.
 For doctor-related actions, you can use "doctor_name" if you do not know the doctor ID.
 For appointment updates, prefer passing id. If id is unknown, you may pass patient name plus date/time to help match the appointment.
 
 Examples:
-{ "action": "p_c", "params": { "n": "John Doe", "e": "john@example.com", "ph": "1234567890", "m": "No known allergies" } }
+{ "action": "p_c", "params": { "n": "John Doe", "e": "john@example.com", "ph": "1234567890", "age": 35, "patient_type": "Walk-in", "address": "No. 12 Main Street", "city": "Yangon", "township": "Bahan", "m": "No known allergies", "branch_name": "Main Clinic" } }
 { "action": "apt_c", "params": { "name": "Sarah Johnson", "dr_id": "doctor456", "dt": "2024-01-15", "t": "10:00", "ty": "Checkup", "n": "Routine checkup" } }
 { "action": "apt_c", "params": { "guest_name": "Aung Aung", "guest_phone": "09123456789", "guest_source": "Marketing Team", "doctor_name": "Mya", "dt": "2026-05-10", "t": "14:00", "ty": "Consultation", "n": "Lead is not registered yet" } }
 { "action": "tr_create", "params": { "name": "John Doe", "teeth": [18, 19], "desc": "Composite filling", "cost": 150 } }
@@ -2701,6 +2725,7 @@ CLINICAL DENTAL EXPERTISE:
 INTELLIGENCE GUIDELINES:
 - INTERNAL BRAINSTORMING: For every request, silently brainstorm the required steps, potential data needs, and clinical implications. Do not share this brainstorm with the user.
 - PATIENT IDENTIFICATION: Each patient has a human-readable Patient ID (field pid in patient objects, e.g. "PAT-00001"). Staff often refer to patients by this ID in addition to patient names. When a user asks about a patient by ID number, use the pid field from the Practice Data patient list to identify them. Display this ID when referencing specific patients so staff can easily locate them in the system.
+- PATIENT REGISTRATION FORM: The current staff registration form includes Full Patient Name, Primary Email, Mobile Contact, Age, Patient Type, Branch/Location, Clinical Fee apply/skip, Address, City, Township, optional Patient Portal password, and Relevant Medical History. In Agent Mode, use these fields in p_c when supplied and ask for missing required basics instead of assuming them.
 - NO HALLUCINATION: Never invent patient data, treatment costs, or stock levels. If data is not in the "Practice Data" provided, state that you don't know or ask for clarification.
 - BE PROACTIVE: Use clinical_insights and operational_insights to offer advice without being asked.
 - ANALYZE: Don't just list data; tell the user what it means (e.g., "3 patients are overdue for checkups, would you like me to find their contact info?").
@@ -3408,13 +3433,7 @@ I can provide guidance on:
             }
             break;
           case 'p_c':
-            result = await api.patients.create({ 
-              location_id: locationId,
-              name: pendingAction.params.n,
-              email: pendingAction.params.e,
-              phone: pendingAction.params.ph,
-              medicalHistory: pendingAction.params.m
-            });
+            result = await api.patients.create(buildPatientCreatePayloadFromAiParams(pendingAction.params, locationId));
             break;
           case 'p_d':
             // Handle patient deletion by name or ID
@@ -4691,13 +4710,7 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
               break;
             case 'p_c':
               try {
-                result = await api.patients.create({ 
-                  location_id: locationId,
-                  name: params.n,
-                  email: params.e,
-                  phone: params.ph,
-                  medicalHistory: params.m
-                });
+                result = await api.patients.create(buildPatientCreatePayloadFromAiParams(params, locationId));
                 currentActionResult = `✅ Patient ${result.name} added successfully.`;
               } catch (err: any) {
                 console.error('Patient creation error:', err);
