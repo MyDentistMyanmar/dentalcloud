@@ -348,6 +348,8 @@ const App: React.FC = () => {
   const [assistantRecords, setAssistantRecords] = useState<ClinicalRecord[]>([]);
   const [assistantMedicines, setAssistantMedicines] = useState<Medicine[]>([]);
   const [assistantExpenses, setAssistantExpenses] = useState<Expense[]>([]);
+  const [assistantMedicineSales, setAssistantMedicineSales] = useState<MedicineSale[]>([]);
+  const [assistantPaymentRecords, setAssistantPaymentRecords] = useState<PaymentRecord[]>(() => readPaymentRecords());
   const [assistantRecalls, setAssistantRecalls] = useState<Recall[]>([]);
   const [treatmentTypes, setTreatmentTypes] = useState<TreatmentType[]>([]);
   const [patientFiles, setPatientFiles] = useState<PatientFile[]>([]);
@@ -1031,6 +1033,8 @@ const App: React.FC = () => {
     setAssistantRecords([]);
     setAssistantMedicines([]);
     setAssistantExpenses([]);
+    setAssistantMedicineSales([]);
+    setAssistantPaymentRecords([]);
     setAssistantRecalls([]);
     localStorage.removeItem('dashboardLocationId');
   };
@@ -1113,7 +1117,7 @@ const App: React.FC = () => {
     const queryLocationId = restrictedLocationId || currentLocationId || undefined;
     const assistantLocationId = queryLocationId;
 
-    const [patData, aptData, docData, typeData, recordsData, medData, expenseData, recallData] = await Promise.all([
+    const [patData, aptData, docData, typeData, recordsData, medData, expenseData, recallData, salesData] = await Promise.all([
       api.patients.getAll(assistantLocationId),
       api.appointments.getAll(assistantLocationId),
       api.doctors.getAll(assistantLocationId),
@@ -1121,8 +1125,10 @@ const App: React.FC = () => {
       api.treatments.getAllRecords(assistantLocationId),
       api.medicines.getAll(assistantLocationId),
       api.expenses.getAll(assistantLocationId),
-      api.recalls.getAll(assistantLocationId)
+      api.recalls.getAll(assistantLocationId),
+      api.medicines.getSales(assistantLocationId)
     ]);
+    const paymentData = readPaymentRecords().filter((record) => !assistantLocationId || record.location_id === assistantLocationId);
 
     setAssistantPatients(patData);
     setAssistantAppointments(aptData);
@@ -1131,6 +1137,8 @@ const App: React.FC = () => {
     setAssistantRecords(recordsData);
     setAssistantMedicines(medData);
     setAssistantExpenses(expenseData);
+    setAssistantMedicineSales(salesData);
+    setAssistantPaymentRecords(paymentData);
     setAssistantRecalls(recallData);
   };
 
@@ -3139,6 +3147,8 @@ const App: React.FC = () => {
                 users={users}
                 medicines={assistantMedicines}
                 expenses={assistantExpenses}
+                medicineSales={assistantMedicineSales}
+                paymentRecords={assistantPaymentRecords}
                 recalls={assistantRecalls}
                 locations={locations}
                 currentLocationId={currentLocationId}

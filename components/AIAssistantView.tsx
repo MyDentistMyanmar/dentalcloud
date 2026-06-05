@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Bot, Send, Loader2, Sparkles, AlertCircle, User, Copy, Check, Plus, Trash2, MessageCircle, Zap, ShieldQuestion, Mic, HelpCircle, X, Brain, MapPin, ThumbsUp, ThumbsDown, Eye, EyeOff } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Patient, ClinicalRecord, Appointment, Doctor, TreatmentType, User as UserType, Medicine, Expense, Recall, Location } from '../types';
+import { Patient, ClinicalRecord, Appointment, Doctor, TreatmentType, User as UserType, Medicine, Expense, Recall, Location, MedicineSale, PaymentRecord } from '../types';
 import { api } from '../services/api';
 import { Currency } from '../utils/currency';
 import { DEFAULT_PATIENT_TYPE_NAME } from '../constants';
@@ -440,6 +440,8 @@ interface AIAssistantViewProps {
   users: UserType[];
   medicines: Medicine[];
   expenses: Expense[];
+  medicineSales?: MedicineSale[];
+  paymentRecords?: PaymentRecord[];
   recalls?: Recall[];
   locations?: Location[];
   currentLocationId?: string;
@@ -458,6 +460,8 @@ const AIAssistantView: React.FC<AIAssistantViewProps> = ({
   users,
   medicines,
   expenses,
+  medicineSales = [],
+  paymentRecords = [],
   recalls = [],
   locations = [],
   currentLocationId = '',
@@ -569,6 +573,11 @@ const AIAssistantView: React.FC<AIAssistantViewProps> = ({
   const activeTreatmentTypes = useMemo(() => filterByLocation(treatmentTypes), [treatmentTypes, analysisLocationId]);
   const activeMedicines = useMemo(() => filterByLocation(medicines), [medicines, analysisLocationId]);
   const activeExpenses = useMemo(() => filterByLocation(expenses), [expenses, analysisLocationId]);
+  const activeMedicineSales = useMemo(() => filterByLocation(medicineSales), [medicineSales, analysisLocationId]);
+  const activePaymentRecords = useMemo(
+    () => analysisLocationId ? paymentRecords.filter(record => record.location_id === analysisLocationId) : paymentRecords,
+    [paymentRecords, analysisLocationId]
+  );
   const activeRecalls = useMemo(() => filterByLocation(recalls), [recalls, analysisLocationId]);
   const activeTreatmentRecords = useMemo(() => filterByLocation(treatmentRecords), [treatmentRecords, analysisLocationId]);
   const currentStaffUser = useMemo(
@@ -2069,12 +2078,15 @@ Need more detailed help?
     // Identify high outstanding balances
     const highBalances = activePatients.filter(p => (p.balance || 0) > 500000).slice(0, 5).map(p => ({ n: p.name, b: p.balance, loc: p.location_id }));
 
-    const monthlyRevenue = activeTreatmentRecords.filter(tr => {
-      const recordDate = new Date(tr.date);
-      const currentDate = new Date();
-      return recordDate.getMonth() === currentDate.getMonth() && 
-             recordDate.getFullYear() === currentDate.getFullYear();
-    }).reduce((sum, tr) => sum + (tr.cost || 0), 0);
+    const financialReport = buildFinancialReport(
+      activeTreatmentRecords,
+      activeExpenses,
+      activeMedicines,
+      currency,
+      today,
+      activeMedicineSales,
+      activePaymentRecords
+    );
 
     const doctorPopularity30dMap = new Map<string, number>();
     const thirtyDaysAgo = new Date();
@@ -2107,13 +2119,6 @@ Need more detailed help?
     const appointmentCreators30d = Array.from(appointmentCreator30dMap.values())
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
       .slice(0, 8);
-
-    const monthlyExpenses = activeExpenses.filter(exp => {
-      const expDate = new Date(exp.date);
-      const currentDate = new Date();
-      return expDate.getMonth() === currentDate.getMonth() && 
-             expDate.getFullYear() === currentDate.getFullYear();
-    }).reduce((sum, exp) => sum + (exp.amount || 0), 0);
 
     const recallSummary = {
       total: activeRecalls.length,
@@ -2234,13 +2239,19 @@ Need more detailed help?
         loc: exp.location_id
       })),
       financial_summary: {
-        daily_revenue: activeTreatmentRecords.filter(tr => tr.date === today).reduce((sum, tr) => sum + (tr.cost || 0), 0),
-        weekly_revenue: activeTreatmentRecords.filter(tr => tr.date >= sevenDaysAgoStr).reduce((sum, tr) => sum + (tr.cost || 0), 0),
-        monthly_revenue: monthlyRevenue,
-        daily_expenses: activeExpenses.filter(exp => exp.date === today).reduce((sum, exp) => sum + (exp.amount || 0), 0),
-        weekly_expenses: activeExpenses.filter(exp => exp.date >= sevenDaysAgoStr).reduce((sum, exp) => sum + (exp.amount || 0), 0),
-        monthly_expenses: monthlyExpenses,
-        monthly_profit: monthlyRevenue - monthlyExpenses
+        daily_revenue: financialReport.revenueDaily,
+        weekly_revenue: financialReport.revenueWeekly,
+        monthly_revenue: financialReport.revenueMonthly,
+        daily_expenses: financialReport.expenseDaily,
+        weekly_expenses: financialReport.expenseWeekly,
+        monthly_expenses: financialReport.expenseMonthly,
+        monthly_profit: financialReport.profitMonthly,
+        monthly_label: financialReport.monthlyLabel,
+        revenue_sources: {
+          treatments: activeTreatmentRecords.length,
+          medicine_sales: activeMedicineSales.length,
+          payments: activePaymentRecords.length
+        }
       },
       reporting_insights: {
         doctor_popularity_30d: doctorPopularity30d,
@@ -2615,7 +2626,15 @@ ${isAgentMode ? '• **Manage clinic data through direct API actions**' : ''}
     
     const isReportQuery = isReportingQuery(userMessage);
     if (isReportQuery) {
-      const report = buildFinancialReport(activeTreatmentRecords, activeExpenses, activeMedicines, currency);
+      const report = buildFinancialReport(
+        activeTreatmentRecords,
+        activeExpenses,
+        activeMedicines,
+        currency,
+        undefined,
+        activeMedicineSales,
+        activePaymentRecords
+      );
       const reportMarkdown = renderFinancialReportMarkdown(report, currency);
       const insights = buildInsightsNoNumbers(report);
       const insightsMarkdown = buildInsightsMarkdown(insights);
@@ -5027,10 +5046,18 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                 }
                 
                 const periodRecords = activeTreatmentRecords.filter(tr => tr.date >= startDate && tr.date <= endDate);
-                const totalRevenue = periodRecords.reduce((sum, tr) => sum + (tr.cost || 0), 0);
+                const periodExpenses = activeExpenses.filter(exp => exp.date >= startDate && exp.date <= endDate);
+                const periodMedicineSales = activeMedicineSales.filter(sale => sale.date >= startDate && sale.date <= endDate);
+                const periodPayments = activePaymentRecords.filter(payment => payment.date >= startDate && payment.date <= endDate);
+                const treatmentRevenue = periodRecords.reduce((sum, tr) => sum + (tr.cost || 0), 0);
+                const medicineRevenue = periodMedicineSales.reduce((sum, sale) => sum + (sale.total_price || 0), 0);
+                const collectedPayments = periodPayments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
+                const totalRevenue = treatmentRevenue + medicineRevenue + collectedPayments;
+                const totalExpenses = periodExpenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
+                const netProfit = totalRevenue - totalExpenses;
                 const treatmentCount = periodRecords.length;
                 
-                currentActionResult = `📊 Financial Report - ${periodLabel} (${startDate} to ${endDate}):\nTotal Revenue: ${totalRevenue} MMK\nTotal Treatments: ${treatmentCount}`;
+                currentActionResult = `📊 Financial Report - ${periodLabel} (${startDate} to ${endDate}):\nTotal Revenue: ${totalRevenue} MMK\nTreatment Revenue: ${treatmentRevenue} MMK\nMedicine Sales: ${medicineRevenue} MMK\nCollected Payments: ${collectedPayments} MMK\nTotal Expenses: ${totalExpenses} MMK\nNet Profit: ${netProfit} MMK\nTotal Treatments: ${treatmentCount}`;
               } catch (err: any) {
                 currentActionResult = `❌ Failed to generate financial report: ${err.message}`;
               }
