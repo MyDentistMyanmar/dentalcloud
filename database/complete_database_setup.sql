@@ -894,6 +894,16 @@ END $$;
 -- if the GoTrue container starts before the database is fully initialized,
 -- the auth.users migration may be skipped. This section idempotently creates
 -- and repairs the auth.users table to prevent this.
+--
+-- IMPORTANT FOR SELF-HOSTED SUPABASE:
+-- GoTrue connects to Postgres as supabase_auth_admin. If this setup script is
+-- executed by another privileged role such as supabase_admin, CREATE TABLE IF
+-- NOT EXISTS auth.users can leave auth.users owned by the wrong role and with
+-- insufficient grants. That causes auth emails/signups/password resets to fail
+-- with errors like:
+--   500: Database error finding user: permission denied for table users
+-- Therefore, after touching auth.users, this script repairs ownership/grants
+-- when the supabase_auth_admin role exists.
 -- Ensure the auth schema exists
 CREATE SCHEMA IF NOT EXISTS auth;
 -- Ensure the auth.users table exists with all columns GoTrue expects
@@ -968,6 +978,68 @@ ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS encrypted_password VARCHAR(255);
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_auth_users_email ON auth.users(email);
 CREATE INDEX IF NOT EXISTS idx_auth_users_phone ON auth.users(phone);
+
+-- Repair auth schema/table ownership and privileges for self-hosted Supabase.
+-- This block is intentionally defensive so local/non-Supabase Postgres setups
+-- that do not have the Supabase internal roles can still run the setup script.
+DO $$
+DECLARE
+  auth_object RECORD;
+BEGIN
+  IF to_regrole('supabase_auth_admin') IS NOT NULL THEN
+    ALTER SCHEMA auth OWNER TO supabase_auth_admin;
+    GRANT USAGE ON SCHEMA auth TO supabase_auth_admin;
+
+    ALTER TABLE auth.users OWNER TO supabase_auth_admin;
+    GRANT ALL PRIVILEGES ON TABLE auth.users TO supabase_auth_admin;
+
+    -- Keep the whole auth schema consistent if other GoTrue-managed tables
+    -- already exist. This matches Supabase Auth's expected ownership model and
+    -- prevents future permission drift in self-hosted deployments.
+    FOR auth_object IN
+      SELECT
+        n.nspname AS schema_name,
+        c.relname AS object_name,
+        c.relkind AS object_kind
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'auth'
+        AND c.relkind IN ('r', 'p', 'S', 'v', 'm')
+    LOOP
+      IF auth_object.object_kind IN ('r', 'p') THEN
+        EXECUTE format(
+          'ALTER TABLE %I.%I OWNER TO supabase_auth_admin',
+          auth_object.schema_name,
+          auth_object.object_name
+        );
+      ELSIF auth_object.object_kind = 'S' THEN
+        EXECUTE format(
+          'ALTER SEQUENCE %I.%I OWNER TO supabase_auth_admin',
+          auth_object.schema_name,
+          auth_object.object_name
+        );
+      ELSIF auth_object.object_kind = 'v' THEN
+        EXECUTE format(
+          'ALTER VIEW %I.%I OWNER TO supabase_auth_admin',
+          auth_object.schema_name,
+          auth_object.object_name
+        );
+      ELSIF auth_object.object_kind = 'm' THEN
+        EXECUTE format(
+          'ALTER MATERIALIZED VIEW %I.%I OWNER TO supabase_auth_admin',
+          auth_object.schema_name,
+          auth_object.object_name
+        );
+      END IF;
+    END LOOP;
+
+    EXECUTE 'GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA auth TO supabase_auth_admin';
+    EXECUTE 'GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA auth TO supabase_auth_admin';
+  ELSE
+    RAISE NOTICE 'Role supabase_auth_admin does not exist; skipped auth schema ownership/grant repair.';
+  END IF;
+END $$;
+
 -- Verify
 SELECT 'auth.users guard complete - table is ready' AS status;
 
