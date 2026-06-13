@@ -1,7 +1,9 @@
-﻿import React, { useState } from 'react';
-import { User, Mail, Lock, CheckCircle, XCircle, ArrowLeft, RefreshCw, Inbox, Phone, KeyRound } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { User, Mail, Lock, CheckCircle, XCircle, ArrowLeft, RefreshCw, Inbox, Phone, KeyRound, MapPin } from 'lucide-react';
 import { otpService } from '../services/otp';
 import { Input } from './Shared';
+import { SearchableSelect } from './SearchableSelect';
+import { getMyanmarCities, getTownshipsForCity } from '../utils/myanmarCities';
 
 interface PatientRegistrationProps {
   onBack: () => void;
@@ -19,6 +21,8 @@ const PatientSelfRegistration: React.FC<PatientRegistrationProps> = ({
   const [phone, setPhone] = useState('');
   const [age, setAge] = useState('');
   const [address, setAddress] = useState('');
+  const [city, setCity] = useState('');
+  const [township, setTownship] = useState('');
 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -28,6 +32,15 @@ const PatientSelfRegistration: React.FC<PatientRegistrationProps> = ({
   const [success, setSuccess] = useState('');
   const [otpCode, setOtpCode] = useState('');
   const [verificationSucceeded, setVerificationSucceeded] = useState(false);
+  
+  const cityOptions = useMemo(
+    () => getMyanmarCities().map((city) => ({ value: city, label: city })),
+    []
+  );
+  const townshipOptions = useMemo(
+    () => getTownshipsForCity(city).map((township) => ({ value: township, label: township })),
+    [city]
+  );
   
   const normalizeUsernameInput = (value: string) => value.trim().replace(/\s+/g, ' ');
   const isValidUsername = (value: string) => /^[a-zA-Z0-9 ._-]{3,50}$/.test(value);
@@ -91,6 +104,8 @@ const PatientSelfRegistration: React.FC<PatientRegistrationProps> = ({
         phone: normalizedPhone,
         age: age ? parseInt(age, 10) : undefined,
         address: address.trim() || undefined,
+        city: city.trim() || undefined,
+        township: township.trim() || undefined,
       }, password);
       
       if (result.success) {
@@ -273,7 +288,38 @@ const PatientSelfRegistration: React.FC<PatientRegistrationProps> = ({
                 />
               </div>
               
-
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                  <MapPin className="w-4 h-4" />
+                  City
+                </label>
+                <SearchableSelect
+                  value={city}
+                  onChange={(selectedCity) => {
+                    const allowedTownships = getTownshipsForCity(selectedCity);
+                    const nextTownship = allowedTownships.includes(township) ? township : '';
+                    setCity(selectedCity);
+                    setTownship(nextTownship);
+                  }}
+                  options={cityOptions}
+                  placeholder="Select City"
+                  emptyMessage="No city found"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                  <MapPin className="w-4 h-4" />
+                  Township
+                </label>
+                <SearchableSelect
+                  value={township}
+                  onChange={(selectedTownship) => setTownship(selectedTownship)}
+                  options={townshipOptions}
+                  placeholder={city ? 'Select Township' : 'Select City first'}
+                  emptyMessage={city ? 'No township found for this city' : 'Choose city first'}
+                />
+              </div>
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">

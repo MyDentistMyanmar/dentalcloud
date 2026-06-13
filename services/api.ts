@@ -1,4 +1,4 @@
-﻿import { supabase, supabaseUrl, supabaseAnonKey } from './supabase';
+import { supabase, supabaseUrl, supabaseAnonKey } from './supabase';
 import * as tus from 'tus-js-client';
 import { Patient, Appointment, ClinicalRecord, TreatmentType, PatientFile, Doctor, DoctorSchedule, DoctorScheduleInput, User, Medicine, MedicineSale, Location, LoyaltyRule, LoyaltyTransaction, Expense, Message, Conversation, Recall, ScheduledTask, S3Settings, PatientType, AppointmentType } from '../types';
 import { DEFAULT_PATIENT_TYPE_NAME, DEFAULT_PATIENT_TYPE_OPTIONS, DOCTOR_DASHBOARD_TABS, FULL_ACCESS_TAB_PERMISSIONS } from '../constants';
@@ -1173,7 +1173,9 @@ export const api = {
       phone?: string,
       isVerified: boolean = true,
       age?: number,
-      address?: string
+      address?: string,
+      city?: string,
+      township?: string
     ): Promise<Patient> => {
       // 1. Get first location as default
       const { data: locations } = await supabase.from('locations').select('id').limit(1);
@@ -1203,7 +1205,9 @@ export const api = {
             phone: normalizedPhone,
             location_id: defaultLocationId,
             age: age ?? null,
-            address: address?.trim() || null
+            address: address?.trim() || null,
+            city: city?.trim() || null,
+            township: township?.trim() || null
           })
           .select()
           .single();
@@ -2785,18 +2789,18 @@ export const api = {
      * Calculate optimal chunk size for the primary (cloud) Supabase TUS endpoint.
      * Supabase TUS requires chunk sizes that are multiples of 6 MB.
      *
-     * Optimised for UNSTABLE internet — uses the smallest valid chunk (6 MB)
+     * Optimised for UNSTABLE internet � uses the smallest valid chunk (6 MB)
      * so each request completes quickly and retries are cheap.
      *
      * NOTE: The self-hosted Supabase path uses its own chunk-size logic inside
-     * utils/supabaseStorage.ts → chooseTusChunkSize().
+     * utils/supabaseStorage.ts ? chooseTusChunkSize().
      *
      * @param fileSize - File size in bytes
      * @returns Optimal chunk size in bytes (6 MB)
      */
     calculateOptimalChunkSize: (fileSize: number): number => {
       void fileSize; // kept for future tuning
-      return 6 * 1024 * 1024; // 6 MB — smallest valid TUS chunk
+      return 6 * 1024 * 1024; // 6 MB � smallest valid TUS chunk
     },
 
     /**
