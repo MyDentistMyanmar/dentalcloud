@@ -82,6 +82,12 @@ const PatientSelfRegistration: React.FC<PatientRegistrationProps> = ({
     setLoading(true);
     
     try {
+      // Clean up any stale unverified records that may have been created
+      // from a previous attempt with a different email but same username.
+      // This prevents false-positive "username already taken" errors when
+      // the user goes back to change their email on the OTP step.
+      await otpService.cleanupPendingSignupConflicts(normalizedEmail, normalizedUsername);
+
       // Check if email is already registered in patient_auth
       const isRegistered = await otpService.isEmailRegistered(normalizedEmail);
       if (isRegistered) {
@@ -495,8 +501,20 @@ const PatientSelfRegistration: React.FC<PatientRegistrationProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
+                    // Clean up the pending unverified auth/patient records
+                    // for the current email so the user can re-register
+                    // with a different email using the same username.
+                    try {
+                      await otpService.cleanupPendingSignupConflicts(
+                        email.toLowerCase().trim(),
+                        username
+                      );
+                    } catch (_) {
+                      // Best-effort cleanup; the form will re-validate on submit
+                    }
                     setStep('signup');
+                    setEmail('');
                     setOtpCode('');
                     setError('');
                     setSuccess('');
