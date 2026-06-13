@@ -1,4 +1,4 @@
-import { supabase, supabaseUrl, supabaseAnonKey } from './supabase';
+﻿import { supabase, supabaseUrl, supabaseAnonKey } from './supabase';
 import * as tus from 'tus-js-client';
 import { Patient, Appointment, ClinicalRecord, TreatmentType, PatientFile, Doctor, DoctorSchedule, DoctorScheduleInput, User, Medicine, MedicineSale, Location, LoyaltyRule, LoyaltyTransaction, Expense, Message, Conversation, Recall, ScheduledTask, S3Settings, PatientType, AppointmentType } from '../types';
 import { DEFAULT_PATIENT_TYPE_NAME, DEFAULT_PATIENT_TYPE_OPTIONS, DOCTOR_DASHBOARD_TABS, FULL_ACCESS_TAB_PERMISSIONS } from '../constants';
@@ -1171,7 +1171,9 @@ export const api = {
       supabaseUserId?: string,
       username?: string,
       phone?: string,
-      isVerified: boolean = true
+      isVerified: boolean = true,
+      age?: number,
+      address?: string
     ): Promise<Patient> => {
       // 1. Get first location as default
       const { data: locations } = await supabase.from('locations').select('id').limit(1);
@@ -1199,7 +1201,9 @@ export const api = {
             name: normalizedUsername || normalizedEmail.split('@')[0], 
             email: normalizedEmail,
             phone: normalizedPhone,
-            location_id: defaultLocationId
+            location_id: defaultLocationId,
+            age: age ?? null,
+            address: address?.trim() || null
           })
           .select()
           .single();

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { User, Mail, Lock, CheckCircle, XCircle, ArrowLeft, RefreshCw, Inbox, Phone, KeyRound } from 'lucide-react';
 import { otpService } from '../services/otp';
 import { Input } from './Shared';
@@ -17,6 +17,9 @@ const PatientSelfRegistration: React.FC<PatientRegistrationProps> = ({
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [age, setAge] = useState('');
+  const [address, setAddress] = useState('');
+
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -86,6 +89,8 @@ const PatientSelfRegistration: React.FC<PatientRegistrationProps> = ({
       const result = await otpService.sendSignupOtpEmail(normalizedEmail, {
         username: normalizedUsername,
         phone: normalizedPhone,
+        age: age ? parseInt(age, 10) : undefined,
+        address: address.trim() || undefined,
       }, password);
       
       if (result.success) {
@@ -238,6 +243,37 @@ const PatientSelfRegistration: React.FC<PatientRegistrationProps> = ({
                   className="w-full"
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                  <User className="w-4 h-4" />
+                  Age (optional)
+                </label>
+                <Input
+                  type="number"
+                  value={age}
+                  onChange={(e) => setAge(e.target.value.replace(/\D/g, '').slice(0, 3))}
+                  placeholder="Enter age"
+                  min={0}
+                  max={150}
+                  className="w-full"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                  <User className="w-4 h-4" />
+                  Address (optional)
+                </label>
+                <Input
+                  type="text"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder="Street address"
+                  className="w-full"
+                />
+              </div>
+              
+
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">

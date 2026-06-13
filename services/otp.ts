@@ -247,7 +247,7 @@ export const otpService = {
 
   async sendSignupOtpEmail(
     email: string,
-    profile: { username?: string; phone?: string },
+    profile: { username?: string; phone?: string; age?: number; address?: string },
     password: string
   ): Promise<{ success: boolean; message: string }> {
     try {
@@ -267,7 +267,9 @@ export const otpService = {
         undefined,
         profile.username,
         profile.phone,
-        false
+        false,
+        profile.age,
+        profile.address
       );
 
       const code = this.generateOTP();
@@ -275,7 +277,9 @@ export const otpService = {
 
       const pendingData = {
         username: profile.username?.trim() || undefined,
-        phone: profile.phone?.trim() || undefined
+        phone: profile.phone?.trim() || undefined,
+        age: profile.age ?? undefined,
+        address: profile.address?.trim() || undefined
       };
       localStorage.setItem(this.getPendingSignupKey(normalizedEmail), JSON.stringify(pendingData));
 
