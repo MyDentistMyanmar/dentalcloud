@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.90.1",
-    "framer-motion": "^12.38.0",
+    "framer-motion": "12.36.0",
     "html5-qrcode": "^2.3.8",
     "jspdf": "^4.0.0",
     "jspdf-autotable": "^5.0.7",
@@ -27,6 +27,11 @@
     "remark-gfm": "^4.0.1",
     "tus-js-client": "^4.3.1",
     "xlsx": "^0.18.5"
+  },
+  "overrides": {
+    "@reduxjs/toolkit": "2.10.1",
+    "motion-dom": "12.36.0",
+    "motion-utils": "12.36.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

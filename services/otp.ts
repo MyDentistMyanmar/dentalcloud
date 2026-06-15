@@ -22,6 +22,29 @@ export const otpService = {
     return Math.floor(100000 + Math.random() * 900000).toString();
   },
 
+  async getCurrentUser() {
+    const { data, error } = await supabase.auth.getUser();
+    if (error) {
+      console.warn('Unable to read current Supabase user:', error.message);
+      return null;
+    }
+    return data.user;
+  },
+
+  async updatePassword(password: string): Promise<{ success: boolean; message?: string }> {
+    const trimmedPassword = password.trim();
+    if (trimmedPassword.length < 6) {
+      return { success: false, message: 'Password must be at least 6 characters long.' };
+    }
+
+    const { error } = await supabase.auth.updateUser({ password: trimmedPassword });
+    if (error) {
+      return { success: false, message: error.message };
+    }
+
+    return { success: true };
+  },
+
   generateResetToken(): string {
     const bytes = new Uint8Array(16);
     if (typeof crypto !== 'undefined' && crypto.getRandomValues) {

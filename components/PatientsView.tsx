@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { Search, Plus, Loader2, ChevronRight, Award, User, ShieldCheck, ShieldAlert, Key, Edit, MoreVertical, ArrowLeft, Calendar, Clock, Filter } from 'lucide-react';
-import { Patient, LoyaltyRule, Appointment, ClinicalRecord, PatientType, TreatmentType, Doctor } from '../types';
+import { Patient, LoyaltyRule, Appointment, ClinicalRecord, PatientType, TreatmentType, Doctor, Location } from '../types';
 import { formatCurrency, Currency } from '../utils/currency';
 import { exportPatientsToPDF } from '../utils/pdfExport';
 import { exportPatientsToExcel } from '../utils/excelExport';
@@ -16,6 +16,7 @@ import PatientQRScanButton from './PatientQRScanButton';
 interface PatientsViewProps {
   patients: Patient[];
   patientTypes: PatientType[];
+  locations: Location[];
   appointments: Appointment[];
   loading: boolean;
   currency: Currency;
@@ -37,6 +38,7 @@ interface PatientsViewProps {
 const PatientsView: React.FC<PatientsViewProps> = ({ 
   patients, 
   patientTypes,
+  locations,
   appointments: _appointments,
   loading, 
   currency, 
@@ -74,7 +76,8 @@ const PatientsView: React.FC<PatientsViewProps> = ({
     address: '',
     city: '',
     township: '',
-    patient_type: DEFAULT_PATIENT_TYPE_NAME
+    patient_type: DEFAULT_PATIENT_TYPE_NAME,
+    location_id: ''
   });
   const [newPassword, setNewPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -767,7 +770,8 @@ const PatientsView: React.FC<PatientsViewProps> = ({
                                 address: patient.address || '',
                                 city: patient.city || '',
                                 township: patient.township || '',
-                                patient_type: normalizePatientType(patient.patient_type)
+                                patient_type: normalizePatientType(patient.patient_type),
+                                location_id: patient.location_id || ''
                               });
                             }}
                             className="text-indigo-600 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded flex items-center gap-1 transition-colors"
@@ -913,7 +917,8 @@ const PatientsView: React.FC<PatientsViewProps> = ({
                     address: patient.address || '',
                     city: patient.city || '',
                     township: patient.township || '',
-                    patient_type: normalizePatientType(patient.patient_type)
+                    patient_type: normalizePatientType(patient.patient_type),
+                    location_id: patient.location_id || ''
                   });
                 }}
                 className="w-full mt-2 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-bold border border-indigo-100 flex items-center justify-center gap-2"
@@ -1025,10 +1030,15 @@ const PatientsView: React.FC<PatientsViewProps> = ({
           onSubmit={async (e) => {
             e.preventDefault();
             if (isSubmitting) return;
+            if (!editData.location_id) {
+              alert('Please select a branch/location for this patient.');
+              return;
+            }
             setIsSubmitting(true);
             try {
               if (onUpdatePatient && editModal.patient) {
                 const patientData: Partial<Patient> = {
+                  location_id: editData.location_id,
                   name: editData.name,
                   email: editData.email,
                   phone: editData.phone,
@@ -1061,6 +1071,25 @@ const PatientsView: React.FC<PatientsViewProps> = ({
           </div>
 
           <Input label="Full Patient Name" required value={editData.name} onChange={(e: any) => setEditData({...editData, name: e.target.value})} />
+          <div>
+            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 ml-1">Branch / Location</label>
+            <select
+              required
+              className="w-full border-gray-200 border rounded-xl p-3 text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all bg-white"
+              value={editData.location_id}
+              onChange={(e) => setEditData({...editData, location_id: e.target.value})}
+            >
+              <option value="">Select a branch...</option>
+              {locations.map((loc) => (
+                <option key={loc.id} value={loc.id}>{loc.name}</option>
+              ))}
+            </select>
+            {editModal.patient.location_id !== editData.location_id && editData.location_id && (
+              <p className="mt-2 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                Saving will transfer this patient profile and portal access to the selected branch.
+              </p>
+            )}
+          </div>
           <div className="grid grid-cols-2 gap-4">
              <Input label="Primary Email" type="email" value={editData.email} onChange={(e: any) => setEditData({...editData, email: e.target.value})} />
              <Input label="Mobile Contact" required value={editData.phone} onChange={(e: any) => setEditData({...editData, phone: e.target.value})} />

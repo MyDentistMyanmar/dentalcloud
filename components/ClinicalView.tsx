@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { User, X, Upload, Trash2, FileText, Receipt as ReceiptIcon, Package, RotateCcw, Award, Zap, Key, Edit, Download, Eye, MoreVertical, Calendar, CheckCircle2, AlertCircle, ArrowLeft, Search } from 'lucide-react';
 import { ToothSelector } from './ToothSelector';
-import { Patient, TreatmentType, ClinicalRecord, PatientFile, LoyaltyTransaction, LoyaltyRule, Doctor, Appointment, TreatmentChargeLine, AppointmentType } from '../types';
+import { Patient, TreatmentType, ClinicalRecord, PatientFile, LoyaltyTransaction, LoyaltyRule, Doctor, Appointment, TreatmentChargeLine, AppointmentType, Location } from '../types';
 import { formatCurrency, getCurrencySymbol, Currency } from '../utils/currency';
 import { formatTeethWithPosition } from '../utils/toothNumbering';
 import { Modal, Input, TimeInput } from './Shared';
@@ -18,6 +18,7 @@ export interface UploadProgress {
 interface ClinicalViewProps {
   selectedPatient: Patient | null;
   patients: Patient[];
+  locations: Location[];
   doctors: Doctor[];
   selectedDoctorId: string;
   selectedTeeth: number[];
@@ -58,6 +59,7 @@ interface ClinicalViewProps {
 const ClinicalView: React.FC<ClinicalViewProps> = ({
   selectedPatient,
   patients,
+  locations,
   doctors,
   selectedDoctorId,
   selectedTeeth,
@@ -120,7 +122,7 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
   const [editModal, setEditModal] = React.useState(false);
   const [redeemModal, setRedeemModal] = React.useState(false);
   const [redeemPointsInput, setRedeemPointsInput] = React.useState('');
-  const [editData, setEditData] = React.useState({ name: '', email: '', phone: '', medicalHistory: '' });
+  const [editData, setEditData] = React.useState({ name: '', email: '', phone: '', medicalHistory: '', location_id: '' });
   const [newPassword, setNewPassword] = React.useState('');
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [uploadProgress, setUploadProgress] = React.useState<UploadProgress | null>(null);
@@ -886,7 +888,8 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
                       name: selectedPatient.name,
                       email: selectedPatient.email || '',
                       phone: selectedPatient.phone || '',
-                      medicalHistory: selectedPatient.medicalHistory || ''
+                      medicalHistory: selectedPatient.medicalHistory || '',
+                      location_id: selectedPatient.location_id || ''
                     });
                   }}
                  >
@@ -970,6 +973,10 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
                      onSubmit={async (e) => {
                        e.preventDefault();
                        if (isSubmitting) return;
+                        if (!editData.location_id) {
+                          alert('Please select a branch/location for this patient.');
+                          return;
+                        }
                        setIsSubmitting(true);
                        try {
                          if (onUpdatePatient) {
@@ -995,6 +1002,25 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
                      </div>
 
                      <Input label="Full Patient Name" required value={editData.name} onChange={(e: any) => setEditData({...editData, name: e.target.value})} />
+                      <div>
+                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 ml-1">Branch / Location</label>
+                        <select
+                          required
+                          className="w-full border-gray-200 border rounded-xl p-3 text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all bg-white"
+                          value={editData.location_id}
+                          onChange={(e) => setEditData({...editData, location_id: e.target.value})}
+                        >
+                          <option value="">Select a branch...</option>
+                          {locations.map((loc) => (
+                            <option key={loc.id} value={loc.id}>{loc.name}</option>
+                          ))}
+                        </select>
+                        {selectedPatient.location_id !== editData.location_id && editData.location_id && (
+                          <p className="mt-2 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                            Saving will transfer this patient profile and portal access to the selected branch.
+                          </p>
+                        )}
+                      </div>
                      <div className="grid grid-cols-2 gap-4">
                         <Input label="Primary Email" type="email" value={editData.email} onChange={(e: any) => setEditData({...editData, email: e.target.value})} />
                         <Input label="Mobile Contact" required value={editData.phone} onChange={(e: any) => setEditData({...editData, phone: e.target.value})} />

@@ -72,7 +72,7 @@ import { supabase } from './services/supabase';
 import { resolveAllowedTabs } from './utils/permissions';
 import { loadEmailSettings } from './utils/emailSettings';
 import { buildAppointmentClinicalFocusNotes, parseAppointmentClinicalFocus } from './utils/appointmentClinicalFocus';
-import { dataCache, cacheKey } from './utils/dataCache';
+import { dataCache } from './utils/dataCache';
 
 // Lazy Load Views
 const DashboardView = React.lazy(() => import('./components/DashboardView'));
@@ -1097,11 +1097,13 @@ const App: React.FC = () => {
       ? storedPayments.filter((record) => record.location_id === queryLocationId)
       : storedPayments;
 
-    // Use preloaded data when available; only fetch what's missing (reduces up to 4 API calls).
-    const patData     = preloaded?.patients     ?? (await api.patients.getAll(queryLocationId));
-    const aptData     = preloaded?.appointments ?? (await api.appointments.getAll(queryLocationId));
-    const recordsData = preloaded?.records      ?? (await api.treatments.getAllRecords(queryLocationId));
-    const expenseData = preloaded?.expenses     ?? (await api.expenses.getAll(queryLocationId));
+    // Use preloaded data when available; fetch missing dashboard datasets in parallel.
+    const [patData, aptData, recordsData, expenseData] = await Promise.all([
+      preloaded?.patients ? Promise.resolve(preloaded.patients) : api.patients.getAll(queryLocationId),
+      preloaded?.appointments ? Promise.resolve(preloaded.appointments) : api.appointments.getAll(queryLocationId),
+      preloaded?.records ? Promise.resolve(preloaded.records) : api.treatments.getAllRecords(queryLocationId),
+      preloaded?.expenses ? Promise.resolve(preloaded.expenses) : api.expenses.getAll(queryLocationId)
+    ]);
 
     if (requestId !== dashboardFetchRequestRef.current) {
       return;
@@ -1251,6 +1253,10 @@ const App: React.FC = () => {
         setTreatmentTypes(typeData);
         setGlobalRecords(doctorRecords);
         setMedicines(medData);
+        setLoyaltyRules([]);
+        setExpenses([]);
+        setRecalls([]);
+        setMedicineSales([]);
 
         // Unhide the main UI as soon as the critical data is in state.
         if (requestId === initialDataFetchRequestRef.current) {
@@ -2950,6 +2956,7 @@ const App: React.FC = () => {
             {currentView === 'patients' && canAccessView('patients') && <PatientsView 
                 patients={patients} 
                 patientTypes={patientTypes}
+                locations={locations}
                 appointments={appointments}
                 loading={loading} 
                 currency={currency} 
@@ -2995,7 +3002,7 @@ const App: React.FC = () => {
                 onUpdatePatient={async (id, data) => {
                   try {
                     await api.patients.update(id, data);
-                    fetchInitialData();
+                    fetchInitialData(currentLocationId || undefined);
                     alert('Patient profile updated successfully!');
                   } catch (err: any) {
                     alert('Error: ' + err.message);
@@ -3196,6 +3203,7 @@ const App: React.FC = () => {
             {currentView === 'finance' && <ClinicalView 
                 selectedPatient={selectedPatient} 
                 patients={patients}
+                locations={locations}
                 doctors={doctors}
                 selectedDoctorId={selectedDoctorId}
                 selectedTeeth={selectedTeeth} 
@@ -3224,11 +3232,11 @@ const App: React.FC = () => {
                 onUpdatePatient={async (id, data) => {
                   try {
                     await api.patients.update(id, data);
-                    fetchInitialData();
+                    fetchInitialData(currentLocationId || undefined);
                     // update selectedPatient to reflect changes
                     const updated = await api.patients.getAll(currentLocationId || undefined);
                     const p = updated.find(x => x.id === id);
-                    if (p) setSelectedPatient(p);
+                    setSelectedPatient(p || null);
                   } catch (err: any) {
                     alert('Error: ' + err.message);
                   }
