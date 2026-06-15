@@ -3006,6 +3006,9 @@ const App: React.FC = () => {
                     fetchInitialData(currentLocationId || undefined);
                     alert('Patient profile updated successfully!');
                   } catch (err: any) {
+                    if (err?.message?.includes('Cannot transfer branch: Patient has existing records')) {
+                      throw err;
+                    }
                     alert('Error: ' + err.message);
                     throw err;
                   }

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { Search, Plus, Loader2, ChevronRight, Award, User, ShieldCheck, ShieldAlert, Key, Edit, MoreVertical, ArrowLeft, Calendar, Clock, Filter } from 'lucide-react';
+import { Search, Plus, Loader2, ChevronRight, Award, User, ShieldCheck, ShieldAlert, Key, Edit, MoreVertical, ArrowLeft, Calendar, Clock, Filter, AlertTriangle } from 'lucide-react';
 import { Patient, LoyaltyRule, Appointment, ClinicalRecord, PatientType, TreatmentType, Doctor, Location } from '../types';
 import { formatCurrency, Currency } from '../utils/currency';
 import { exportPatientsToPDF } from '../utils/pdfExport';
@@ -12,6 +12,13 @@ import { getMyanmarCities, getTownshipsForCity } from '../utils/myanmarCities';
 import { api } from '../services/api';
 import { DEFAULT_PATIENT_TYPE_NAME, DEFAULT_PATIENT_TYPE_OPTIONS } from '../constants';
 import PatientQRScanButton from './PatientQRScanButton';
+
+type BranchTransferRecordState = {
+  hasAppointments: boolean;
+  hasTreatments: boolean;
+  hasLoyalty: boolean;
+  hasAny: boolean;
+};
 
 interface PatientsViewProps {
   patients: Patient[];
@@ -92,6 +99,19 @@ const PatientsView: React.FC<PatientsViewProps> = ({
   const deletePatientIdRef = useRef<string | null>(null);
   const deletePatientNameRef = useRef<string>('this patient');
   const itemsPerPage = 10;
+  const [branchTransferBlockedOpen, setBranchTransferBlockedOpen] = useState(false);
+  const [branchTransferBlockedRecords, setBranchTransferBlockedRecords] = useState<string[]>([]);
+
+  const isBranchTransferValidationError = (error: unknown) =>
+    error instanceof Error && error.message.includes('Cannot transfer branch: Patient has existing records');
+
+  const getBranchTransferBlockedItems = (recordState: BranchTransferRecordState): string[] => {
+    const blockedItems: string[] = [];
+    if (recordState.hasAppointments) blockedItems.push('Appointments');
+    if (recordState.hasTreatments) blockedItems.push('Treatment Records');
+    if (recordState.hasLoyalty) blockedItems.push('Loyalty Transactions');
+    return blockedItems;
+  };
 
   const toLocalISODate = (date: Date) => {
     const year = date.getFullYear();
@@ -1035,9 +1055,9 @@ const PatientsView: React.FC<PatientsViewProps> = ({
               return;
             }
             setIsSubmitting(true);
-            try {
-              if (onUpdatePatient && editModal.patient) {
-                const patientData: Partial<Patient> = {
+                       try {
+                         if (onUpdatePatient && editModal.patient) {
+                           const patientData: Partial<Patient> = {
                   location_id: editData.location_id,
                   name: editData.name,
                   email: editData.email,
@@ -1048,15 +1068,19 @@ const PatientsView: React.FC<PatientsViewProps> = ({
                   city: editData.city || undefined,
                   township: editData.township || undefined,
                   patient_type: editData.patient_type
-                };
-                await onUpdatePatient(editModal.patient.id, patientData);
-                setEditModal({ open: false, patient: null });
-              }
-            } catch (err: any) {
-              // error handled by onUpdatePatient
-            } finally {
-              setIsSubmitting(false);
-            }
+                           };
+                           await onUpdatePatient(editModal.patient.id, patientData);
+                           setEditModal({ open: false, patient: null });
+                         }
+                       } catch (err: any) {
+                         if (isBranchTransferValidationError(err) && editModal.patient) {
+                           const recordState = await api.patients.checkPatientRecords(editModal.patient.id);
+                           setBranchTransferBlockedRecords(getBranchTransferBlockedItems(recordState));
+                           setBranchTransferBlockedOpen(true);
+                         }
+                       } finally {
+                         setIsSubmitting(false);
+                       }
           }} 
           className="space-y-5"
         >
@@ -1228,6 +1252,66 @@ const PatientsView: React.FC<PatientsViewProps> = ({
         deletePatientNameRef.current = 'this patient';
       }}
     />
+
+    {branchTransferBlockedOpen && (
+      <Modal
+        title="Branch Transfer Blocked"
+        onClose={() => {
+          setBranchTransferBlockedOpen(false);
+          setBranchTransferBlockedRecords([]);
+        }}
+        maxWidthClassName="max-w-md"
+      >
+        <div className="space-y-5">
+          <div className="rounded-3xl border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-orange-50 p-4 shadow-sm">
+            <div className="flex items-start gap-4">
+              <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
+                <AlertTriangle size={22} />
+              </div>
+              <div>
+                <p className="text-base font-black tracking-tight text-gray-900">
+                  This patient cannot be transferred to another branch.
+                </p>
+                <p className="mt-2 text-sm leading-6 text-gray-600">
+                  Existing branch-linked history was found for this patient.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3">
+            <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">
+              Why This Is Blocked
+            </p>
+            <p className="mt-2 text-sm leading-6 text-gray-700">
+              This patient has existing records in the current branch:
+            </p>
+            <ul className="mt-3 space-y-2">
+              {branchTransferBlockedRecords.map((item) => (
+                <li key={item} className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <span className="h-2 w-2 rounded-full bg-amber-500" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-3 text-sm leading-6 text-gray-700">
+              Resolve or move these records first before transferring the patient to another branch.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              setBranchTransferBlockedOpen(false);
+              setBranchTransferBlockedRecords([]);
+            }}
+            className="w-full rounded-2xl bg-amber-600 px-5 py-3.5 text-sm font-black text-white shadow-lg shadow-amber-600/20 transition-all hover:bg-amber-700 hover:shadow-amber-700/25"
+          >
+            Understood
+          </button>
+        </div>
+      </Modal>
+    )}
 
     {redeemModal.open && redeemModal.patient && (
       <Modal

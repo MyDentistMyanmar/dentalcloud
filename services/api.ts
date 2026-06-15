@@ -783,7 +783,69 @@ export const api = {
 
       return mapPatient(result);
     },
+    checkPatientRecords: async (patientId: string): Promise<{
+      hasAppointments: boolean;
+      hasTreatments: boolean;
+      hasLoyalty: boolean;
+      hasAny: boolean;
+    }> => {
+      const [
+        { count: appointmentCount, error: appointmentError },
+        { count: treatmentCount, error: treatmentError },
+        { count: loyaltyCount, error: loyaltyError }
+      ] = await Promise.all([
+        supabase
+          .from('appointments')
+          .select('id', { count: 'exact', head: true })
+          .eq('patient_id', patientId),
+        supabase
+          .from('treatments')
+          .select('id', { count: 'exact', head: true })
+          .eq('patient_id', patientId),
+        supabase
+          .from('loyalty_transactions')
+          .select('id', { count: 'exact', head: true })
+          .eq('patient_id', patientId)
+      ]);
+
+      if (appointmentError) throw new Error(appointmentError.message);
+      if (treatmentError) throw new Error(treatmentError.message);
+      if (loyaltyError) throw new Error(loyaltyError.message);
+
+      const hasAppointments = (appointmentCount || 0) > 0;
+      const hasTreatments = (treatmentCount || 0) > 0;
+      const hasLoyalty = (loyaltyCount || 0) > 0;
+
+      return {
+        hasAppointments,
+        hasTreatments,
+        hasLoyalty,
+        hasAny: hasAppointments || hasTreatments || hasLoyalty
+      };
+    },
     update: async (id: string, data: Partial<Patient>): Promise<Patient> => {
+      if (data.location_id !== undefined) {
+        const { data: existingPatient, error: existingPatientError } = await supabase
+          .from('patients')
+          .select('location_id')
+          .eq('id', id)
+          .single();
+
+        if (existingPatientError) throw new Error(existingPatientError.message);
+
+        const isBranchTransfer =
+          !!data.location_id &&
+          !!existingPatient?.location_id &&
+          data.location_id !== existingPatient.location_id;
+
+        if (isBranchTransfer) {
+          const patientRecordState = await api.patients.checkPatientRecords(id);
+          if (patientRecordState.hasAny) {
+            throw new Error('Cannot transfer branch: Patient has existing records');
+          }
+        }
+      }
+
       const normalizedEmail = data.email ? data.email.toLowerCase().trim() : data.email;
       const normalizedPhone = normalizePhoneForStorage(data.phone);
       const payload = {
