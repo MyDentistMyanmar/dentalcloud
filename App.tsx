@@ -107,6 +107,8 @@ const ACTIVE_BRANCH_STORAGE_KEY = 'dentalcloud_active_branch_id_v1';
 type PaymentDraft = {
   treatments: ClinicalRecord[];
   amountTendered: number;
+  previousBalance: number;
+  currentTreatmentTotal: number;
 };
 
 type HoverTheme = 'blue' | 'green' | 'yellow' | 'brown' | 'dark';
@@ -540,8 +542,11 @@ const App: React.FC = () => {
   // -- Form State --
   const [paymentDraft, setPaymentDraft] = useState<PaymentDraft>({
     treatments: [],
-    amountTendered: 0
+    amountTendered: 0,
+    previousBalance: 0,
+    currentTreatmentTotal: 0
   });
+  const [latestTreatmentBatch, setLatestTreatmentBatch] = useState<ClinicalRecord[]>([]);
   const [newPatientData, setNewPatientData] = useState<Partial<Patient> & { password?: string }>({
       name: '',
       email: '',
@@ -574,6 +579,8 @@ const App: React.FC = () => {
 
   const selectedPaymentTreatments = useMemo(() => paymentDraft.treatments, [paymentDraft.treatments]);
   const paymentOriginalAmount = Math.max(0, Number(selectedPatient?.balance || 0));
+  const paymentPreviousBalance = Math.max(0, Number(paymentDraft.previousBalance || 0));
+  const paymentCurrentTreatmentTotal = Math.max(0, Number(paymentDraft.currentTreatmentTotal || 0));
   const paymentAmountTendered = Math.min(paymentOriginalAmount, Math.max(0, Number(paymentDraft.amountTendered || 0)));
   const paymentClearedAmount = Math.min(paymentOriginalAmount, paymentAmountTendered);
   const [paymentThemeColors, setPaymentThemeColors] = useState(() => ({
@@ -1638,9 +1645,23 @@ const App: React.FC = () => {
   };
 
   const handleOpenPaymentModal = (treatments: ClinicalRecord[]) => {
+    const currentBatchForPatient = latestTreatmentBatch.filter(
+      (record) => record.patient_id === selectedPatient?.id
+    );
+    const currentTreatmentTotal = currentBatchForPatient.reduce(
+      (sum, record) => sum + Math.max(0, Number(record.cost || 0)),
+      0
+    );
+    const previousBalance = Math.max(
+      0,
+      Math.max(0, Number(selectedPatient?.balance || 0)) - currentTreatmentTotal
+    );
+
     setPaymentDraft({
       treatments,
-      amountTendered: Math.max(0, Number(selectedPatient?.balance || 0))
+      amountTendered: Math.max(0, Number(selectedPatient?.balance || 0)),
+      previousBalance,
+      currentTreatmentTotal
     });
     setShowPaymentModal(true);
   };
@@ -2463,6 +2484,7 @@ const App: React.FC = () => {
 
       const latestResponse = recordedResponses[recordedResponses.length - 1];
       const newRecords = recordedResponses.map((response) => response.record);
+      setLatestTreatmentBatch(newRecords);
       
       setSelectedPatient({ ...selectedPatient, balance: latestResponse?.new_balance ?? selectedPatient.balance });
       
@@ -2607,11 +2629,12 @@ const App: React.FC = () => {
       }
 
       setSelectedPatient({ ...selectedPatient, balance: res.new_balance });
+      setLatestTreatmentBatch([]);
       setLastPaymentAmount(paymentAmountTendered);
       setSelectedTreatmentsForReceipt(selectedPaymentTreatments);
       setSelectedMedicineSalesForReceipt([]);
       setShowPaymentModal(false);
-      setPaymentDraft({ treatments: [], amountTendered: 0 });
+      setPaymentDraft({ treatments: [], amountTendered: 0, previousBalance: 0, currentTreatmentTotal: 0 });
       // Ask whether to generate a receipt after posting payment.
       setShowReceiptPrompt(true);
       fetchInitialData(); 
@@ -4399,7 +4422,7 @@ const App: React.FC = () => {
           maxWidthClassName="max-w-4xl"
           onClose={() => {
             setShowPaymentModal(false);
-            setPaymentDraft({ treatments: [], amountTendered: 0 });
+            setPaymentDraft({ treatments: [], amountTendered: 0, previousBalance: 0, currentTreatmentTotal: 0 });
           }}
         >
           <form onSubmit={handlePaymentSubmit} className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
@@ -4418,7 +4441,7 @@ const App: React.FC = () => {
               </div>
 
               <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
-                <p className="text-sm font-semibold text-slate-500">Balance due</p>
+                <p className="text-sm font-semibold text-slate-500">Current total due</p>
                 <p className="mt-2 text-4xl font-black tracking-tight text-slate-950">
                   {formatCurrency(paymentOriginalAmount, currency)}
                 </p>
@@ -4426,14 +4449,26 @@ const App: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
+                  <p className="font-semibold text-slate-500">Previous balance</p>
+                  <p className="mt-1 text-base font-black leading-tight text-slate-900 sm:text-lg">
+                    {formatCurrency(paymentPreviousBalance, currency)}
+                  </p>
+                </div>
+                <div className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
+                  <p className="font-semibold text-slate-500">Current treatment</p>
+                  <p className="mt-1 text-base font-black leading-tight text-slate-900 sm:text-lg">
+                    {formatCurrency(paymentCurrentTreatmentTotal, currency)}
+                  </p>
+                </div>
+                <div className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
                   <p className="font-semibold text-slate-500">Applied to balance</p>
-                  <p className="mt-1 text-lg font-black text-slate-900">
+                  <p className="mt-1 text-base font-black leading-tight text-slate-900 sm:text-lg">
                     {formatCurrency(paymentClearedAmount, currency)}
                   </p>
                 </div>
                 <div className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
                   <p className="font-semibold text-slate-500">New balance</p>
-                  <p className="mt-1 text-lg font-black text-slate-900">
+                  <p className="mt-1 text-base font-black leading-tight text-slate-900 sm:text-lg">
                     {formatCurrency(Math.max(0, paymentOriginalAmount - paymentClearedAmount), currency)}
                   </p>
                 </div>
