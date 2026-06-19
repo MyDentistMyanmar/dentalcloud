@@ -660,7 +660,7 @@ const AIAssistantView: React.FC<AIAssistantViewProps> = ({
     city: params.city || '',
     township: params.township || params.tsp || '',
     patient_type: params.patient_type || params.pt || params.type || DEFAULT_PATIENT_TYPE_NAME,
-    balance: params.balance !== undefined ? Number(params.balance) : params.clinical_fee !== undefined ? Number(params.clinical_fee) : 0,
+    balance: 0,
     medicalHistory: params.m || params.medicalHistory || params.medical_history || '',
     password: params.password || params.portal_password || undefined,
     username: params.username || undefined
@@ -1645,7 +1645,8 @@ Finding Patients:
 
 Adding Patients (Agent Mode):
 • "Add new patient Michael Brown" 
-• The current registration form supports name, email, phone, age, patient type, branch, address, city, township, optional portal password, clinical fee/balance, and medical history
+• The current registration form supports name, email, phone, age, patient type, branch, address, city, township, optional portal password, and medical history
+• Clinical fees are charged when appointments are completed: first visit uses the new-patient rate, later visits use the returning-patient rate, and staff can explicitly skip the fee
 
 Scheduling Appointments:
 • "Book Sarah Johnson for a checkup next Tuesday at 2 PM"
@@ -2398,7 +2399,7 @@ BRANCH AWARENESS:
 - If the current scope is "All Branches" and the task changes data, prefer specifying the branch explicitly.
 
 PATIENT MANAGEMENT:
-- p_c(n, e, ph, age, patient_type, address, city, township, m, password, balance, location_id): Create patient using the current registration form fields. n/name=Full Patient Name, e/email=Primary Email, ph/phone=Mobile Contact, age=required age when available, patient_type/pt=Patient Type, address=street address, city=City, township=Township, m/medicalHistory=Relevant Medical History, password/portal_password=optional Patient Portal password, balance/clinical_fee=initial balance when applying clinical fee, location_id/location_name/branch_name=Branch.
+- p_c(n, e, ph, age, patient_type, address, city, township, m, password, location_id): Create patient using the current registration form fields. n/name=Full Patient Name, e/email=Primary Email, ph/phone=Mobile Contact, age=required age when available, patient_type/pt=Patient Type, address=street address, city=City, township=Township, m/medicalHistory=Relevant Medical History, password/portal_password=optional Patient Portal password, location_id/location_name/branch_name=Branch. Do not set a clinical fee during registration.
 - p_u(id, data): Update patient profile. id=patient id (or use "name"), data={name, email, phone, age, address, city, township, patient_type, medicalHistory, balance, loyalty_points}.
 - p_d(id): Delete patient.
 - p_find(name): Find patient by name (partial match).
@@ -2414,7 +2415,7 @@ APPOINTMENT MANAGEMENT:
 - apt_u(id, data): Update appointment. data can include {date, time, status, doctor_id, type, location_id, notes, guest_name, guest_phone, guest_source, guest_notes}.
 - apt_d(id): Delete appointment.
 - apt_reschedule(id, dt, t): Reschedule appointment.
-- apt_status(id, status): Update appointment status.
+- apt_status(id, status, skip_clinical_fee): Update appointment status. Completing a registered-patient appointment applies the configured per-visit clinical fee once. Set skip_clinical_fee=true only when the user explicitly asks to waive it.
 - apt_find_patient(name): Find appointments for patient.
 - apt_get_past(name): Get past appointment history for patient.
 - staff_availability(date, dr_id): Check doctor availability for date.
@@ -2528,7 +2529,7 @@ Response:
 
 To perform an action, include a JSON block at the END of your message. 
 IMPORTANT: You can use "name" instead of "pid" or "p_id" for any patient-related action. The system will automatically look up the ID.
-For patient registration, use the updated form fields when the user provides them: age, patient_type, branch/location, address, city, township, optional portal password, clinical fee/balance, and medical history. If the user asks to register a patient but required basics are missing, ask for the missing name/phone/age/branch instead of inventing them.
+For patient registration, use the updated form fields when the user provides them: age, patient_type, branch/location, address, city, township, optional portal password, and medical history. Do not add a clinical fee during registration. If the user asks to register a patient but required basics are missing, ask for the missing name/phone/age/branch instead of inventing them.
 For appointments, match the Admin Appointments form: choose Registered Patient when the person already exists, or New Patient lead when they are not registered yet; collect/emit date, time, type, optional doctor, status, branch/location, clinical_focus, and extra notes. Do not invent missing date/time/type/branch/doctor.
 For every staff-facing workflow, baby teeth must be written as 1A-1E, 2A-2E, 3A-3E, or 4A-4E. Numeric 51-85 values are legacy internal identifiers and must never be presented to users.
 For unregistered New Patient / marketing leads, do not create a patient first. Use apt_c with guest_name and guest_phone, plus guest_source/guest_notes when available. guest_source should come from the user's lead/source wording, and guest_notes should contain marketing context, caller request, or preferred contact time.
@@ -2790,7 +2791,7 @@ INTELLIGENCE GUIDELINES:
 - INTERNAL BRAINSTORMING: For every request, silently brainstorm the required steps, potential data needs, and clinical implications. Do not share this brainstorm with the user.
 - FULL CONVERSATION REVIEW: Before every reply, silently read the full current chat timeline from beginning to latest message. Use it to understand what the user is currently talking about, resolve pronouns like "it/that/this patient/that form", and avoid forgetting earlier details. If older messages conflict with the latest user instruction, follow the latest instruction but mention the change only when helpful.
 - PATIENT IDENTIFICATION: Each patient has a human-readable Patient ID (field pid in patient objects, e.g. "PAT-00001"). Staff often refer to patients by this ID in addition to patient names. When a user asks about a patient by ID number, use the pid field from the Practice Data patient list to identify them. Display this ID when referencing specific patients so staff can easily locate them in the system.
-- PATIENT REGISTRATION FORM: The current staff registration form includes Full Patient Name, Primary Email, Mobile Contact, Age, Patient Type, Branch/Location, Clinical Fee apply/skip, Address, City, Township, optional Patient Portal password, and Relevant Medical History. In Agent Mode, use these fields in p_c when supplied and ask for missing required basics instead of assuming them.
+- PATIENT REGISTRATION FORM: The current staff registration form includes Full Patient Name, Primary Email, Mobile Contact, Age, Patient Type, Branch/Location, Address, City, Township, optional Patient Portal password, and Relevant Medical History. Clinical fees are handled at appointment completion, not registration. In Agent Mode, use these fields in p_c when supplied and ask for missing required basics instead of assuming them.
 - NO HALLUCINATION: Never invent patient data, treatment costs, or stock levels. If data is not in the "Practice Data" provided, state that you don't know or ask for clarification.
 - BE PROACTIVE: Use clinical_insights and operational_insights to offer advice without being asked.
 - ANALYZE: Don't just list data; tell the user what it means (e.g., "3 patients are overdue for checkups, would you like me to find their contact info?").
@@ -3469,9 +3470,11 @@ I can provide guidance on:
               const appointment = resolveAppointment(pendingAction.params);
               if (!appointment) throw new Error("Appointment not found for status update.");
               const status = normalizeAppointmentStatus(pendingAction.params.status);
-              await api.appointments.updateStatus(appointment.id, status);
+              const completionResult = await api.appointments.updateStatus(appointment.id, status, {
+                skipClinicalFee: Boolean(pendingAction.params.skip_clinical_fee)
+              });
               const verification = await verifyAppointmentUpdateAction(locationId, pendingAction.params, appointment, null, { status });
-              result = { appointment, status, verification };
+              result = { appointment, status, completionResult, verification };
             }
             break;
           case 'apt_reschedule':
@@ -4650,8 +4653,10 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                 const appointment = resolveAppointment(params);
                 if (!appointment) throw new Error("Appointment not found for status change.");
                 const status = normalizeAppointmentStatus(params.status);
-                await api.appointments.updateStatus(appointment.id, status);
-                result = { appointment, status, verification: await verifyAppointmentUpdateAction(locationId, params, appointment, null, { status }) };
+                const completionResult = await api.appointments.updateStatus(appointment.id, status, {
+                  skipClinicalFee: Boolean(params.skip_clinical_fee)
+                });
+                result = { appointment, status, completionResult, verification: await verifyAppointmentUpdateAction(locationId, params, appointment, null, { status }) };
                 currentActionResult = `✅ Appointment status updated to ${status} for ${formatAppointmentLabel(appointment)}.`;
               } catch (err: any) {
                 console.error('Appointment status error:', err);

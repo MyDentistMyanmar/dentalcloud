@@ -80,6 +80,8 @@ CREATE TABLE app_settings (
   clinical_fee_enabled BOOLEAN DEFAULT FALSE,
   clinical_fee_amount DECIMAL(12,2) DEFAULT 0 CHECK (clinical_fee_amount >= 0),
   clinical_fee_default_apply_on_registration BOOLEAN DEFAULT FALSE,
+  clinical_fee_new_patient_amount DECIMAL(12,2) DEFAULT 0 CHECK (clinical_fee_new_patient_amount >= 0),
+  clinical_fee_returning_patient_amount DECIMAL(12,2) DEFAULT 0 CHECK (clinical_fee_returning_patient_amount >= 0),
   
   -- Custom app name (defaults to "DentalCloud Pro")
   app_name VARCHAR(255) DEFAULT 'DentalCloud Pro',
@@ -320,6 +322,12 @@ CREATE TABLE appointments (
   type VARCHAR(100),
   status VARCHAR(20) DEFAULT 'Scheduled',
   notes TEXT,
+  clinical_fee_status VARCHAR(20) DEFAULT 'PENDING'
+    CHECK (clinical_fee_status IN ('PENDING', 'APPLIED', 'SKIPPED', 'NOT_APPLICABLE')),
+  clinical_fee_amount DECIMAL(12,2) DEFAULT 0 CHECK (clinical_fee_amount >= 0),
+  clinical_fee_patient_category VARCHAR(20)
+    CHECK (clinical_fee_patient_category IS NULL OR clinical_fee_patient_category IN ('NEW', 'RETURNING')),
+  clinical_fee_applied_at TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   CONSTRAINT appointments_registered_or_guest_check CHECK (
     patient_id IS NOT NULL
@@ -494,6 +502,8 @@ ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS receipt_header_title TEXT;
 ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS currency_unit VARCHAR(3) NOT NULL DEFAULT 'USD';
 ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS receipt_size VARCHAR(20) NOT NULL DEFAULT 'A4';
 ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS clinical_fee_default_apply_on_registration BOOLEAN DEFAULT FALSE;
+ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS clinical_fee_new_patient_amount DECIMAL(12,2);
+ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS clinical_fee_returning_patient_amount DECIMAL(12,2);
 ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS email_delivery_enabled BOOLEAN DEFAULT FALSE;
 ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS email_sender_name TEXT DEFAULT 'DentalCloud';
 ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS email_sender_email TEXT;
@@ -502,12 +512,58 @@ ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS email_settings_updated_at TIME
 ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS app_logo_url TEXT;
 ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS app_logo_path TEXT;
 ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS hover_theme TEXT NOT NULL DEFAULT 'blue';
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS clinical_fee_status VARCHAR(20) DEFAULT 'PENDING';
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS clinical_fee_amount DECIMAL(12,2) DEFAULT 0;
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS clinical_fee_patient_category VARCHAR(20);
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS clinical_fee_applied_at TIMESTAMP WITH TIME ZONE;
 
 UPDATE app_settings
 SET
   currency_unit = CASE WHEN currency_unit IN ('USD', 'MMK') THEN currency_unit ELSE 'USD' END,
   receipt_size = CASE WHEN receipt_size IN ('A4', 'THERMAL_55MM') THEN receipt_size ELSE 'A4' END,
-  clinical_fee_default_apply_on_registration = COALESCE(clinical_fee_default_apply_on_registration, clinical_fee_enabled, FALSE);
+  clinical_fee_default_apply_on_registration = COALESCE(clinical_fee_default_apply_on_registration, clinical_fee_enabled, FALSE),
+  clinical_fee_new_patient_amount = COALESCE(clinical_fee_new_patient_amount, clinical_fee_amount, 0),
+  clinical_fee_returning_patient_amount = COALESCE(clinical_fee_returning_patient_amount, clinical_fee_amount, 0);
+
+UPDATE appointments
+SET
+  clinical_fee_status = CASE
+    WHEN status = 'Completed' AND COALESCE(clinical_fee_status, 'PENDING') = 'PENDING' THEN 'NOT_APPLICABLE'
+    ELSE COALESCE(clinical_fee_status, 'PENDING')
+  END,
+  clinical_fee_amount = COALESCE(clinical_fee_amount, 0);
+
+ALTER TABLE app_settings
+  ALTER COLUMN clinical_fee_new_patient_amount SET DEFAULT 0,
+  ALTER COLUMN clinical_fee_returning_patient_amount SET DEFAULT 0,
+  DROP CONSTRAINT IF EXISTS app_settings_clinical_fee_new_patient_amount_check,
+  DROP CONSTRAINT IF EXISTS app_settings_clinical_fee_returning_patient_amount_check;
+
+ALTER TABLE app_settings
+  ADD CONSTRAINT app_settings_clinical_fee_new_patient_amount_check
+    CHECK (clinical_fee_new_patient_amount >= 0),
+  ADD CONSTRAINT app_settings_clinical_fee_returning_patient_amount_check
+    CHECK (clinical_fee_returning_patient_amount >= 0);
+
+ALTER TABLE appointments
+  DROP CONSTRAINT IF EXISTS appointments_clinical_fee_status_check,
+  DROP CONSTRAINT IF EXISTS appointments_clinical_fee_amount_check,
+  DROP CONSTRAINT IF EXISTS appointments_clinical_fee_patient_category_check;
+
+ALTER TABLE appointments
+  ADD CONSTRAINT appointments_clinical_fee_status_check
+    CHECK (clinical_fee_status IN ('PENDING', 'APPLIED', 'SKIPPED', 'NOT_APPLICABLE')),
+  ADD CONSTRAINT appointments_clinical_fee_amount_check
+    CHECK (clinical_fee_amount >= 0),
+  ADD CONSTRAINT appointments_clinical_fee_patient_category_check
+    CHECK (
+      clinical_fee_patient_category IS NULL
+      OR clinical_fee_patient_category IN ('NEW', 'RETURNING')
+    );
+
+CREATE INDEX IF NOT EXISTS idx_appointments_patient_completed_visit
+  ON appointments (patient_id, date, time)
+  WHERE status = 'Completed';
 
 ALTER TABLE app_settings
   ALTER COLUMN currency_unit SET DEFAULT 'USD',
@@ -744,6 +800,148 @@ $$;
 REVOKE ALL ON FUNCTION process_patient_payment(UUID, DECIMAL, TEXT, UUID[], DATE, JSONB, UUID, TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION process_patient_payment(UUID, DECIMAL, TEXT, UUID[], DATE, JSONB, UUID, TEXT) TO anon, authenticated;
 
+CREATE OR REPLACE FUNCTION complete_appointment_with_clinical_fee(
+  p_appointment_id UUID,
+  p_skip_clinical_fee BOOLEAN DEFAULT FALSE
+)
+RETURNS TABLE (
+  appointment_id UUID,
+  fee_status VARCHAR,
+  fee_amount DECIMAL,
+  patient_category VARCHAR,
+  new_balance DECIMAL
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_appointment appointments%ROWTYPE;
+  v_patient patients%ROWTYPE;
+  v_settings app_settings%ROWTYPE;
+  v_is_returning BOOLEAN := FALSE;
+  v_category VARCHAR(20);
+  v_fee DECIMAL(12,2) := 0;
+  v_fee_status VARCHAR(20) := 'NOT_APPLICABLE';
+BEGIN
+  SELECT *
+  INTO v_appointment
+  FROM appointments
+  WHERE id = p_appointment_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Appointment not found';
+  END IF;
+
+  IF v_appointment.status = 'Completed'
+     AND v_appointment.clinical_fee_status IN ('APPLIED', 'SKIPPED', 'NOT_APPLICABLE') THEN
+    SELECT patient.balance
+    INTO new_balance
+    FROM patients patient
+    WHERE patient.id = v_appointment.patient_id;
+
+    appointment_id := v_appointment.id;
+    fee_status := v_appointment.clinical_fee_status;
+    fee_amount := COALESCE(v_appointment.clinical_fee_amount, 0);
+    patient_category := v_appointment.clinical_fee_patient_category;
+    RETURN NEXT;
+    RETURN;
+  END IF;
+
+  IF v_appointment.patient_id IS NULL THEN
+    UPDATE appointments
+    SET
+      status = 'Completed',
+      clinical_fee_status = 'NOT_APPLICABLE',
+      clinical_fee_amount = 0,
+      clinical_fee_patient_category = NULL,
+      clinical_fee_applied_at = NULL
+    WHERE id = v_appointment.id;
+
+    appointment_id := v_appointment.id;
+    fee_status := 'NOT_APPLICABLE';
+    fee_amount := 0;
+    patient_category := NULL;
+    new_balance := NULL;
+    RETURN NEXT;
+    RETURN;
+  END IF;
+
+  SELECT *
+  INTO v_patient
+  FROM patients
+  WHERE id = v_appointment.patient_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Patient not found';
+  END IF;
+
+  SELECT *
+  INTO v_settings
+  FROM app_settings
+  WHERE id = 1;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM appointments previous
+    WHERE previous.patient_id = v_appointment.patient_id
+      AND previous.id <> v_appointment.id
+      AND previous.status = 'Completed'
+      AND (
+        previous.date < v_appointment.date
+        OR (previous.date = v_appointment.date AND previous.time < v_appointment.time)
+      )
+  ) OR EXISTS (
+    SELECT 1
+    FROM treatments previous_treatment
+    WHERE previous_treatment.patient_id = v_appointment.patient_id
+      AND previous_treatment.date < v_appointment.date
+  )
+  INTO v_is_returning;
+
+  v_category := CASE WHEN v_is_returning THEN 'RETURNING' ELSE 'NEW' END;
+
+  IF p_skip_clinical_fee THEN
+    v_fee_status := 'SKIPPED';
+  ELSIF COALESCE(v_settings.clinical_fee_enabled, FALSE) THEN
+    v_fee := CASE
+      WHEN v_is_returning THEN COALESCE(v_settings.clinical_fee_returning_patient_amount, 0)
+      ELSE COALESCE(v_settings.clinical_fee_new_patient_amount, 0)
+    END;
+
+    IF v_fee > 0 THEN
+      UPDATE patients
+      SET balance = ROUND((COALESCE(balance, 0) + v_fee)::NUMERIC, 2)
+      WHERE id = v_patient.id
+      RETURNING * INTO v_patient;
+
+      v_fee_status := 'APPLIED';
+    END IF;
+  END IF;
+
+  UPDATE appointments
+  SET
+    status = 'Completed',
+    clinical_fee_status = v_fee_status,
+    clinical_fee_amount = CASE WHEN v_fee_status = 'APPLIED' THEN v_fee ELSE 0 END,
+    clinical_fee_patient_category = v_category,
+    clinical_fee_applied_at = CASE WHEN v_fee_status = 'APPLIED' THEN NOW() ELSE NULL END
+  WHERE id = v_appointment.id;
+
+  appointment_id := v_appointment.id;
+  fee_status := v_fee_status;
+  fee_amount := CASE WHEN v_fee_status = 'APPLIED' THEN v_fee ELSE 0 END;
+  patient_category := v_category;
+  new_balance := v_patient.balance;
+  RETURN NEXT;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION complete_appointment_with_clinical_fee(UUID, BOOLEAN) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION complete_appointment_with_clinical_fee(UUID, BOOLEAN) TO anon, authenticated;
+
 -- Generic function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
@@ -898,7 +1096,9 @@ SET
     email_settings_updated_at = COALESCE(email_settings_updated_at, NOW()),
     currency_unit = CASE WHEN currency_unit IN ('USD', 'MMK') THEN currency_unit ELSE 'USD' END,
     receipt_size = CASE WHEN receipt_size IN ('A4', 'THERMAL_55MM') THEN receipt_size ELSE 'A4' END,
-    clinical_fee_default_apply_on_registration = COALESCE(clinical_fee_default_apply_on_registration, clinical_fee_enabled, FALSE)
+    clinical_fee_default_apply_on_registration = COALESCE(clinical_fee_default_apply_on_registration, clinical_fee_enabled, FALSE),
+    clinical_fee_new_patient_amount = COALESCE(clinical_fee_new_patient_amount, clinical_fee_amount, 0),
+    clinical_fee_returning_patient_amount = COALESCE(clinical_fee_returning_patient_amount, clinical_fee_amount, 0)
 WHERE id = 1;
 
 -- Public PNG-only clinic logo bucket

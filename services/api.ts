@@ -1,6 +1,6 @@
 import { supabase, supabaseUrl, supabaseAnonKey } from './supabase';
 import * as tus from 'tus-js-client';
-import { Patient, Appointment, ClinicalRecord, TreatmentType, PatientFile, Doctor, DoctorSchedule, DoctorScheduleInput, User, Medicine, MedicineSale, Location, LoyaltyRule, LoyaltyTransaction, Expense, Message, Conversation, Recall, ScheduledTask, S3Settings, PatientType, AppointmentType, DoctorTreatmentCommission, PaymentMethod, PaymentRecord, PaymentReceiptSnapshot, ReceiptPreferences } from '../types';
+import { Patient, Appointment, ClinicalRecord, TreatmentType, PatientFile, Doctor, DoctorSchedule, DoctorScheduleInput, User, Medicine, MedicineSale, Location, LoyaltyRule, LoyaltyTransaction, Expense, Message, Conversation, Recall, ScheduledTask, S3Settings, PatientType, AppointmentType, DoctorTreatmentCommission, PaymentMethod, PaymentRecord, PaymentReceiptSnapshot, ReceiptPreferences, ClinicalFeeSettings, ClinicalFeeCompletionResult } from '../types';
 import { DEFAULT_PATIENT_TYPE_NAME, DEFAULT_PATIENT_TYPE_OPTIONS, DOCTOR_DASHBOARD_TABS, FULL_ACCESS_TAB_PERMISSIONS } from '../constants';
 import { resolveAllowedTabs } from '../utils/permissions';
 import { EmailSettings, loadEmailSettingsAsync, saveEmailSettingsAsync } from '../utils/emailSettings';
@@ -295,6 +295,38 @@ const getLocalISODate = (date = new Date()): string => {
   return `${year}-${month}-${day}`;
 };
 
+const completeAppointmentWithClinicalFee = async (
+  appointmentId: string,
+  skipClinicalFee = false
+): Promise<ClinicalFeeCompletionResult> => {
+  const { data, error } = await supabase.rpc('complete_appointment_with_clinical_fee', {
+    p_appointment_id: appointmentId,
+    p_skip_clinical_fee: skipClinicalFee
+  });
+
+  if (error) {
+    if (isMissingFunctionError(error, 'complete_appointment_with_clinical_fee')) {
+      throw new Error('Per-visit clinical fees are not installed. Run database/clinical_fee_per_visit_migration.sql in Supabase.');
+    }
+    throw new Error(error.message);
+  }
+
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) {
+    throw new Error('Appointment completion did not return a result.');
+  }
+
+  return {
+    appointmentId: row.appointment_id,
+    feeStatus: row.fee_status,
+    feeAmount: Number(row.fee_amount || 0),
+    patientCategory: row.patient_category || null,
+    newBalance: row.new_balance === null || row.new_balance === undefined
+      ? null
+      : Number(row.new_balance)
+  };
+};
+
 const completeScheduledAppointmentForTreatment = async (params: {
   locationId: string;
   patientId: string;
@@ -327,13 +359,7 @@ const completeScheduledAppointmentForTreatment = async (params: {
     candidateAppointments.find((appointment: any) => !appointment.doctor_id) ||
     candidateAppointments[0];
 
-  const { error: updateError } = await supabase
-    .from('appointments')
-    .update({ status: 'Completed' })
-    .eq('id', appointmentToComplete.id)
-    .eq('status', 'Scheduled');
-
-  if (updateError) throw new Error(updateError.message);
+  await completeAppointmentWithClinicalFee(appointmentToComplete.id);
 
   try {
     await syncRecallStatusFromAppointment({
@@ -1470,6 +1496,7 @@ export const api = {
       if (!data.time) throw new Error('time is required');
       if (!data.type) throw new Error('type is required');
 
+      const requestedStatus = data.status || 'Scheduled';
       const payload = {
         location_id: data.location_id,
         patient_id: data.patient_id || null,
@@ -1477,7 +1504,7 @@ export const api = {
         date: data.date,
         time: data.time,
         type: data.type,
-        status: data.status || 'Scheduled',
+        status: requestedStatus === 'Completed' ? 'Scheduled' : requestedStatus,
         notes: data.notes,
         guest_name: hasRegisteredPatient ? null : guestName,
         guest_phone: hasRegisteredPatient ? null : guestPhone,
@@ -1514,6 +1541,18 @@ export const api = {
         throw new Error(error.message);
       }
 
+      if (requestedStatus === 'Completed') {
+        await completeAppointmentWithClinicalFee(result.id);
+        const completedResult = await supabase
+          .from('appointments')
+          .select('*, patients!appointments_patient_id_fkey(name, balance), doctors(name)')
+          .eq('id', result.id)
+          .single();
+
+        if (completedResult.error) throw new Error(completedResult.error.message);
+        result = completedResult.data;
+      }
+
       try {
         await syncRecallStatusFromAppointment({
           appointmentId: result.id,
@@ -1533,14 +1572,44 @@ export const api = {
         doctor_name: result.doctors?.name || undefined
       };
     },
-    updateStatus: async (id: string, status: string): Promise<void> => {
+    updateStatus: async (
+      id: string,
+      status: string,
+      options: { skipClinicalFee?: boolean } = {}
+    ): Promise<ClinicalFeeCompletionResult | void> => {
       const { data: appointment, error: fetchError } = await supabase
         .from('appointments')
-        .select('id, patient_id, location_id')
+        .select('id, patient_id, location_id, status, clinical_fee_status')
         .eq('id', id)
         .single();
 
-      if (fetchError || !appointment) throw new Error(fetchError?.message || 'Appointment not found');
+      if (fetchError || !appointment) {
+        if (fetchError && isMissingColumnError(fetchError, 'clinical_fee_status')) {
+          throw new Error('Per-visit clinical fees are not installed. Run database/clinical_fee_per_visit_migration.sql in Supabase.');
+        }
+        throw new Error(fetchError?.message || 'Appointment not found');
+      }
+
+      if (status === 'Completed') {
+        const result = await completeAppointmentWithClinicalFee(id, Boolean(options.skipClinicalFee));
+
+        try {
+          await syncRecallStatusFromAppointment({
+            appointmentId: id,
+            patientId: appointment.patient_id,
+            locationId: appointment.location_id,
+            status
+          });
+        } catch (syncErr) {
+          console.warn('Recall automation sync failed on appointment status update:', syncErr);
+        }
+
+        return result;
+      }
+
+      if (appointment.status === 'Completed' && appointment.clinical_fee_status === 'APPLIED') {
+        throw new Error('This completed visit has an applied clinical fee and cannot be reopened without a financial adjustment.');
+      }
 
       const { error } = await supabase
         .from('appointments')
@@ -1561,8 +1630,44 @@ export const api = {
       }
     },
     update: async (id: string, data: Partial<Appointment>): Promise<Appointment> => {
+      const { data: existingAppointment, error: existingAppointmentError } = await supabase
+        .from('appointments')
+        .select('status, clinical_fee_status, patient_id, location_id, date, time')
+        .eq('id', id)
+        .single();
+
+      if (existingAppointmentError) {
+        if (isMissingColumnError(existingAppointmentError, 'clinical_fee_status')) {
+          throw new Error('Per-visit clinical fees are not installed. Run database/clinical_fee_per_visit_migration.sql in Supabase.');
+        }
+        throw new Error(existingAppointmentError.message);
+      }
+
+      const shouldComplete = data.status === 'Completed';
+      if (
+        !shouldComplete &&
+        data.status !== undefined &&
+        existingAppointment.status === 'Completed' &&
+        existingAppointment.clinical_fee_status === 'APPLIED'
+      ) {
+        throw new Error('This completed visit has an applied clinical fee and cannot be reopened without a financial adjustment.');
+      }
+
+      if (existingAppointment.clinical_fee_status === 'APPLIED') {
+        const changesFeeIdentity =
+          (data.patient_id !== undefined && (data.patient_id || null) !== existingAppointment.patient_id) ||
+          (data.location_id !== undefined && data.location_id !== existingAppointment.location_id) ||
+          (data.date !== undefined && data.date !== existingAppointment.date) ||
+          (data.time !== undefined && data.time !== existingAppointment.time);
+
+        if (changesFeeIdentity) {
+          throw new Error('This visit has an applied clinical fee. Patient, branch, date, and time cannot be changed without a financial adjustment.');
+        }
+      }
+
       const updatePayload = {
         ...data,
+        status: shouldComplete ? undefined : data.status,
         patient_id: Object.prototype.hasOwnProperty.call(data, 'patient_id')
           ? (data.patient_id || null)
           : undefined,
@@ -1571,7 +1676,7 @@ export const api = {
           : undefined
       };
 
-      const { data: result, error } = await supabase
+      let { data: result, error } = await supabase
         .from('appointments')
         .update(updatePayload)
         .eq('id', id)
@@ -1579,6 +1684,18 @@ export const api = {
         .single();
 
       if (error) throw new Error(error.message);
+
+      if (shouldComplete) {
+        await completeAppointmentWithClinicalFee(id);
+        const completedResult = await supabase
+          .from('appointments')
+          .select('*, patients!appointments_patient_id_fkey(name, balance), doctors(name)')
+          .eq('id', id)
+          .single();
+
+        if (completedResult.error) throw new Error(completedResult.error.message);
+        result = completedResult.data;
+      }
 
       try {
         await syncRecallStatusFromAppointment({
@@ -1600,6 +1717,23 @@ export const api = {
       };
     },
     delete: async (id: string): Promise<void> => {
+      const { data: appointment, error: appointmentError } = await supabase
+        .from('appointments')
+        .select('clinical_fee_status')
+        .eq('id', id)
+        .single();
+
+      if (appointmentError) {
+        if (isMissingColumnError(appointmentError, 'clinical_fee_status')) {
+          throw new Error('Per-visit clinical fees are not installed. Run database/clinical_fee_per_visit_migration.sql in Supabase.');
+        }
+        throw new Error(appointmentError.message);
+      }
+
+      if (appointment.clinical_fee_status === 'APPLIED') {
+        throw new Error('This visit has an applied clinical fee and cannot be deleted without a financial adjustment.');
+      }
+
       const { error } = await supabase
         .from('appointments')
         .delete()
@@ -1616,6 +1750,7 @@ export const api = {
         .from('appointments')
         .delete()
         .lt('date', cutoffDateStr)
+        .neq('clinical_fee_status', 'APPLIED')
         .select();
 
       if (locationId) {
@@ -2731,15 +2866,21 @@ export const api = {
     saveEmailSettings: async (settings: EmailSettings): Promise<EmailSettings> => {
       return saveEmailSettingsAsync(settings);
     },
-    getClinicalFeeSettings: async (): Promise<{ enabled: boolean; amount: number; defaultApplyOnRegistration: boolean }> => {
+    getClinicalFeeSettings: async (): Promise<ClinicalFeeSettings> => {
       try {
         let { data, error } = await supabase
           .from('app_settings')
-          .select('clinical_fee_enabled, clinical_fee_amount, clinical_fee_default_apply_on_registration')
+          .select('clinical_fee_enabled, clinical_fee_amount, clinical_fee_new_patient_amount, clinical_fee_returning_patient_amount')
           .eq('id', APP_SETTINGS_SINGLETON_ID)
           .maybeSingle();
 
-        if (error && isMissingColumnError(error, 'clinical_fee_default_apply_on_registration')) {
+        if (
+          error &&
+          (
+            isMissingColumnError(error, 'clinical_fee_new_patient_amount') ||
+            isMissingColumnError(error, 'clinical_fee_returning_patient_amount')
+          )
+        ) {
           const fallbackResult = await supabase
             .from('app_settings')
             .select('clinical_fee_enabled, clinical_fee_amount')
@@ -2750,27 +2891,27 @@ export const api = {
         }
 
         if (error || !data) {
-          return { enabled: false, amount: 0, defaultApplyOnRegistration: false };
+          return { enabled: false, newPatientAmount: 0, returningPatientAmount: 0 };
         }
 
-        const enabled = Boolean(data.clinical_fee_enabled);
+        const legacyAmount = Math.max(0, Number(data.clinical_fee_amount || 0));
         return {
-          enabled,
-          amount: Number(data.clinical_fee_amount || 0),
-          defaultApplyOnRegistration: typeof data.clinical_fee_default_apply_on_registration === 'boolean'
-            ? data.clinical_fee_default_apply_on_registration
-            : enabled
+          enabled: Boolean(data.clinical_fee_enabled),
+          newPatientAmount: Math.max(0, Number(data.clinical_fee_new_patient_amount ?? legacyAmount)),
+          returningPatientAmount: Math.max(0, Number(data.clinical_fee_returning_patient_amount ?? legacyAmount))
         };
       } catch (error: any) {
         console.warn('Failed to load clinical fee settings:', error?.message || error);
-        return { enabled: false, amount: 0, defaultApplyOnRegistration: false };
+        return { enabled: false, newPatientAmount: 0, returningPatientAmount: 0 };
       }
     },
-    saveClinicalFeeSettings: async (settings: { enabled: boolean; amount: number }): Promise<void> => {
+    saveClinicalFeeSettings: async (settings: ClinicalFeeSettings): Promise<void> => {
       const payload = {
         id: APP_SETTINGS_SINGLETON_ID,
         clinical_fee_enabled: settings.enabled,
-        clinical_fee_amount: Number(settings.amount || 0),
+        clinical_fee_amount: Number(settings.newPatientAmount || 0),
+        clinical_fee_new_patient_amount: Number(settings.newPatientAmount || 0),
+        clinical_fee_returning_patient_amount: Number(settings.returningPatientAmount || 0),
         updated_at: new Date().toISOString()
       };
 
@@ -2779,23 +2920,11 @@ export const api = {
         .upsert(payload);
 
       if (error) {
-        throw new Error(error.message);
-      }
-    },
-    saveClinicalFeeRegistrationPreference: async (apply: boolean): Promise<void> => {
-      const payload = {
-        id: APP_SETTINGS_SINGLETON_ID,
-        clinical_fee_default_apply_on_registration: apply,
-        updated_at: new Date().toISOString()
-      };
-
-      const { error } = await supabase
-        .from('app_settings')
-        .upsert(payload);
-
-      if (error) {
-        if (isMissingColumnError(error, 'clinical_fee_default_apply_on_registration')) {
-          throw new Error('Clinical fee registration preference is not installed. Run the latest clinical fee preference migration in Supabase.');
+        if (
+          isMissingColumnError(error, 'clinical_fee_new_patient_amount') ||
+          isMissingColumnError(error, 'clinical_fee_returning_patient_amount')
+        ) {
+          throw new Error('Per-visit clinical fee settings are not installed. Run database/clinical_fee_per_visit_migration.sql in Supabase.');
         }
         throw new Error(error.message);
       }

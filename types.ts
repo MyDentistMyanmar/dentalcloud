@@ -243,6 +243,24 @@ export interface Appointment {
   created_at?: string;
   created_by_user_id?: string | null;
   created_by_user_name?: string | null;
+  clinical_fee_status?: 'PENDING' | 'APPLIED' | 'SKIPPED' | 'NOT_APPLICABLE';
+  clinical_fee_amount?: number;
+  clinical_fee_patient_category?: 'NEW' | 'RETURNING' | null;
+  clinical_fee_applied_at?: string | null;
+}
+
+export interface ClinicalFeeSettings {
+  enabled: boolean;
+  newPatientAmount: number;
+  returningPatientAmount: number;
+}
+
+export interface ClinicalFeeCompletionResult {
+  appointmentId: string;
+  feeStatus: 'APPLIED' | 'SKIPPED' | 'NOT_APPLICABLE';
+  feeAmount: number;
+  patientCategory: 'NEW' | 'RETURNING' | null;
+  newBalance: number | null;
 }
 
 export interface AppointmentType {
@@ -300,6 +318,8 @@ export interface ClinicSettings {
   loyalty_enabled: boolean;
   clinical_fee_enabled?: boolean;
   clinical_fee_amount?: number;
+  clinical_fee_new_patient_amount?: number;
+  clinical_fee_returning_patient_amount?: number;
 }
 
 export interface S3Settings {

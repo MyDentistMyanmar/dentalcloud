@@ -502,23 +502,21 @@ const App: React.FC = () => {
     api.messages.toggleMessagingFeature(enabled);
   };
 
-  const handleSaveClinicalFeeSettings = async (enabled: boolean, amount: number) => {
-    const normalizedAmount = Math.max(0, Number(amount || 0));
+  const handleSaveClinicalFeeSettings = async (
+    enabled: boolean,
+    newPatientAmount: number,
+    returningPatientAmount: number
+  ) => {
+    const normalizedNewPatientAmount = Math.max(0, Number(newPatientAmount || 0));
+    const normalizedReturningPatientAmount = Math.max(0, Number(returningPatientAmount || 0));
     await api.appSettings.saveClinicalFeeSettings({
       enabled,
-      amount: normalizedAmount
+      newPatientAmount: normalizedNewPatientAmount,
+      returningPatientAmount: normalizedReturningPatientAmount
     });
     setClinicalFeeEnabled(enabled);
-    setClinicalFeeAmount(normalizedAmount);
-  };
-
-  const handleRegistrationClinicalFeePreferenceChange = async (apply: boolean) => {
-    setApplyClinicalFeeOnRegistration(apply);
-    try {
-      await api.appSettings.saveClinicalFeeRegistrationPreference(apply);
-    } catch (error) {
-      console.warn('Failed to persist patient registration clinical fee preference:', error);
-    }
+    setClinicalFeeNewPatientAmount(normalizedNewPatientAmount);
+    setClinicalFeeReturningPatientAmount(normalizedReturningPatientAmount);
   };
 
   const handleUploadAppLogo = async (file: File) => {
@@ -605,8 +603,8 @@ const App: React.FC = () => {
       location_id: ''
     });
   const [clinicalFeeEnabled, setClinicalFeeEnabled] = useState(false);
-  const [clinicalFeeAmount, setClinicalFeeAmount] = useState(0);
-  const [applyClinicalFeeOnRegistration, setApplyClinicalFeeOnRegistration] = useState(false);
+  const [clinicalFeeNewPatientAmount, setClinicalFeeNewPatientAmount] = useState(0);
+  const [clinicalFeeReturningPatientAmount, setClinicalFeeReturningPatientAmount] = useState(0);
   const [newAppointmentData, setNewAppointmentData] = useState<Partial<Appointment>>({ date: '', time: '', type: '', status: 'Scheduled', patient_id: '', doctor_id: '', location_id: currentLocationId || '' });
   const [appointmentPatientMode, setAppointmentPatientMode] = useState<'registered' | 'lead'>('registered');
   const [convertingLeadAppointment, setConvertingLeadAppointment] = useState<Appointment | null>(null);
@@ -952,8 +950,8 @@ const App: React.FC = () => {
       .then((settings) => {
         if (!mounted) return;
         setClinicalFeeEnabled(settings.enabled);
-        setClinicalFeeAmount(settings.amount);
-        setApplyClinicalFeeOnRegistration(settings.defaultApplyOnRegistration);
+        setClinicalFeeNewPatientAmount(settings.newPatientAmount);
+        setClinicalFeeReturningPatientAmount(settings.returningPatientAmount);
       })
       .catch((err) => {
         console.warn('Failed to load clinical fee settings:', err);
@@ -1022,8 +1020,8 @@ const App: React.FC = () => {
         }
         if (mounted) {
           setClinicalFeeEnabled(clinicalFeeSettings.enabled);
-          setClinicalFeeAmount(clinicalFeeSettings.amount);
-          setApplyClinicalFeeOnRegistration(clinicalFeeSettings.defaultApplyOnRegistration);
+          setClinicalFeeNewPatientAmount(clinicalFeeSettings.newPatientAmount);
+          setClinicalFeeReturningPatientAmount(clinicalFeeSettings.returningPatientAmount);
         }
       } catch (error) {
         console.warn('Failed to refresh shared app settings:', error);
@@ -1045,7 +1043,8 @@ const App: React.FC = () => {
             receipt_size?: unknown;
             clinical_fee_enabled?: unknown;
             clinical_fee_amount?: unknown;
-            clinical_fee_default_apply_on_registration?: unknown;
+            clinical_fee_new_patient_amount?: unknown;
+            clinical_fee_returning_patient_amount?: unknown;
           } | null;
           const nextTheme = row?.hover_theme;
           if (isHoverTheme(nextTheme)) {
@@ -1063,12 +1062,17 @@ const App: React.FC = () => {
           if (typeof row?.clinical_fee_enabled === 'boolean') {
             setClinicalFeeEnabled(row.clinical_fee_enabled);
           }
-          const nextClinicalFeeAmount = Number(row?.clinical_fee_amount);
-          if (Number.isFinite(nextClinicalFeeAmount)) {
-            setClinicalFeeAmount(Math.max(0, nextClinicalFeeAmount));
+          const nextNewPatientAmount = Number(
+            row?.clinical_fee_new_patient_amount ?? row?.clinical_fee_amount
+          );
+          if (Number.isFinite(nextNewPatientAmount)) {
+            setClinicalFeeNewPatientAmount(Math.max(0, nextNewPatientAmount));
           }
-          if (typeof row?.clinical_fee_default_apply_on_registration === 'boolean') {
-            setApplyClinicalFeeOnRegistration(row.clinical_fee_default_apply_on_registration);
+          const nextReturningPatientAmount = Number(
+            row?.clinical_fee_returning_patient_amount ?? row?.clinical_fee_amount
+          );
+          if (Number.isFinite(nextReturningPatientAmount)) {
+            setClinicalFeeReturningPatientAmount(Math.max(0, nextReturningPatientAmount));
           }
         }
       )
@@ -1687,11 +1691,10 @@ const App: React.FC = () => {
     setIsSubmitting(true);
     try {
       console.log('Creating patient with location_id:', newPatientData.location_id);
-      const registrationFee = applyClinicalFeeOnRegistration ? Math.max(0, Number(clinicalFeeAmount || 0)) : 0;
       const patientInput = {
         ...newPatientData,
         location_id: newPatientData.location_id,
-        balance: registrationFee,
+        balance: 0,
       } as Parameters<typeof api.patients.create>[0];
       const createdPatient = await api.patients.create(patientInput);
       if (convertingLeadAppointment) {
@@ -1718,9 +1721,7 @@ const App: React.FC = () => {
       setConvertingLeadAppointment(null);
       const createdBranch = locations.find((loc) => loc.id === createdPatient.location_id);
       const viewingDifferentBranch = !!createdPatient.location_id && !!currentLocationId && createdPatient.location_id !== currentLocationId;
-      const baseSuccessMessage = registrationFee > 0
-        ? `Patient registered with clinical fee: ${formatCurrency(registrationFee, currency)}.`
-        : 'Patient registered successfully.';
+      const baseSuccessMessage = 'Patient registered successfully. The new-patient clinical fee will be handled when the first appointment is completed.';
       const branchHint = viewingDifferentBranch
         ? ` Saved to ${createdBranch?.name || 'another branch'}. Switch branch in Settings to view it.`
         : '';
@@ -2307,10 +2308,22 @@ const App: React.FC = () => {
     }
   };
 
-  const handleUpdateAppointmentStatus = async (id: string, status: 'Scheduled' | 'Completed' | 'Cancelled') => {
+  const handleUpdateAppointmentStatus = async (
+    id: string,
+    status: 'Scheduled' | 'Completed' | 'Cancelled',
+    options?: { skipClinicalFee?: boolean }
+  ) => {
     try {
-      await api.appointments.updateStatus(id, status);
+      const result = await api.appointments.updateStatus(id, status, options);
       await fetchInitialData(currentLocationId || undefined);
+      if (status === 'Completed' && result) {
+        const feeMessage = result.feeStatus === 'APPLIED'
+          ? `${result.patientCategory === 'NEW' ? 'New-patient' : 'Returning-patient'} clinical fee applied: ${formatCurrency(result.feeAmount, currency)}.`
+          : result.feeStatus === 'SKIPPED'
+          ? 'Appointment completed and the clinical fee was skipped.'
+          : 'Appointment completed with no clinical fee.';
+        setToast({ message: feeMessage, type: 'success', show: true });
+      }
     } catch (err: any) {
       alert(err.message);
     }
@@ -3404,6 +3417,7 @@ const App: React.FC = () => {
                 }} 
                 onDeleteAppointment={handleDeleteAppointment} 
                 onUpdateStatus={handleUpdateAppointmentStatus} 
+                currency={currency}
                 onViewChart={handleViewAppointmentChart}
                 onSelectPatient={handlePatientSelect}
                 onConvertLead={handleConvertLeadAppointment}
@@ -3474,7 +3488,8 @@ const App: React.FC = () => {
                     onToggleMessaging={handleToggleMessaging}
                     onRemoveAllMessages={handleRemoveAllMessages}
                     clinicalFeeEnabled={clinicalFeeEnabled}
-                    clinicalFeeAmount={clinicalFeeAmount}
+                    clinicalFeeNewPatientAmount={clinicalFeeNewPatientAmount}
+                    clinicalFeeReturningPatientAmount={clinicalFeeReturningPatientAmount}
                     onSaveClinicalFeeSettings={handleSaveClinicalFeeSettings}
                     patientTypes={patientTypes}
                     appointmentTypes={appointmentTypes}
@@ -3710,35 +3725,20 @@ const App: React.FC = () => {
             </div>
 
             <div className="rounded-xl border border-indigo-100 bg-indigo-50/70 p-4">
-              <p className="text-[10px] font-black uppercase tracking-wide text-indigo-700 mb-2">Clinical Fee on Registration</p>
-              <div className="flex items-center gap-6">
-                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="applyClinicalFee"
-                    checked={applyClinicalFeeOnRegistration}
-                    onChange={() => { void handleRegistrationClinicalFeePreferenceChange(true); }}
-                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                  />
-                  Apply
-                </label>
-                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="applyClinicalFee"
-                    checked={!applyClinicalFeeOnRegistration}
-                    onChange={() => { void handleRegistrationClinicalFeePreferenceChange(false); }}
-                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                  />
-                  Skip
-                </label>
-                <span className="ml-auto text-xs font-semibold text-indigo-700">
-                  Amount: {formatCurrency(Math.max(0, Number(clinicalFeeAmount || 0)), currency)}
+              <p className="text-[10px] font-black uppercase tracking-wide text-indigo-700 mb-2">First Visit Clinical Fee</p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-medium text-gray-700">
+                  The fee is applied when this patient's first appointment is completed.
+                </p>
+                <span className="text-xs font-semibold text-indigo-700">
+                  New patient: {formatCurrency(clinicalFeeNewPatientAmount, currency)}
                 </span>
               </div>
-              {!clinicalFeeEnabled && (
-                <p className="mt-2 text-xs text-amber-700">Global clinical fee is disabled in Settings. You can still keep this off for this patient.</p>
-              )}
+              <p className={`mt-2 text-xs ${clinicalFeeEnabled ? 'text-indigo-700' : 'text-amber-700'}`}>
+                {clinicalFeeEnabled
+                  ? 'Use “Complete & Skip Fee” on the appointment when the fee should be waived.'
+                  : 'Clinical visit fees are currently disabled in Settings.'}
+              </p>
             </div>
 
             <div>

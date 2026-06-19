@@ -26,8 +26,9 @@ interface SettingsViewProps {
   onToggleMessaging: (enabled: boolean) => void;
   onRemoveAllMessages: () => void;
   clinicalFeeEnabled: boolean;
-  clinicalFeeAmount: number;
-  onSaveClinicalFeeSettings: (enabled: boolean, amount: number) => Promise<void>;
+  clinicalFeeNewPatientAmount: number;
+  clinicalFeeReturningPatientAmount: number;
+  onSaveClinicalFeeSettings: (enabled: boolean, newPatientAmount: number, returningPatientAmount: number) => Promise<void>;
   patientTypes: PatientType[];
   appointmentTypes: AppointmentType[];
   onCreatePatientType: (data: Partial<PatientType>) => Promise<void>;
@@ -88,7 +89,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   onToggleMessaging,
   onRemoveAllMessages,
   clinicalFeeEnabled,
-  clinicalFeeAmount,
+  clinicalFeeNewPatientAmount,
+  clinicalFeeReturningPatientAmount,
   onSaveClinicalFeeSettings,
   patientTypes,
   appointmentTypes,
@@ -214,9 +216,14 @@ const SettingsView: React.FC<SettingsViewProps> = ({
     bucket: ''
   });
   const [supabaseStorageMessage, setSupabaseStorageMessage] = useState<string>('');
-  const [clinicalFeeForm, setClinicalFeeForm] = useState<{ enabled: boolean; amount: number }>({
+  const [clinicalFeeForm, setClinicalFeeForm] = useState<{
+    enabled: boolean;
+    newPatientAmount: number;
+    returningPatientAmount: number;
+  }>({
     enabled: clinicalFeeEnabled,
-    amount: clinicalFeeAmount
+    newPatientAmount: clinicalFeeNewPatientAmount,
+    returningPatientAmount: clinicalFeeReturningPatientAmount
   });
   const [clinicalFeeMessage, setClinicalFeeMessage] = useState<string>('');
   const [patientTypeForm, setPatientTypeForm] = useState<{ name: string; sort_order: string; is_active: boolean }>({
@@ -312,9 +319,18 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   const handleSaveClinicalFee = async () => {
     try {
       setClinicalFeeMessage('');
-      const normalizedAmount = Math.max(0, Number(clinicalFeeForm.amount || 0));
-      await onSaveClinicalFeeSettings(clinicalFeeForm.enabled, normalizedAmount);
-      setClinicalFeeForm(prev => ({ ...prev, amount: normalizedAmount }));
+      const normalizedNewPatientAmount = Math.max(0, Number(clinicalFeeForm.newPatientAmount || 0));
+      const normalizedReturningPatientAmount = Math.max(0, Number(clinicalFeeForm.returningPatientAmount || 0));
+      await onSaveClinicalFeeSettings(
+        clinicalFeeForm.enabled,
+        normalizedNewPatientAmount,
+        normalizedReturningPatientAmount
+      );
+      setClinicalFeeForm(prev => ({
+        ...prev,
+        newPatientAmount: normalizedNewPatientAmount,
+        returningPatientAmount: normalizedReturningPatientAmount
+      }));
       setClinicalFeeMessage('Clinical fee settings saved successfully.');
     } catch (error: any) {
       console.error('Failed to save clinical fee settings:', error);
@@ -688,9 +704,10 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   useEffect(() => {
     setClinicalFeeForm({
       enabled: clinicalFeeEnabled,
-      amount: clinicalFeeAmount
+      newPatientAmount: clinicalFeeNewPatientAmount,
+      returningPatientAmount: clinicalFeeReturningPatientAmount
     });
-  }, [clinicalFeeEnabled, clinicalFeeAmount]);
+  }, [clinicalFeeEnabled, clinicalFeeNewPatientAmount, clinicalFeeReturningPatientAmount]);
 
   const handleSendTestEmail = async () => {
     setTestMessage('');
@@ -882,10 +899,10 @@ const SettingsView: React.FC<SettingsViewProps> = ({
         <div className="border border-gray-200 rounded-xl p-6">
           <div className="flex items-center gap-3 mb-4">
             <DollarSign className="w-5 h-5 text-indigo-600" />
-            <h3 className="text-lg font-semibold text-gray-800">Patient Registration Clinical Fee</h3>
+            <h3 className="text-lg font-semibold text-gray-800">Patient Visit Clinical Fee</h3>
           </div>
           <p className="text-sm text-gray-600 mb-4">
-            Configure a default fee that can be applied to newly registered patients.
+            Charge a clinical fee when a registered patient's appointment is completed. The first completed visit uses the new-patient price; later visits use the returning-patient price.
           </p>
 
           <div className="space-y-4">
@@ -899,20 +916,37 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                 }}
                 className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
               />
-              <span className="text-sm font-medium text-gray-700">Enable clinical fee for new patient registration by default</span>
+              <span className="text-sm font-medium text-gray-700">Enable clinical fee on completed patient visits</span>
             </label>
 
-            <Input
-              label={`Clinical Fee Amount (${currencySymbols[currency]})`}
-              type="number"
-              min="0"
-              step="0.01"
-              value={clinicalFeeForm.amount}
-              onChange={(e: any) => {
-                setClinicalFeeMessage('');
-                setClinicalFeeForm({ ...clinicalFeeForm, amount: parseFloat(e.target.value) || 0 });
-              }}
-            />
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <Input
+                label={`New Patient / First Visit (${currencySymbols[currency]})`}
+                type="number"
+                min="0"
+                step="0.01"
+                value={clinicalFeeForm.newPatientAmount}
+                onChange={(e: any) => {
+                  setClinicalFeeMessage('');
+                  setClinicalFeeForm({ ...clinicalFeeForm, newPatientAmount: parseFloat(e.target.value) || 0 });
+                }}
+              />
+              <Input
+                label={`Returning Patient / Later Visits (${currencySymbols[currency]})`}
+                type="number"
+                min="0"
+                step="0.01"
+                value={clinicalFeeForm.returningPatientAmount}
+                onChange={(e: any) => {
+                  setClinicalFeeMessage('');
+                  setClinicalFeeForm({ ...clinicalFeeForm, returningPatientAmount: parseFloat(e.target.value) || 0 });
+                }}
+              />
+            </div>
+
+            <p className="text-xs text-gray-500">
+              Staff can use “Complete &amp; Skip Fee” on an appointment when the fee should be waived.
+            </p>
 
             <button
               type="button"
