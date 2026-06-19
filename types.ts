@@ -1,4 +1,5 @@
 import type { AppTabPermission } from './constants';
+import type { Currency } from './utils/currency';
 
 export interface Location {
   id: string;
@@ -90,12 +91,44 @@ export interface PaymentRecord {
   treatmentIds?: string[];
   date: string;
   type: 'FULL' | 'PARTIAL';
+  balanceBefore?: number;
   remainingBalance: number;
   paymentMethod?: PaymentMethod;
   receiptNumber?: string;
+  receiptSnapshot?: PaymentReceiptSnapshot | null;
   createdAt?: string;
   createdByUserId?: string | null;
   createdByUserName?: string | null;
+}
+
+export interface PaymentReceiptSnapshot {
+  version: 1;
+  receiptType: 'PAYMENT';
+  receiptNumber: string;
+  receiptDate: string;
+  createdAt?: string | null;
+  currency: Currency;
+  clinic: {
+    appName: string;
+    headerTitle: string;
+    email: string;
+    phone: string;
+  };
+  patient: {
+    id: string;
+    name: string;
+    email?: string;
+    phone?: string;
+    patientUniqueId?: string;
+  };
+  payment: {
+    amountPaid: number;
+    method: PaymentMethod;
+    status: 'FULL' | 'PARTIAL';
+    balanceBefore: number;
+    balanceAfter: number;
+    recordedByUserName?: string | null;
+  };
 }
 
 export type PaymentMethod =

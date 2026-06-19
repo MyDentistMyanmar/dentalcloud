@@ -1,46 +1,30 @@
 -- ============================================================================
--- PAYMENT METHODS + SHARED PAYMENT AUDIT MIGRATION
--- Run once in the Supabase SQL Editor before deploying the matching app build.
+-- PAYMENT RECEIPT SNAPSHOT MIGRATION
+-- Purpose:
+-- Persist immutable payment receipt facts so reprints stay correct even when
+-- patient balances, treatment prices, or receipt settings change later.
+--
+-- Safe to run multiple times.
 -- ============================================================================
 
-CREATE SEQUENCE IF NOT EXISTS payment_receipt_seq START 1;
+BEGIN;
 
-CREATE TABLE IF NOT EXISTS payments (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  location_id UUID NOT NULL REFERENCES locations(id) ON DELETE RESTRICT,
-  patient_id UUID NOT NULL REFERENCES patients(id) ON DELETE RESTRICT,
-  amount DECIMAL(12,2) NOT NULL CHECK (amount > 0),
-  original_amount DECIMAL(12,2) NOT NULL CHECK (original_amount > 0),
-  cleared_amount DECIMAL(12,2) NOT NULL CHECK (cleared_amount > 0),
-  balance_before DECIMAL(12,2) NOT NULL CHECK (balance_before >= 0),
-  remaining_balance DECIMAL(12,2) NOT NULL CHECK (remaining_balance >= 0),
-  payment_method VARCHAR(30) NOT NULL CHECK (
-    payment_method IN ('KPAY', 'WAVEPAY', 'CASH', 'MMQR', 'DEBIT_CARD', 'CREDIT_CARD', 'AYA_PAY', 'UAB_PAY')
-  ),
-  payment_status VARCHAR(10) NOT NULL CHECK (payment_status IN ('FULL', 'PARTIAL')),
-  treatment_ids UUID[] NOT NULL DEFAULT '{}',
-  receipt_number VARCHAR(40) NOT NULL UNIQUE DEFAULT (
-    'REC-' || TO_CHAR(CURRENT_DATE, 'YYYYMMDD') || '-' || LPAD(nextval('payment_receipt_seq')::TEXT, 6, '0')
-  ),
-  payment_date DATE NOT NULL DEFAULT CURRENT_DATE,
-  receipt_snapshot JSONB,
-  created_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-  created_by_user_name VARCHAR(255),
-  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-);
+ALTER TABLE payments
+  ADD COLUMN IF NOT EXISTS balance_before DECIMAL(12,2),
+  ADD COLUMN IF NOT EXISTS receipt_snapshot JSONB;
 
-CREATE INDEX IF NOT EXISTS idx_payments_location_date ON payments(location_id, payment_date DESC);
-CREATE INDEX IF NOT EXISTS idx_payments_patient_date ON payments(patient_id, payment_date DESC);
-CREATE INDEX IF NOT EXISTS idx_payments_method_date ON payments(payment_method, payment_date DESC);
-CREATE INDEX IF NOT EXISTS idx_payments_created_at ON payments(created_at DESC);
+UPDATE payments
+SET balance_before = ROUND((COALESCE(remaining_balance, 0) + COALESCE(amount, 0))::NUMERIC, 2)
+WHERE balance_before IS NULL;
 
-ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "anon_full_access_payments" ON payments;
-CREATE POLICY "anon_full_access_payments" ON payments
-  FOR ALL
-  TO anon, authenticated
-  USING (true)
-  WITH CHECK (true);
+ALTER TABLE payments
+  DROP CONSTRAINT IF EXISTS payments_balance_before_check;
+
+ALTER TABLE payments
+  ADD CONSTRAINT payments_balance_before_check CHECK (balance_before >= 0);
+
+ALTER TABLE payments
+  ALTER COLUMN balance_before SET NOT NULL;
 
 CREATE OR REPLACE FUNCTION process_patient_payment(
   p_patient_id UUID,
@@ -176,4 +160,6 @@ $$;
 REVOKE ALL ON FUNCTION process_patient_payment(UUID, DECIMAL, TEXT, UUID[], DATE, JSONB, UUID, TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION process_patient_payment(UUID, DECIMAL, TEXT, UUID[], DATE, JSONB, UUID, TEXT) TO anon, authenticated;
 
-SELECT 'Payment methods migration complete' AS status;
+COMMIT;
+
+SELECT 'payment_receipt_snapshot_migration_complete' AS status;

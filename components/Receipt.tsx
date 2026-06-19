@@ -1,6 +1,6 @@
 import React from 'react';
 import { X, Printer } from 'lucide-react';
-import { Patient, ClinicalRecord, MedicineSale, PaymentMethod, ReceiptSize, TreatmentType } from '../types';
+import { Patient, ClinicalRecord, MedicineSale, PaymentMethod, PaymentReceiptSnapshot, ReceiptSize, TreatmentType } from '../types';
 import { formatCurrency, Currency } from '../utils/currency';
 import { formatPaymentMethod } from '../utils/paymentMethods';
 import { resolveReceiptHeaderTitle } from '../utils/receiptPreferences';
@@ -13,6 +13,7 @@ interface ReceiptProps {
   paymentAmount?: number;
   paymentMethod?: PaymentMethod;
   receiptNumber?: string;
+  paymentReceiptSnapshot?: PaymentReceiptSnapshot | null;
   treatmentTypes?: TreatmentType[];
   currency: Currency;
   appName?: string;
@@ -29,6 +30,7 @@ const Receipt: React.FC<ReceiptProps> = ({
   paymentAmount,
   paymentMethod,
   receiptNumber: persistedReceiptNumber,
+  paymentReceiptSnapshot,
   treatmentTypes = [],
   currency,
   appName = 'DentalCloud Pro',
@@ -37,15 +39,48 @@ const Receipt: React.FC<ReceiptProps> = ({
   receiptSize = 'A4',
   onClose
 }) => {
-  const receiptEmail = receiptInfo?.email || 'info@dentflowpro.com';
-  const receiptPhone = receiptInfo?.phone || '(555) 123-4567';
-  const displayHeaderTitle = resolveReceiptHeaderTitle(receiptHeaderTitle, appName);
-  const receiptNumber = persistedReceiptNumber || `REC-${Date.now().toString().slice(-8)}`;
-  const today = new Date().toLocaleDateString('en-US', { 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric' 
-  });
+  const paymentSnapshot = paymentReceiptSnapshot || null;
+  const effectiveAppName = paymentSnapshot?.clinic.appName || appName;
+  const receiptEmail = paymentSnapshot?.clinic.email || receiptInfo?.email || 'info@dentflowpro.com';
+  const receiptPhone = paymentSnapshot?.clinic.phone || receiptInfo?.phone || '(555) 123-4567';
+  const displayHeaderTitle = paymentSnapshot?.clinic.headerTitle || resolveReceiptHeaderTitle(receiptHeaderTitle, effectiveAppName);
+  const receiptNumber = paymentSnapshot?.receiptNumber || persistedReceiptNumber || `REC-${Date.now().toString().slice(-8)}`;
+  const effectiveCurrency = paymentSnapshot?.currency || currency;
+  const formatLongDate = (value: string | Date) => {
+    const date = typeof value === 'string' ? new Date(value) : value;
+    if (Number.isNaN(date.getTime())) return typeof value === 'string' ? value : '';
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  };
+  const formatShortDate = (value: string | Date) => {
+    const date = typeof value === 'string' ? new Date(value) : value;
+    if (Number.isNaN(date.getTime())) return typeof value === 'string' ? value : '';
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+  const displayDate = paymentSnapshot
+    ? formatLongDate(`${paymentSnapshot.receiptDate}T00:00:00`)
+    : formatLongDate(new Date());
+  const patientDisplay = paymentSnapshot
+    ? {
+        name: paymentSnapshot.patient.name,
+        email: paymentSnapshot.patient.email || '',
+        phone: paymentSnapshot.patient.phone || '',
+        patientUniqueId: paymentSnapshot.patient.patientUniqueId || ''
+      }
+    : {
+        name: patient.name,
+        email: patient.email || '',
+        phone: patient.phone || '',
+        patientUniqueId: patient.patient_unique_id || ''
+      };
+  const today = displayDate;
 
   const getTreatmentPricing = (treatment: ClinicalRecord) => {
     const finalCost = Number(treatment.cost || 0);
@@ -755,12 +790,262 @@ const Receipt: React.FC<ReceiptProps> = ({
     </div>
   );
 
+  const renderPaymentA4Content = (isPrint = false) => {
+    if (!paymentSnapshot) return null;
+
+    return (
+      <div
+        className={isPrint ? 'receipt-content' : 'p-8 md:p-12 print:p-12'}
+        style={{
+          width: '210mm',
+          minHeight: '297mm',
+          margin: '0 auto',
+          padding: isPrint ? '12mm' : undefined,
+          background: 'white',
+          fontSize: isPrint ? '12pt' : undefined,
+          fontFamily: isPrint ? 'system-ui, sans-serif' : undefined
+        }}
+      >
+        <div className="text-center mb-8 border-b-2 border-gray-800 pb-6">
+          <h1 className="text-2xl font-black text-gray-900 mb-2">{displayHeaderTitle}</h1>
+          <p className="text-sm text-gray-600">Official Payment Receipt</p>
+          <p className="text-xs text-gray-500 mt-2">Email: {receiptEmail} | Phone: {receiptPhone}</p>
+        </div>
+
+        <div className="flex justify-between items-start mb-8">
+          <div>
+            <p className="text-sm font-semibold text-gray-700 mb-2">RECEIVED FROM:</p>
+            <p className="text-base font-bold text-gray-900">{patientDisplay.name}</p>
+            {patientDisplay.patientUniqueId ? <p className="text-sm text-gray-600">Patient ID: {patientDisplay.patientUniqueId}</p> : null}
+            {patientDisplay.email ? <p className="text-sm text-gray-600">{patientDisplay.email}</p> : null}
+            {patientDisplay.phone ? <p className="text-sm text-gray-600">{patientDisplay.phone}</p> : null}
+          </div>
+          <div className="text-right">
+            <p className="text-sm text-gray-600 mb-1">Receipt #: <span className="font-semibold">{receiptNumber}</span></p>
+            <p className="text-sm text-gray-600">Date: <span className="font-semibold">{displayDate}</span></p>
+          </div>
+        </div>
+
+        <div className="mb-8 rounded-2xl border border-emerald-100 bg-emerald-50 p-6">
+          <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">Amount Received</p>
+          <p className="mt-2 text-4xl font-black tracking-tight text-emerald-950">
+            {formatCurrency(paymentSnapshot.payment.amountPaid, effectiveCurrency)}
+          </p>
+        </div>
+
+        <div className="mb-8 grid gap-4 md:grid-cols-2">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+            <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Payment Details</p>
+            <div className="mt-4 space-y-3 text-sm">
+              <div className="flex justify-between gap-4">
+                <span className="text-slate-500">Payment Method</span>
+                <span className="font-semibold text-slate-900">{formatPaymentMethod(paymentSnapshot.payment.method)}</span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-slate-500">Payment Date</span>
+                <span className="font-semibold text-slate-900">{displayDate}</span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-slate-500">Status</span>
+                <span className="font-semibold text-emerald-700">{paymentSnapshot.payment.status === 'FULL' ? 'Paid in Full' : 'Partial Payment'}</span>
+              </div>
+              {paymentSnapshot.payment.recordedByUserName ? (
+                <div className="flex justify-between gap-4">
+                  <span className="text-slate-500">Recorded By</span>
+                  <span className="font-semibold text-slate-900">{paymentSnapshot.payment.recordedByUserName}</span>
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Balance Summary</p>
+            <div className="mt-4 space-y-3 text-sm">
+              <div className="flex justify-between gap-4">
+                <span className="text-slate-500">Balance Before Payment</span>
+                <span className="font-semibold text-slate-900">{formatCurrency(paymentSnapshot.payment.balanceBefore, effectiveCurrency)}</span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-slate-500">Payment Received</span>
+                <span className="font-semibold text-emerald-700">-{formatCurrency(paymentSnapshot.payment.amountPaid, effectiveCurrency)}</span>
+              </div>
+              <div className="flex justify-between gap-4 border-t border-slate-200 pt-3">
+                <span className="text-slate-700 font-semibold">Remaining Balance</span>
+                <span className={`font-black ${paymentSnapshot.payment.balanceAfter > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>
+                  {paymentSnapshot.payment.balanceAfter > 0 ? formatCurrency(paymentSnapshot.payment.balanceAfter, effectiveCurrency) : 'Clear'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-blue-100 bg-blue-50 p-5 text-sm text-blue-900">
+          This payment receipt reflects the amount collected and the updated account balance at the time of payment.
+          Treatment and medicine details are managed separately in the patient invoice workflow.
+        </div>
+
+        <div className="mt-12 pt-6 border-t-2 border-gray-800 text-center">
+          <p className="text-xs text-gray-600 mb-2">Thank you for choosing {effectiveAppName} for your dental care needs.</p>
+          <p className="text-xs text-gray-500">This is a computer-generated payment receipt. No signature required.</p>
+          <p className="text-xs text-gray-500 mt-2">Please retain this receipt for your records.</p>
+        </div>
+      </div>
+    );
+  };
+
+  const renderPaymentThermalContent = () => {
+    if (!paymentSnapshot) return null;
+
+    return (
+      <div
+        className="thermal-receipt-content"
+        style={{
+          width: '58mm',
+          margin: '0 auto',
+          padding: '2mm 3mm',
+          background: 'white',
+          fontFamily: "'Courier New', Courier, monospace",
+          fontSize: '10px',
+          lineHeight: '1.3',
+          color: '#222'
+        }}
+      >
+        <div style={{ textAlign: 'center', marginBottom: '6px' }}>
+          <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '1px' }}>{displayHeaderTitle}</div>
+          <div style={{ fontSize: '8px', color: '#555' }}>PAYMENT RECEIPT</div>
+          <div style={{ fontSize: '7px', color: '#777', marginTop: '2px' }}>{receiptEmail} | {receiptPhone}</div>
+        </div>
+
+        {thermalThickDivider()}
+        {thermalLine('Receipt #:', receiptNumber, { fontSize: '8px' }, { fontSize: '8px' })}
+        {thermalLine('Date:', formatShortDate(`${paymentSnapshot.receiptDate}T00:00:00`), { fontSize: '8px' }, { fontSize: '8px' })}
+        {thermalDivider()}
+
+        <div style={{ marginBottom: '6px' }}>
+          <div style={{ fontSize: '9px', fontWeight: 700 }}>{patientDisplay.name}</div>
+          {patientDisplay.patientUniqueId ? <div style={{ fontSize: '7px', color: '#555' }}>ID: {patientDisplay.patientUniqueId}</div> : null}
+          {patientDisplay.phone ? <div style={{ fontSize: '7px', color: '#555' }}>{patientDisplay.phone}</div> : null}
+          {patientDisplay.email ? <div style={{ fontSize: '7px', color: '#555' }}>{patientDisplay.email}</div> : null}
+        </div>
+
+        {thermalDivider()}
+        <div style={{ textAlign: 'center', margin: '6px 0' }}>
+          <div style={{ fontSize: '8px', color: '#555' }}>AMOUNT RECEIVED</div>
+          <div style={{ fontSize: '14px', fontWeight: 700 }}>{formatCurrency(paymentSnapshot.payment.amountPaid, effectiveCurrency)}</div>
+        </div>
+
+        {thermalThickDivider()}
+        <div style={{ marginBottom: '6px', fontSize: '8px', lineHeight: '1.35' }}>
+          <div style={{ fontSize: '8.5px', fontWeight: 700, marginBottom: '3px', letterSpacing: '0.3px' }}>-- PAYMENT DETAILS --</div>
+          {thermalLine('Method:', formatPaymentMethod(paymentSnapshot.payment.method))}
+          {thermalLine('Status:', paymentSnapshot.payment.status === 'FULL' ? 'Paid in Full' : 'Partial Payment')}
+          {paymentSnapshot.payment.recordedByUserName ? thermalLine('Recorded By:', paymentSnapshot.payment.recordedByUserName) : null}
+        </div>
+
+        {thermalDivider()}
+        <div style={{ marginBottom: '6px', fontSize: '8px', lineHeight: '1.35' }}>
+          <div style={{ fontSize: '8.5px', fontWeight: 700, marginBottom: '3px', letterSpacing: '0.3px' }}>-- BALANCE SUMMARY --</div>
+          {thermalLine('Before Payment:', formatCurrency(paymentSnapshot.payment.balanceBefore, effectiveCurrency))}
+          {thermalLine('Payment Received:', `-${formatCurrency(paymentSnapshot.payment.amountPaid, effectiveCurrency)}`, undefined, { color: '#16a34a' })}
+          {thermalThickDivider()}
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', fontWeight: 700, marginTop: '2px' }}>
+            <span>REMAINING</span>
+            <span style={{ color: paymentSnapshot.payment.balanceAfter > 0 ? '#b45309' : '#16a34a' }}>
+              {paymentSnapshot.payment.balanceAfter > 0 ? formatCurrency(paymentSnapshot.payment.balanceAfter, effectiveCurrency) : 'Clear'}
+            </span>
+          </div>
+        </div>
+
+        {thermalThickDivider()}
+        <div style={{ textAlign: 'center', marginTop: '8px', fontSize: '8px', color: '#555' }}>
+          <div style={{ fontWeight: 700, marginBottom: '2px' }}>Thank you for choosing {effectiveAppName}.</div>
+          <div>This is a computer-generated payment receipt.</div>
+          <div>No signature required.</div>
+        </div>
+
+        <div style={{ textAlign: 'center', marginTop: '6px', fontSize: '8px', color: '#999', letterSpacing: '2px' }}>
+          - - - - - - - - - - - - - - - - -
+        </div>
+      </div>
+    );
+  };
+
+  const renderPaymentA4Preview = () => (
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 print:hidden">
+      <div className="bg-white rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-auto">
+        <div className="sticky top-0 bg-white border-b border-gray-200 p-4 flex justify-between items-center z-10">
+          <h2 className="text-xl font-bold text-gray-800">Payment Receipt</h2>
+          <div className="flex gap-2">
+            <button
+              onClick={handlePrint}
+              className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
+            >
+              <Printer className="w-4 h-4" /> Print
+            </button>
+            <button
+              onClick={onClose}
+              className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+        {renderPaymentA4Content()}
+      </div>
+    </div>
+  );
+
+  const renderPaymentA4Print = () => (
+    <div className="receipt-print hidden print:block">
+      {renderPaymentA4Content(true)}
+    </div>
+  );
+
+  const renderPaymentThermalPreview = () => (
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 print:hidden">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-h-[90vh] overflow-auto" style={{ maxWidth: '380px' }}>
+        <div className="sticky top-0 bg-white border-b border-gray-200 p-3 flex justify-between items-center z-10">
+          <h2 className="text-sm font-bold text-gray-800">Payment Receipt</h2>
+          <div className="flex gap-2">
+            <button
+              onClick={handlePrint}
+              className="flex items-center gap-1 bg-indigo-600 text-white px-3 py-1.5 rounded-lg hover:bg-indigo-700 transition-colors text-xs"
+            >
+              <Printer className="w-3 h-3" /> Print
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+        <div className="p-4 bg-slate-100">
+          <div className="mx-auto rounded-lg bg-white p-4 shadow-sm" style={{ width: '68mm' }}>
+            {renderPaymentThermalContent()}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderPaymentThermalPrint = () => (
+    <div className="receipt-print hidden print:block">
+      {renderPaymentThermalContent()}
+    </div>
+  );
+
   // ─── Main Return ───────────────────────────────────────────────────────
 
   return (
     <>
-      {isThermal ? renderThermalPreview() : renderA4Preview()}
-      {isThermal ? renderThermalPrint() : renderA4Print()}
+      {paymentSnapshot
+        ? (isThermal ? renderPaymentThermalPreview() : renderPaymentA4Preview())
+        : (isThermal ? renderThermalPreview() : renderA4Preview())}
+      {paymentSnapshot
+        ? (isThermal ? renderPaymentThermalPrint() : renderPaymentA4Print())
+        : (isThermal ? renderThermalPrint() : renderA4Print())}
 
       {/* Print Styles */}
       <style>{`

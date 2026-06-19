@@ -1,6 +1,6 @@
 import { supabase, supabaseUrl, supabaseAnonKey } from './supabase';
 import * as tus from 'tus-js-client';
-import { Patient, Appointment, ClinicalRecord, TreatmentType, PatientFile, Doctor, DoctorSchedule, DoctorScheduleInput, User, Medicine, MedicineSale, Location, LoyaltyRule, LoyaltyTransaction, Expense, Message, Conversation, Recall, ScheduledTask, S3Settings, PatientType, AppointmentType, DoctorTreatmentCommission, PaymentMethod, PaymentRecord, ReceiptPreferences } from '../types';
+import { Patient, Appointment, ClinicalRecord, TreatmentType, PatientFile, Doctor, DoctorSchedule, DoctorScheduleInput, User, Medicine, MedicineSale, Location, LoyaltyRule, LoyaltyTransaction, Expense, Message, Conversation, Recall, ScheduledTask, S3Settings, PatientType, AppointmentType, DoctorTreatmentCommission, PaymentMethod, PaymentRecord, PaymentReceiptSnapshot, ReceiptPreferences } from '../types';
 import { DEFAULT_PATIENT_TYPE_NAME, DEFAULT_PATIENT_TYPE_OPTIONS, DOCTOR_DASHBOARD_TABS, FULL_ACCESS_TAB_PERMISSIONS } from '../constants';
 import { resolveAllowedTabs } from '../utils/permissions';
 import { EmailSettings, loadEmailSettingsAsync, saveEmailSettingsAsync } from '../utils/emailSettings';
@@ -8,6 +8,7 @@ import { buildS3FileUrl, buildSupabaseS3Url, buildSupabaseS3PublicUrl, deleteS3O
 import { buildSupabasePublicUrl, deleteSupabaseStorageFile, isSupabaseStorageReady, listSupabaseStorageFiles, normalizeSupabaseStorageUrl, uploadSupabaseStorageFile } from '../utils/supabaseStorage';
 import { findInvalidTeeth } from '../utils/toothNumbering';
 import { normalizePaymentMethod } from '../utils/paymentMethods';
+import { normalizePaymentReceiptSnapshot } from '../utils/paymentReceipt';
 import { DEFAULT_RECEIPT_PREFERENCES, normalizeReceiptPreferences } from '../utils/receiptPreferences';
 
 let usersAllowedTabsSupport: boolean | null = null;
@@ -2547,9 +2548,11 @@ export const api = {
         treatmentIds: Array.isArray(row.treatment_ids) ? row.treatment_ids : [],
         date: row.payment_date || row.created_at?.slice(0, 10) || '',
         type: row.payment_status === 'FULL' ? 'FULL' : 'PARTIAL',
+        balanceBefore: Number(row.balance_before ?? (Number(row.remaining_balance || 0) + Number(row.amount || 0))),
         remainingBalance: Number(row.remaining_balance || 0),
         paymentMethod: normalizePaymentMethod(row.payment_method),
         receiptNumber: row.receipt_number,
+        receiptSnapshot: normalizePaymentReceiptSnapshot(row.receipt_snapshot),
         createdAt: row.created_at,
         createdByUserId: row.created_by_user_id,
         createdByUserName: row.created_by_user_name
@@ -2578,13 +2581,14 @@ export const api = {
         p_payment_method: input.paymentMethod,
         p_treatment_ids: input.treatmentIds || [],
         p_payment_date: input.paymentDate || new Date().toISOString().slice(0, 10),
+        p_receipt_snapshot: null,
         p_created_by_user_id: input.createdByUserId || null,
         p_created_by_user_name: input.createdByUserName || null
       });
 
       if (error) {
         if (isMissingFunctionError(error, 'process_patient_payment')) {
-          throw new Error('Payment storage is not installed. Run database/payment_methods_migration.sql in Supabase.');
+          throw new Error('Payment receipt storage is not installed. Run database/payment_receipt_snapshot_migration.sql in Supabase.');
         }
         throw new Error(error.message);
       }
@@ -2603,9 +2607,11 @@ export const api = {
         treatmentIds: Array.isArray(row.treatment_ids) ? row.treatment_ids : [],
         date: row.payment_date || row.created_at?.slice(0, 10) || '',
         type: row.payment_status === 'FULL' ? 'FULL' : 'PARTIAL',
+        balanceBefore: Number(row.balance_before ?? (Number(row.remaining_balance || 0) + Number(row.amount || 0))),
         remainingBalance: Number(row.remaining_balance || 0),
         paymentMethod: normalizePaymentMethod(row.payment_method),
         receiptNumber: row.receipt_number,
+        receiptSnapshot: normalizePaymentReceiptSnapshot(row.receipt_snapshot),
         createdAt: row.created_at,
         createdByUserId: row.created_by_user_id,
         createdByUserName: row.created_by_user_name
@@ -2618,6 +2624,23 @@ export const api = {
         cleared_amount: payment.clearedAmount ?? payment.amount,
         payment
       };
+    },
+    saveReceiptSnapshot: async (paymentId: string, snapshot: PaymentReceiptSnapshot): Promise<PaymentReceiptSnapshot> => {
+      const { data, error } = await supabase
+        .from('payments')
+        .update({ receipt_snapshot: snapshot })
+        .eq('id', paymentId)
+        .select('receipt_snapshot')
+        .single();
+
+      if (error) {
+        if (isMissingColumnError(error, 'receipt_snapshot')) {
+          throw new Error('Payment receipt storage is not installed. Run database/payment_receipt_snapshot_migration.sql in Supabase.');
+        }
+        throw new Error(error.message);
+      }
+
+      return normalizePaymentReceiptSnapshot(data?.receipt_snapshot) || snapshot;
     }
   },
 

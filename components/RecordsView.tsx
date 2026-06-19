@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Loader2, Download, CalendarDays, Stethoscope, ShieldCheck, Search, RotateCw, WalletCards } from 'lucide-react';
+import { Loader2, Download, CalendarDays, Stethoscope, ShieldCheck, Search, RotateCw, WalletCards, Printer } from 'lucide-react';
 import { Appointment, ClinicalRecord, PaymentRecord } from '../types';
 import { formatCurrency, Currency } from '../utils/currency';
 import { exportClinicalRecordsToPDF } from '../utils/pdfExport';
@@ -22,9 +22,10 @@ interface RecordsViewProps {
   currency: Currency;
   isDoctor?: boolean;
   initialFilter?: AuditFilter;
+  onOpenPaymentReceipt?: (payment: PaymentRecord) => void;
 }
 
-const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], payments = [], loading, onRefresh, onDeleteAll, currency, isDoctor = false, initialFilter = 'all' }) => {
+const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], payments = [], loading, onRefresh, onDeleteAll, currency, isDoctor = false, initialFilter = 'all', onOpenPaymentReceipt }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -350,7 +351,21 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], p
                           <td className="px-6 py-4 text-sm text-slate-700">{payment.createdByUserName || 'Unknown'}</td>
                           <td className="px-6 py-4 text-right text-sm">{renderPatientBalance(payment.remainingBalance)}</td>
                           <td className="px-6 py-4 text-right text-sm font-black text-violet-700">{formatCurrency(payment.amount, currency)}</td>
-                          <td className="px-6 py-4 text-sm font-bold text-slate-800">{formatPaymentMethod(payment.paymentMethod)}</td>
+                          <td className="px-6 py-4 text-sm font-bold text-slate-800">
+                            <div className="flex items-center justify-between gap-3">
+                              <span>{formatPaymentMethod(payment.paymentMethod)}</span>
+                              {onOpenPaymentReceipt ? (
+                                <button
+                                  type="button"
+                                  onClick={() => onOpenPaymentReceipt(payment)}
+                                  className="inline-flex items-center gap-1 rounded-lg border border-violet-200 bg-violet-50 px-2 py-1 text-xs font-bold text-violet-700 hover:bg-violet-100"
+                                >
+                                  <Printer size={12} />
+                                  Receipt
+                                </button>
+                              ) : null}
+                            </div>
+                          </td>
                           <td className="px-6 py-4 text-right text-sm text-slate-400">-</td>
                         </tr>
                       );
@@ -451,6 +466,16 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], p
                       <p className="mt-3 text-xs text-slate-500">
                         {payment.receiptNumber || 'No receipt number'} · Recorded by {payment.createdByUserName || 'Unknown'}
                       </p>
+                      {onOpenPaymentReceipt ? (
+                        <button
+                          type="button"
+                          onClick={() => onOpenPaymentReceipt(payment)}
+                          className="mt-3 inline-flex items-center gap-1 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-bold text-violet-700 hover:bg-violet-100"
+                        >
+                          <Printer size={13} />
+                          Reprint Receipt
+                        </button>
+                      ) : null}
                     </div>
                   );
                 }

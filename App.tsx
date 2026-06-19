@@ -53,7 +53,8 @@ import {
   ReceiptSize,
   PatientType,
   AppointmentType,
-  TreatmentChargeLine
+  TreatmentChargeLine,
+  PaymentReceiptSnapshot
 } from './types';
 import {
   DEFAULT_PATIENT_TYPE_NAME,
@@ -77,6 +78,7 @@ import { buildAppointmentClinicalFocusNotes, parseAppointmentClinicalFocus } fro
 import { dataCache } from './utils/dataCache';
 import { formatTeethArray, parseTeethInput } from './utils/toothNumbering';
 import { formatPaymentMethod, isSelectablePaymentMethod, normalizePaymentMethod, PAYMENT_METHOD_OPTIONS } from './utils/paymentMethods';
+import { buildLegacyPaymentReceiptSnapshot, buildPaymentReceiptSnapshot, normalizePaymentReceiptSnapshot } from './utils/paymentReceipt';
 
 // Lazy Load Views
 const DashboardView = React.lazy(() => import('./components/DashboardView'));
@@ -218,7 +220,9 @@ const readPaymentRecords = (): PaymentRecord[] => {
       .filter((item: any) => item && typeof item.amount === 'number' && typeof item.date === 'string')
       .map((item: any) => ({
         ...item,
-        paymentMethod: normalizePaymentMethod(item.paymentMethod || item.payment_method)
+        paymentMethod: normalizePaymentMethod(item.paymentMethod || item.payment_method),
+        balanceBefore: Number(item.balanceBefore ?? item.balance_before ?? (Number(item.remainingBalance || item.remaining_balance || 0) + Number(item.amount || 0))),
+        receiptSnapshot: normalizePaymentReceiptSnapshot(item.receiptSnapshot || item.receipt_snapshot)
       }));
   } catch (error) {
     console.warn('Failed to parse local payment records:', error);
@@ -419,6 +423,8 @@ const App: React.FC = () => {
   const [userFormError, setUserFormError] = useState<string | null>(null);
   const [lastPaymentAmount, setLastPaymentAmount] = useState<number>(0);
   const [lastPaymentRecord, setLastPaymentRecord] = useState<PaymentRecord | null>(null);
+  const [receiptViewerPatient, setReceiptViewerPatient] = useState<Patient | null>(null);
+  const [activePaymentReceiptSnapshot, setActivePaymentReceiptSnapshot] = useState<PaymentReceiptSnapshot | null>(null);
   const [selectedTreatmentsForReceipt, setSelectedTreatmentsForReceipt] = useState<ClinicalRecord[]>([]);
   const [selectedMedicineSalesForReceipt, setSelectedMedicineSalesForReceipt] = useState<MedicineSale[]>([]);
   const [currency, setCurrency] = useState<'USD' | 'MMK'>('USD');
@@ -1747,7 +1753,48 @@ const App: React.FC = () => {
     }
   };
 
-  const handleOpenPaymentModal = (treatments: ClinicalRecord[]) => {
+  const closeReceiptViewer = () => {
+    setShowReceipt(false);
+    setReceiptViewerPatient(null);
+    setActivePaymentReceiptSnapshot(null);
+    setSelectedTreatmentsForReceipt([]);
+    setSelectedMedicineSalesForReceipt([]);
+  };
+
+  const resolvePaymentReceiptSnapshotForViewer = (payment: PaymentRecord): PaymentReceiptSnapshot => (
+    payment.receiptSnapshot || buildLegacyPaymentReceiptSnapshot(payment, {
+      appName,
+      receiptHeaderTitle,
+      receiptInfo,
+      currency
+    })
+  );
+
+  const handleOpenStoredPaymentReceipt = (payment: PaymentRecord) => {
+    const snapshot = resolvePaymentReceiptSnapshotForViewer(payment);
+    const matchedPatient = patients.find((patient) => patient.id === payment.patientId);
+
+    setReceiptViewerPatient(
+      matchedPatient || {
+        id: payment.patientId,
+        patient_unique_id: snapshot.patient.patientUniqueId || '',
+        location_id: payment.location_id || '',
+        name: snapshot.patient.name || payment.patient_name || 'Unknown Patient',
+        email: snapshot.patient.email || '',
+        phone: snapshot.patient.phone || '',
+        balance: payment.remainingBalance,
+        loyalty_points: 0
+      }
+    );
+    setActivePaymentReceiptSnapshot(snapshot);
+    setSelectedTreatmentsForReceipt([]);
+    setSelectedMedicineSalesForReceipt([]);
+    setLastPaymentAmount(payment.amount);
+    setLastPaymentRecord(payment);
+    setShowReceipt(true);
+  };
+
+  const handleOpenPaymentModal = (_treatments: ClinicalRecord[]) => {
     const currentBatchForPatient = latestTreatmentBatch.filter(
       (record) => record.patient_id === selectedPatient?.id
     );
@@ -1761,7 +1808,7 @@ const App: React.FC = () => {
     );
 
     setPaymentDraft({
-      treatments,
+      treatments: currentBatchForPatient,
       amountTendered: Math.max(0, Number(selectedPatient?.balance || 0)),
       previousBalance,
       currentTreatmentTotal,
@@ -2708,19 +2755,53 @@ const App: React.FC = () => {
     }
     try {
       const session = auth.getSession();
+      const paymentDate = toLocalISODate(new Date());
       const res = await api.finance.processPayment({
         patientId: selectedPatient.id,
         amount: paymentAmountTendered,
         paymentMethod: paymentDraft.paymentMethod,
         treatmentIds: selectedPaymentTreatments.map((treatment) => treatment.id),
-        paymentDate: toLocalISODate(new Date()),
+        paymentDate,
         createdByUserId: session?.userId || null,
         createdByUserName: currentUser || session?.username || null
       });
-      const paymentRecord: PaymentRecord = {
+      let paymentRecord: PaymentRecord = {
         ...res.payment,
         patient_name: res.payment.patient_name || selectedPatient.name
       };
+      const paymentSnapshot = buildPaymentReceiptSnapshot({
+        patient: selectedPatient,
+        amountPaid: paymentRecord.amount,
+        paymentMethod: paymentRecord.paymentMethod || paymentDraft.paymentMethod,
+        paymentDate: paymentRecord.date || paymentDate,
+        receiptNumber: paymentRecord.receiptNumber || '',
+        balanceBefore: paymentRecord.balanceBefore ?? paymentOriginalAmount,
+        balanceAfter: paymentRecord.remainingBalance,
+        paymentStatus: paymentRecord.type,
+        createdAt: paymentRecord.createdAt || null,
+        recordedByUserName: paymentRecord.createdByUserName || currentUser || session?.username || null,
+        clinic: {
+          appName,
+          receiptHeaderTitle,
+          receiptInfo,
+          currency
+        }
+      });
+
+      try {
+        const savedSnapshot = await api.finance.saveReceiptSnapshot(paymentRecord.id, paymentSnapshot);
+        paymentRecord = {
+          ...paymentRecord,
+          receiptSnapshot: savedSnapshot
+        };
+      } catch (snapshotError) {
+        console.warn('Failed to persist payment receipt snapshot:', snapshotError);
+        paymentRecord = {
+          ...paymentRecord,
+          receiptSnapshot: paymentSnapshot
+        };
+      }
+
       const shouldIncludeInCurrentScope =
         dashboardLocationId === ALL_BRANCHES_VALUE || dashboardLocationId === selectedPatient.location_id;
       if (shouldIncludeInCurrentScope) {
@@ -2733,7 +2814,9 @@ const App: React.FC = () => {
       setLatestTreatmentBatch([]);
       setLastPaymentAmount(paymentAmountTendered);
       setLastPaymentRecord(paymentRecord);
-      setSelectedTreatmentsForReceipt(selectedPaymentTreatments);
+      setReceiptViewerPatient(null);
+      setActivePaymentReceiptSnapshot(null);
+      setSelectedTreatmentsForReceipt([]);
       setSelectedMedicineSalesForReceipt([]);
       setShowPaymentModal(false);
       setPaymentDraft({ treatments: [], amountTendered: 0, previousBalance: 0, currentTreatmentTotal: 0, paymentMethod: 'UNKNOWN' });
@@ -2746,13 +2829,31 @@ const App: React.FC = () => {
   };
 
   const handleReceiptPromptYes = () => {
+    if (!lastPaymentRecord) return;
+    const snapshot = resolvePaymentReceiptSnapshotForViewer(lastPaymentRecord);
     setShowReceiptPrompt(false);
-    // Show treatment selection first, then receipt.
-    setShowTreatmentSelection(true);
+    setReceiptViewerPatient(
+      selectedPatient || {
+        id: lastPaymentRecord.patientId,
+        patient_unique_id: snapshot.patient.patientUniqueId || '',
+        location_id: lastPaymentRecord.location_id || '',
+        name: snapshot.patient.name || lastPaymentRecord.patient_name || 'Unknown Patient',
+        email: snapshot.patient.email || '',
+        phone: snapshot.patient.phone || '',
+        balance: lastPaymentRecord.remainingBalance,
+        loyalty_points: 0
+      }
+    );
+    setActivePaymentReceiptSnapshot(snapshot);
+    setSelectedTreatmentsForReceipt([]);
+    setSelectedMedicineSalesForReceipt([]);
+    setShowReceipt(true);
   };
 
   const handleReceiptPromptNo = () => {
     setShowReceiptPrompt(false);
+    setReceiptViewerPatient(null);
+    setActivePaymentReceiptSnapshot(null);
     setSelectedTreatmentsForReceipt([]);
     setSelectedMedicineSalesForReceipt([]);
     setLastPaymentAmount(0);
@@ -2762,6 +2863,8 @@ const App: React.FC = () => {
   const handleGenerateReceipt = () => {
     setLastPaymentAmount(0);
     setLastPaymentRecord(null);
+    setReceiptViewerPatient(null);
+    setActivePaymentReceiptSnapshot(null);
     setSelectedTreatmentsForReceipt([]);
     setSelectedMedicineSalesForReceipt([]);
     setShowTreatmentSelection(true);
@@ -2815,6 +2918,8 @@ const App: React.FC = () => {
 
     setSelectedTreatmentsForReceipt(selectedTreatments);
     setSelectedMedicineSalesForReceipt(matchedMedicineSales);
+    setReceiptViewerPatient(selectedPatient);
+    setActivePaymentReceiptSnapshot(null);
     setShowTreatmentSelection(false);
     setShowReceipt(true);
   };
@@ -3322,7 +3427,7 @@ const App: React.FC = () => {
             />}
             {currentView === 'doctors' && canAccessView('doctors') && <DoctorsView doctors={doctors} loading={loading} onAdd={() => {setEditingDoctor(null); setNewDoctorData({ name: '', email: '', phone: '', specialization: '', password: '', commission_percentage: 0, schedules: [], location_id: currentLocationId || '' }); resetDoctorCommissionEditor(); setShowDoctorModal(true)}} onEdit={(doc) => {setEditingDoctor(doc); setNewDoctorData({ ...doc, password: '' }); resetDoctorCommissionEditor(); setShowDoctorModal(true)}} onDelete={handleDeleteDoctor} />}
             {currentView === 'treatments' && canAccessView('treatments') && <TreatmentConfigView treatmentTypes={treatmentTypes} currency={currency} onAdd={() => {setEditingTreatmentType(null); setNewTreatmentTypeData({ name: '', cost: 0, category: '' }); setShowTreatmentTypeModal(true)}} onEdit={(t) => {setEditingTreatmentType(t); setNewTreatmentTypeData(t); setShowTreatmentTypeModal(true)}} onDelete={(id) => { const treatment = treatmentTypes.find(t => t.id === id); if (treatment) { setServiceToDelete({ id: treatment.id, name: treatment.name }); setDeleteServiceConfirmOpen(true); } }} />}
-            {currentView === 'records' && canAccessView('records') && <RecordsView records={globalRecords} appointments={appointments} payments={paymentRecords} loading={loading} onRefresh={fetchGlobalRecords} onDeleteAll={isDoctor ? () => alert('Doctor accounts cannot delete patient records.') : handleDeleteAllRecords} currency={currency} isDoctor={isDoctor} initialFilter={recordsInitialFilter} />}
+            {currentView === 'records' && canAccessView('records') && <RecordsView records={globalRecords} appointments={appointments} payments={paymentRecords} loading={loading} onRefresh={fetchGlobalRecords} onDeleteAll={isDoctor ? () => alert('Doctor accounts cannot delete patient records.') : handleDeleteAllRecords} currency={currency} isDoctor={isDoctor} initialFilter={recordsInitialFilter} onOpenPaymentReceipt={handleOpenStoredPaymentReceipt} />}
             {currentView === 'inventory' && canAccessView('inventory') && <InventoryView medicines={medicines} topSelling={topSellingMedicines} loading={loading} currency={currency} onAdd={() => {setEditingMedicine(null); setNewMedicineData({ name: '', description: '', unit: 'pack', item_type: 'Medicine', price: 0, stock: 0, min_stock: 0, quantity_step: 1, category: '' }); setShowMedicineModal(true)}} onEdit={(med) => {setEditingMedicine(med); setNewMedicineData(med); setShowMedicineModal(true)}} onDelete={handleDeleteMedicine} />}
             {currentView === 'expenses' && canAccessView('expenses') && (
               <ExpensesView
@@ -4696,26 +4801,23 @@ const App: React.FC = () => {
         </Suspense>
       )}
 
-      {showReceipt && selectedPatient && (
+      {showReceipt && receiptViewerPatient && (
         <Suspense fallback={<div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center"><Loader2 className="animate-spin text-white w-10 h-10" /></div>}>
           <Receipt
-            patient={selectedPatient}
-            treatments={selectedTreatmentsForReceipt.length > 0 ? selectedTreatmentsForReceipt : treatmentHistory}
+            patient={receiptViewerPatient}
+            treatments={selectedTreatmentsForReceipt}
             medicines={selectedMedicineSalesForReceipt}
             paymentAmount={lastPaymentAmount}
             paymentMethod={lastPaymentRecord?.paymentMethod}
             receiptNumber={lastPaymentRecord?.receiptNumber}
+            paymentReceiptSnapshot={activePaymentReceiptSnapshot}
             treatmentTypes={treatmentTypes}
             currency={currency}
             appName={appName}
             receiptHeaderTitle={receiptHeaderTitle}
             receiptInfo={receiptInfo}
             receiptSize={receiptSize}
-            onClose={() => {
-              setShowReceipt(false);
-              setSelectedTreatmentsForReceipt([]);
-              setSelectedMedicineSalesForReceipt([]);
-            }}
+            onClose={closeReceiptViewer}
           />
         </Suspense>
       )}
@@ -4763,9 +4865,9 @@ const App: React.FC = () => {
                     </svg>
                   </div>
                   <div className="flex-1">
-                    <p className="text-base font-bold text-gray-900 mb-1">Generate Receipt</p>
+                    <p className="text-base font-bold text-gray-900 mb-1">Open Payment Receipt</p>
                     <p className="text-sm text-gray-600 leading-relaxed">
-                      Would you like to print or save a receipt for this payment? This is the final step to complete the transaction.
+                      Would you like to print or save the payment receipt now? This uses the saved payment snapshot, so future reprints stay accurate.
                     </p>
                   </div>
                 </div>
@@ -4790,7 +4892,7 @@ const App: React.FC = () => {
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                Generate Receipt
+                Open Receipt
               </button>
             </div>
           </div>
