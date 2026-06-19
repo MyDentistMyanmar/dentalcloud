@@ -352,7 +352,7 @@ interface ToastProps {
   duration?: number;
 }
 
-export const Toast: React.FC<ToastProps> = ({ message, type = 'success', onClose, duration = 3000 }) => {
+export const Toast: React.FC<ToastProps> = ({ message, type = 'success', onClose, duration = 4500 }) => {
   useEffect(() => {
     const timer = setTimeout(() => {
       onClose();
@@ -360,30 +360,53 @@ export const Toast: React.FC<ToastProps> = ({ message, type = 'success', onClose
     return () => clearTimeout(timer);
   }, [duration, onClose]);
 
+  if (typeof document === 'undefined') return null;
+
   const icons = {
-    success: <CheckCircle className="w-5 h-5 text-green-500" />,
-    error: <AlertCircle className="w-5 h-5 text-red-500" />,
-    info: <Info className="w-5 h-5 text-blue-500" />
+    success: <CheckCircle className="h-7 w-7 text-green-600" />,
+    error: <AlertCircle className="h-7 w-7 text-red-600" />,
+    info: <Info className="h-7 w-7 text-blue-600" />
+  };
+
+  const labels = {
+    success: 'Success',
+    error: 'Attention',
+    info: 'Notice'
   };
 
   const bgColors = {
-    success: 'bg-green-50 border-green-200',
-    error: 'bg-red-50 border-red-200',
-    info: 'bg-blue-50 border-blue-200'
+    success: 'border-green-200 bg-green-50/95',
+    error: 'border-red-200 bg-red-50/95',
+    info: 'border-blue-200 bg-blue-50/95'
   };
 
-  return (
-    <div className={`fixed top-4 right-4 z-[100] animate-fade-in-up`}>
-      <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border shadow-lg ${bgColors[type]}`}>
-        {icons[type]}
-        <p className="text-sm font-medium text-gray-800">{message}</p>
-        <button 
-          onClick={onClose}
-          className="ml-2 text-gray-400 hover:text-gray-600 transition-colors"
-        >
-          <X className="w-4 h-4" />
-        </button>
+  const iconShellColors = {
+    success: 'bg-green-100',
+    error: 'bg-red-100',
+    info: 'bg-blue-100'
+  };
+
+  return createPortal(
+    <div className="pointer-events-none fixed inset-0 z-[9999] flex items-center justify-center px-4 py-6">
+      <div className={`pointer-events-auto w-full max-w-2xl rounded-[2rem] border-2 shadow-2xl backdrop-blur-md animate-scale-up ${bgColors[type]}`}>
+        <div className="flex items-start gap-4 px-5 py-5 sm:px-7 sm:py-6">
+          <div className={`flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl ${iconShellColors[type]}`}>
+            {icons[type]}
+          </div>
+          <div className="min-w-0 flex-1 pr-2">
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-gray-500">{labels[type]}</p>
+            <p className="mt-1 text-base font-semibold leading-7 text-gray-900 sm:text-lg">{message}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="mt-1 rounded-full p-2 text-gray-400 transition-colors hover:bg-white/70 hover:text-gray-700"
+            aria-label="Close notification"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
