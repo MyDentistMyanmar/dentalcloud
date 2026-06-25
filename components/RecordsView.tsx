@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Loader2, Download, CalendarDays, Stethoscope, ShieldCheck, Search, RotateCw, WalletCards, Printer } from 'lucide-react';
-import { Appointment, ClinicalRecord, PaymentRecord } from '../types';
+import { Appointment, AppointmentRescheduleLog, ClinicalRecord, PaymentRecord } from '../types';
 import { formatCurrency, Currency } from '../utils/currency';
 import { exportClinicalRecordsToPDF } from '../utils/pdfExport';
 import { exportClinicalRecordsToExcel } from '../utils/excelExport';
@@ -15,6 +15,7 @@ import { formatPaymentMethod } from '../utils/paymentMethods';
 interface RecordsViewProps {
   records: ClinicalRecord[];
   appointments?: Appointment[];
+  rescheduleLogs?: AppointmentRescheduleLog[];
   payments?: PaymentRecord[];
   loading: boolean;
   onRefresh: () => void;
@@ -25,7 +26,7 @@ interface RecordsViewProps {
   onOpenPaymentReceipt?: (payment: PaymentRecord) => void;
 }
 
-const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], payments = [], loading, onRefresh, onDeleteAll, currency, isDoctor = false, initialFilter = 'all', onOpenPaymentReceipt }) => {
+const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], rescheduleLogs = [], payments = [], loading, onRefresh, onDeleteAll, currency, isDoctor = false, initialFilter = 'all', onOpenPaymentReceipt }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -98,8 +99,8 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], p
   };
 
   const auditRows = useMemo<AuditExportRow[]>(
-    () => buildAuditLogRows(records, appointments, !isDoctor, payments),
-    [records, appointments, payments, isDoctor]
+    () => buildAuditLogRows(records, appointments, !isDoctor, payments, rescheduleLogs),
+    [records, appointments, payments, rescheduleLogs, isDoctor]
   );
 
   const filteredRows = useMemo(() => {
@@ -116,17 +117,19 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], p
     return filteredRows.reduce(
       (summary, row) => {
         if (row.kind === 'appointment') summary.appointments += 1;
+        if (row.kind === 'reschedule') summary.appointments += 1;
+        if (row.kind === 'reschedule') summary.reschedules += 1;
         if (row.kind === 'treatment') summary.treatments += 1;
         if (row.kind === 'payment') summary.payments += 1;
         return summary;
       },
-      { appointments: 0, treatments: 0, payments: 0 }
+      { appointments: 0, reschedules: 0, treatments: 0, payments: 0 }
     );
   }, [filteredRows]);
 
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [records, appointments, payments, auditFilter, dateFrom, dateTo]);
+  }, [records, appointments, rescheduleLogs, payments, auditFilter, dateFrom, dateTo]);
 
   React.useEffect(() => {
     setAuditFilter(initialFilter);
@@ -137,6 +140,7 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], p
     exportClinicalRecordsToPDF(records, currency, {
       appointments,
       payments,
+      rescheduleLogs,
       includeAppointments: !isDoctor,
       ...buildRecordsViewFilterOptions({ isDoctor, auditFilter, dateFrom, dateTo, searchTerm })
     });
@@ -146,6 +150,7 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], p
     await exportClinicalRecordsToExcel(records, currency, {
       appointments,
       payments,
+      rescheduleLogs,
       includeAppointments: !isDoctor,
       ...buildRecordsViewFilterOptions({ isDoctor, auditFilter, dateFrom, dateTo, searchTerm })
     });
@@ -188,6 +193,7 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], p
               <div className="mt-3 grid grid-cols-1 gap-2 text-xs min-[380px]:grid-cols-3 sm:flex sm:flex-wrap">
                 <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-center font-semibold text-slate-700 sm:text-left">{filteredRows.length} visible</span>
                 <span className="rounded-full border theme-accent-border theme-accent-soft-bg px-3 py-1 text-center font-semibold theme-accent-text sm:text-left">{filteredSummary.appointments} appts</span>
+                <span className="rounded-full border border-amber-100 bg-amber-50 px-3 py-1 text-center font-semibold text-amber-700 sm:text-left">{filteredSummary.reschedules} reschedules</span>
                 <span className="rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-center font-semibold text-emerald-700 sm:text-left">{filteredSummary.treatments} treatments</span>
                 <span className="rounded-full border border-violet-100 bg-violet-50 px-3 py-1 text-center font-semibold text-violet-700 sm:text-left">{filteredSummary.payments} payments</span>
               </div>
@@ -232,10 +238,11 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], p
                 {isTodayRange ? 'Today' : 'Custom'}
               </button>
             </div>
-                <div className="grid w-full grid-cols-4 rounded-xl border border-slate-200 bg-slate-50 p-1 sm:inline-grid sm:w-auto">
+                <div className="grid w-full grid-cols-5 rounded-xl border border-slate-200 bg-slate-50 p-1 sm:inline-grid sm:w-auto">
               {[
                 { value: 'all', label: 'All' },
                 { value: 'appointments', label: 'Appointments' },
+                { value: 'reschedules', label: 'Reschedule' },
                 { value: 'treatments', label: 'Treatments' },
                 { value: 'payments', label: 'Payments' }
               ].map((item) => (
@@ -371,6 +378,36 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], p
                       );
                     }
 
+                    if (row.kind === 'reschedule') {
+                      const rescheduleLog = row.rescheduleLog;
+                      return (
+                        <tr key={`reschedule-${rescheduleLog.id}`} className="transition-colors hover:bg-amber-50/40">
+                          <td className="px-6 py-4 text-sm font-semibold text-amber-700">
+                            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-100 bg-amber-50 px-2.5 py-1 text-xs font-bold">
+                              <CalendarDays size={14} /> Rescheduled Appointment
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-slate-500 whitespace-nowrap">{formatCreatedAt(rescheduleLog.created_at)}</td>
+                          <td className="px-6 py-4 font-bold text-slate-900">{rescheduleLog.patient_name || 'Unknown'}</td>
+                          <td className="px-6 py-4 text-sm text-slate-700">{rescheduleLog.doctor_name ? `Dr. ${rescheduleLog.doctor_name}` : '-'}</td>
+                          <td className="px-6 py-4 text-sm text-slate-700 max-w-md">
+                            <div className="space-y-1">
+                              <p className="font-semibold text-amber-800">Original Date: {rescheduleLog.original_date} -&gt; New Date: {rescheduleLog.new_date}</p>
+                              <p>Reason: {rescheduleLog.reason || '-'}</p>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-slate-700">
+                            <span className="font-semibold">{rescheduleLog.admin_name || 'Unknown'}</span>
+                            <span className="block text-xs text-slate-500">{formatCreatedAt(rescheduleLog.created_at)}</span>
+                          </td>
+                          <td className="px-6 py-4 text-right text-sm text-slate-400">-</td>
+                          <td className="px-6 py-4 text-right text-sm font-black text-slate-900">-</td>
+                          <td className="px-6 py-4 text-sm text-slate-400">-</td>
+                          <td className="px-6 py-4 text-right text-sm text-slate-400">-</td>
+                        </tr>
+                      );
+                    }
+
                     if (row.kind === 'appointment') {
                       const appointment = row.appointment;
                       return (
@@ -476,6 +513,35 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], p
                           Reprint Receipt
                         </button>
                       ) : null}
+                    </div>
+                  );
+                }
+
+                if (row.kind === 'reschedule') {
+                  const rescheduleLog = row.rescheduleLog;
+                  return (
+                    <div key={`reschedule-${rescheduleLog.id}`} className="my-2 min-w-0 rounded-2xl border border-amber-100 bg-white p-3 shadow-sm min-[380px]:p-4">
+                      <div className="flex min-w-0 items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[11px] font-black uppercase tracking-wider text-amber-600">Rescheduled Appointment</p>
+                          <p className="mt-0.5 break-words text-sm font-bold text-slate-900">{rescheduleLog.patient_name || 'Unknown'}</p>
+                          <p className="mt-1 text-xs text-slate-500">{formatCreatedAt(rescheduleLog.created_at)}</p>
+                        </div>
+                        <p className="shrink-0 rounded-full bg-amber-50 px-2 py-1 text-[11px] font-black text-amber-700">Rescheduled</p>
+                      </div>
+                      <div className="mt-3 rounded-xl bg-amber-50 p-3">
+                        <p className="text-[11px] font-semibold uppercase text-amber-700">Changes</p>
+                        <p className="mt-1 break-words text-sm text-slate-800">
+                          Original Date: {rescheduleLog.original_date} -&gt; New Date: {rescheduleLog.new_date}
+                        </p>
+                        <p className="mt-2 break-words text-xs text-slate-600">Reason: {rescheduleLog.reason || '-'}</p>
+                        <p className="mt-2 text-xs text-slate-500">{rescheduleLog.doctor_name ? `Dr. ${rescheduleLog.doctor_name}` : 'No clinician assigned'}</p>
+                      </div>
+                      <div className="mt-3 rounded-xl bg-slate-50 p-3">
+                        <p className="text-[11px] font-semibold text-slate-500 uppercase mb-1">Admin</p>
+                        <p className="break-words text-sm text-slate-800">{rescheduleLog.admin_name || 'Unknown'}</p>
+                        <p className="text-xs text-slate-500 mt-1">{formatCreatedAt(rescheduleLog.created_at)}</p>
+                      </div>
                     </div>
                   );
                 }

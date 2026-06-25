@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Appointment, ClinicalRecord, PaymentRecord } from '../types';
+import type { Appointment, AppointmentRescheduleLog, ClinicalRecord, PaymentRecord } from '../types';
 import { buildAuditLogExportTableRows, buildAuditLogRows, filterAuditLogRowsForExport, formatAuditPatientBalance } from './auditLogExport';
 
 describe('audit log export rows', () => {
@@ -87,6 +87,22 @@ describe('audit log export rows', () => {
       receiptNumber: 'REC-20260530-000001',
       createdAt: '2026-05-30T10:00:00Z',
       createdByUserName: 'Reception One'
+    }
+  ];
+
+  const rescheduleLogs: AppointmentRescheduleLog[] = [
+    {
+      id: 'res-1',
+      appointment_id: 'apt-1',
+      location_id: 'loc-1',
+      patient_id: 'pat-3',
+      patient_name: 'Su Su',
+      doctor_name: 'Hnin',
+      original_date: '2026-05-30',
+      new_date: '2026-06-02',
+      reason: 'Patient did not arrive',
+      admin_name: 'Reception One',
+      created_at: '2026-05-30T11:00:00Z'
     }
   ];
 
@@ -186,6 +202,38 @@ describe('audit log export rows', () => {
       paymentMethod: 'KPay'
     });
     expect(tableRow.activity).toContain('REC-20260530-000001');
+  });
+
+  it('includes rescheduled appointments only in the reschedule filter and export rows', () => {
+    const rows = buildAuditLogRows(records, appointments, true, payments, rescheduleLogs);
+    const appointmentRows = filterAuditLogRowsForExport(rows, {
+      auditFilter: 'appointments',
+      dateFrom: '2026-05-30',
+      dateTo: '2026-05-30',
+      searchTerm: 'did not arrive'
+    });
+
+    expect(appointmentRows).toHaveLength(0);
+
+    const rescheduleRows = filterAuditLogRowsForExport(rows, {
+      auditFilter: 'reschedules',
+      dateFrom: '2026-05-30',
+      dateTo: '2026-05-30',
+      searchTerm: 'did not arrive'
+    });
+
+    expect(rescheduleRows).toHaveLength(1);
+    expect(rescheduleRows[0].kind).toBe('reschedule');
+
+    const [tableRow] = buildAuditLogExportTableRows(rescheduleRows, 'MMK');
+    expect(tableRow).toMatchObject({
+      type: 'Rescheduled Appointment',
+      patient: 'Su Su',
+      clinician: 'Dr. Hnin',
+      paymentMethod: '-'
+    });
+    expect(tableRow.activity).toContain('Original Date: 2026-05-30 -> New Date: 2026-06-02');
+    expect(tableRow.activity).toContain('Reason: Patient did not arrive');
   });
 
   it('searches primary teeth using the staff-facing labels', () => {

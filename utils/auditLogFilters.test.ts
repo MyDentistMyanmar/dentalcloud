@@ -22,21 +22,26 @@ describe('audit log date filtering', () => {
       kind: 'appointment' as const,
       sortDate: '2026-06-01T10:30:00',
       appointment: { date: '2026-06-01', created_at: '2026-05-30T03:00:00Z' }
+    },
+    {
+      kind: 'reschedule' as const,
+      sortDate: '2026-05-30T11:00:00Z',
+      rescheduleLog: { created_at: '2026-05-30T11:00:00Z' }
     }
   ];
 
   it('keeps only rows for a single selected day', () => {
     const filtered = filterAuditRowsByDateRange(rows, '2026-05-30', '2026-05-30');
 
-    expect(filtered).toHaveLength(2);
-    expect(filtered.map((row) => row.kind)).toEqual(['treatment', 'appointment']);
+    expect(filtered).toHaveLength(3);
+    expect(filtered.map((row) => row.kind)).toEqual(['treatment', 'appointment', 'reschedule']);
   });
 
   it('keeps rows inside an inclusive day-to-day range', () => {
     const filtered = filterAuditRowsByDateRange(rows, '2026-05-30', '2026-06-01');
 
-    expect(filtered).toHaveLength(3);
-    expect(filtered.map(getAuditLogEventDate)).toEqual(['2026-05-30', '2026-05-30', '2026-06-01']);
+    expect(filtered).toHaveLength(4);
+    expect(filtered.map(getAuditLogEventDate)).toEqual(['2026-05-30', '2026-05-30', '2026-06-01', '2026-05-30']);
   });
 
   it('uses appointment created_at date when appointment date is missing', () => {
@@ -45,6 +50,18 @@ describe('audit log date filtering', () => {
         kind: 'appointment' as const,
         sortDate: '2026-05-30T03:00:00Z',
         appointment: { date: '', created_at: '2026-05-30T03:00:00Z' }
+      }
+    ], '2026-05-30', '2026-05-30');
+
+    expect(filtered).toHaveLength(1);
+  });
+
+  it('uses reschedule created_at date for filtering', () => {
+    const filtered = filterAuditRowsByDateRange([
+      {
+        kind: 'reschedule' as const,
+        sortDate: '2026-05-30T03:00:00Z',
+        rescheduleLog: { created_at: '2026-05-30T03:00:00Z' }
       }
     ], '2026-05-30', '2026-05-30');
 

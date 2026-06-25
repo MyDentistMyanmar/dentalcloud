@@ -31,6 +31,7 @@ import { SearchableSelect } from './components/SearchableSelect';
 import { 
   Patient, 
   Appointment, 
+  AppointmentRescheduleLog,
   TreatmentType, 
   ClinicalRecord,
   PaymentRecord,
@@ -359,6 +360,7 @@ const App: React.FC = () => {
   const [patientTypes, setPatientTypes] = useState<PatientType[]>(buildDefaultPatientTypeRecords());
   const [appointmentTypes, setAppointmentTypes] = useState<AppointmentType[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [appointmentRescheduleLogs, setAppointmentRescheduleLogs] = useState<AppointmentRescheduleLog[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [treatmentHistory, setTreatmentHistory] = useState<ClinicalRecord[]>([]); 
   const [globalRecords, setGlobalRecords] = useState<ClinicalRecord[]>([]); 
@@ -627,6 +629,8 @@ const App: React.FC = () => {
   const [convertingLeadAppointment, setConvertingLeadAppointment] = useState<Appointment | null>(null);
   const [appointmentClinicalFocus, setAppointmentClinicalFocus] = useState('');
   const [appointmentGeneralNotes, setAppointmentGeneralNotes] = useState('');
+  const [appointmentRescheduleReasonPreset, setAppointmentRescheduleReasonPreset] = useState('Patient did not arrive');
+  const [appointmentRescheduleReasonCustom, setAppointmentRescheduleReasonCustom] = useState('');
   const [doctorSearchQuery, setDoctorSearchQuery] = useState('');
   const [showDoctorDropdown, setShowDoctorDropdown] = useState(false);
   const doctorDropdownRef = useRef<HTMLDivElement>(null);
@@ -1151,6 +1155,7 @@ const App: React.FC = () => {
     // Reset all data state
     setPatients([]);
     setAppointments([]);
+    setAppointmentRescheduleLogs([]);
     setDoctors([]);
     setTreatmentHistory([]);
     setGlobalRecords([]);
@@ -1356,14 +1361,15 @@ const App: React.FC = () => {
       // Only fetch data if we have a valid location
       if (locId) {
         // � Critical data: what the main views need immediately �
-        const [patData, aptData, docData, typeData, recordsData, medData, paymentsData] = await Promise.all([
+        const [patData, aptData, docData, typeData, recordsData, medData, paymentsData, rescheduleLogsData] = await Promise.all([
           api.patients.getAll(locId),
           api.appointments.getAll(locId),
           api.doctors.getAll(locId),
           api.treatments.getTypes(locId),
           api.treatments.getAllRecords(locId),
           api.medicines.getAll(locId),
-          api.finance.getPayments(locId)
+          api.finance.getPayments(locId),
+          api.appointmentRescheduleLogs.getAll(locId)
         ]);
         if (requestId !== initialDataFetchRequestRef.current) return;
 
@@ -1392,6 +1398,7 @@ const App: React.FC = () => {
         setTreatmentTypes(typeData);
         setGlobalRecords(doctorRecords);
         setPaymentRecords(isDoctorSession ? [] : mergeLegacyPaymentRecords(paymentsData, locId));
+        setAppointmentRescheduleLogs(isDoctorSession ? [] : rescheduleLogsData);
         setMedicines(medData);
         setLoyaltyRules([]);
         setExpenses([]);
@@ -1718,17 +1725,20 @@ const App: React.FC = () => {
   const fetchGlobalRecords = async () => {
     setLoading(true);
     try {
-      const [records, payments] = await Promise.all([
+      const [records, payments, rescheduleLogs] = await Promise.all([
         api.treatments.getAllRecords(currentLocationId || undefined),
-        api.finance.getPayments(currentLocationId || undefined)
+        api.finance.getPayments(currentLocationId || undefined),
+        api.appointmentRescheduleLogs.getAll(currentLocationId || undefined)
       ]);
       const session = auth.getSession();
       if (session?.role === 'doctor' && session.doctor_id) {
         setGlobalRecords(records.filter((record) => record.doctor_id === session.doctor_id));
         setPaymentRecords([]);
+        setAppointmentRescheduleLogs([]);
       } else {
         setGlobalRecords(records);
         setPaymentRecords(mergeLegacyPaymentRecords(payments, currentLocationId || undefined));
+        setAppointmentRescheduleLogs(rescheduleLogs);
       }
     } catch (err: any) {
       console.error(err);
@@ -1957,6 +1967,8 @@ const App: React.FC = () => {
     setShowDoctorDropdown(false);
     setAppointmentClinicalFocus('');
     setAppointmentGeneralNotes('');
+    setAppointmentRescheduleReasonPreset('Patient did not arrive');
+    setAppointmentRescheduleReasonCustom('');
   };
 
   const createEmptyDoctorCommissionRow = (): DoctorTreatmentCommission => ({
@@ -2036,7 +2048,25 @@ const App: React.FC = () => {
         notes: compiledNotes
       };
       if (editingAppointment) {
-        await api.appointments.update(editingAppointment.id, payload);
+        const isDateRescheduled = editingAppointment.date !== payload.date;
+        const rescheduleReason = getAppointmentRescheduleReason();
+        if (isDateRescheduled && !rescheduleReason) {
+          throw new Error('Please provide a reschedule reason before updating the appointment date.');
+        }
+
+        await api.appointments.update(
+          editingAppointment.id,
+          payload,
+          isDateRescheduled
+            ? {
+                rescheduleAudit: {
+                  reason: rescheduleReason,
+                  adminUserId: auth.getSession()?.userId || null,
+                  adminName: currentUser || auth.getSession()?.username || null
+                }
+              }
+            : undefined
+        );
       } else {
         payload.created_by_user_id = auth.getSession()?.userId || null;
         payload.created_by_user_name = currentUser || auth.getSession()?.username || null;
@@ -2109,6 +2139,14 @@ const App: React.FC = () => {
 
   const handleDateChange = (date: string) => {
     setNewAppointmentData({ ...newAppointmentData, date });
+  };
+
+  const getAppointmentRescheduleReason = () => {
+    const preset = appointmentRescheduleReasonPreset.trim();
+    if (preset === 'Other') {
+      return appointmentRescheduleReasonCustom.trim();
+    }
+    return preset;
   };
 
   const handleCreateDoctor = async (e: React.FormEvent) => {
@@ -3544,6 +3582,8 @@ const App: React.FC = () => {
                   setShowDoctorDropdown(false);
                   setAppointmentClinicalFocus(clinicalPlan.clinicalFocus || apt.type || '');
                   setAppointmentGeneralNotes(clinicalPlan.notes || '');
+                  setAppointmentRescheduleReasonPreset('Patient did not arrive');
+                  setAppointmentRescheduleReasonCustom('');
                   setShowAppointmentModal(true);
                 }} 
                 onDeleteAppointment={handleDeleteAppointment} 
@@ -3575,7 +3615,7 @@ const App: React.FC = () => {
             />}
             {currentView === 'doctors' && canAccessView('doctors') && <DoctorsView doctors={doctors} loading={loading} onAdd={() => {setEditingDoctor(null); setNewDoctorData({ name: '', email: '', phone: '', specialization: '', password: '', commission_percentage: 0, schedules: [], location_id: currentLocationId || '' }); resetDoctorCommissionEditor(); setShowDoctorModal(true)}} onEdit={(doc) => {setEditingDoctor(doc); setNewDoctorData({ ...doc, password: '' }); resetDoctorCommissionEditor(); setShowDoctorModal(true)}} onDelete={handleDeleteDoctor} />}
             {currentView === 'treatments' && canAccessView('treatments') && <TreatmentConfigView treatmentTypes={treatmentTypes} currency={currency} onAdd={() => {setEditingTreatmentType(null); setNewTreatmentTypeData({ name: '', cost: 0, category: '' }); setShowTreatmentTypeModal(true)}} onEdit={(t) => {setEditingTreatmentType(t); setNewTreatmentTypeData(t); setShowTreatmentTypeModal(true)}} onDelete={(id) => { const treatment = treatmentTypes.find(t => t.id === id); if (treatment) { setServiceToDelete({ id: treatment.id, name: treatment.name }); setDeleteServiceConfirmOpen(true); } }} />}
-            {currentView === 'records' && canAccessView('records') && <RecordsView records={globalRecords} appointments={appointments} payments={paymentRecords} loading={loading} onRefresh={fetchGlobalRecords} onDeleteAll={isDoctor ? () => alert('Doctor accounts cannot delete patient records.') : handleDeleteAllRecords} currency={currency} isDoctor={isDoctor} initialFilter={recordsInitialFilter} onOpenPaymentReceipt={handleOpenStoredPaymentReceipt} />}
+            {currentView === 'records' && canAccessView('records') && <RecordsView records={globalRecords} appointments={appointments} rescheduleLogs={appointmentRescheduleLogs} payments={paymentRecords} loading={loading} onRefresh={fetchGlobalRecords} onDeleteAll={isDoctor ? () => alert('Doctor accounts cannot delete patient records.') : handleDeleteAllRecords} currency={currency} isDoctor={isDoctor} initialFilter={recordsInitialFilter} onOpenPaymentReceipt={handleOpenStoredPaymentReceipt} />}
             {currentView === 'inventory' && canAccessView('inventory') && <InventoryView medicines={medicines} topSelling={topSellingMedicines} loading={loading} currency={currency} onAdd={() => {setEditingMedicine(null); setNewMedicineData({ name: '', description: '', unit: 'pack', item_type: 'Medicine', price: 0, stock: 0, min_stock: 0, quantity_step: 1, category: '' }); setShowMedicineModal(true)}} onEdit={(med) => {setEditingMedicine(med); setNewMedicineData(med); setShowMedicineModal(true)}} onDelete={handleDeleteMedicine} />}
             {currentView === 'expenses' && canAccessView('expenses') && (
               <ExpensesView
@@ -4121,6 +4161,43 @@ const App: React.FC = () => {
                 />
               </div>
             </div>
+            {editingAppointment && editingAppointment.date !== newAppointmentData.date && (
+              <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-amber-700">Reschedule Reason</p>
+                  <p className="mt-1 text-xs text-amber-700">
+                    This date change will be recorded in the Audit Log as a rescheduled appointment.
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">Reason</label>
+                  <select
+                    className="w-full border-gray-200 border rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 bg-white"
+                    value={appointmentRescheduleReasonPreset}
+                    onChange={(e: any) => setAppointmentRescheduleReasonPreset(e.target.value)}
+                  >
+                    <option value="Patient did not arrive">Patient did not arrive</option>
+                    <option value="Patient requested a different date">Patient requested a different date</option>
+                    <option value="Doctor unavailable">Doctor unavailable</option>
+                    <option value="Clinic scheduling conflict">Clinic scheduling conflict</option>
+                    <option value="Treatment not ready">Treatment not ready</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                {appointmentRescheduleReasonPreset === 'Other' && (
+                  <div>
+                    <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">Custom Reason</label>
+                    <textarea
+                      className="w-full border-gray-200 border rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white"
+                      rows={2}
+                      value={appointmentRescheduleReasonCustom}
+                      onChange={(e: any) => setAppointmentRescheduleReasonCustom(e.target.value)}
+                      placeholder="Type the reschedule reason"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">Type</label>

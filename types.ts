@@ -251,6 +251,21 @@ export interface Appointment {
   clinical_fee_applied_at?: string | null;
 }
 
+export interface AppointmentRescheduleLog {
+  id: string;
+  appointment_id: string;
+  location_id: string;
+  patient_id?: string | null;
+  patient_name: string;
+  doctor_name?: string | null;
+  original_date: string;
+  new_date: string;
+  reason: string;
+  admin_user_id?: string | null;
+  admin_name?: string | null;
+  created_at?: string;
+}
+
 export interface ClinicalFeeSettings {
   enabled: boolean;
   newPatientAmount: number;

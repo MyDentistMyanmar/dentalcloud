@@ -20,12 +20,12 @@ describe('records view filter options', () => {
   it('does not apply hidden date or search filters to doctor patient records', () => {
     expect(buildRecordsViewFilterOptions({
       isDoctor: true,
-      auditFilter: 'all',
+      auditFilter: 'reschedules',
       dateFrom: '2026-05-30',
       dateTo: '2026-05-30',
       searchTerm: 'alice'
     })).toEqual({
-      auditFilter: 'all',
+      auditFilter: 'reschedules',
       dateFrom: undefined,
       dateTo: undefined,
       searchTerm: undefined

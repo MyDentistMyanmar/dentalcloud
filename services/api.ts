@@ -1,6 +1,6 @@
 import { supabase, supabaseUrl, supabaseAnonKey } from './supabase';
 import * as tus from 'tus-js-client';
-import { Patient, Appointment, ClinicalRecord, TreatmentType, PatientFile, Doctor, DoctorSchedule, DoctorScheduleInput, User, Medicine, MedicineSale, Location, LoyaltyRule, LoyaltyTransaction, Expense, Message, Conversation, Recall, ScheduledTask, S3Settings, PatientType, AppointmentType, DoctorTreatmentCommission, PaymentMethod, PaymentRecord, PaymentReceiptSnapshot, ReceiptPreferences, ClinicalFeeSettings, ClinicalFeeCompletionResult } from '../types';
+import { Patient, Appointment, AppointmentRescheduleLog, ClinicalRecord, TreatmentType, PatientFile, Doctor, DoctorSchedule, DoctorScheduleInput, User, Medicine, MedicineSale, Location, LoyaltyRule, LoyaltyTransaction, Expense, Message, Conversation, Recall, ScheduledTask, S3Settings, PatientType, AppointmentType, DoctorTreatmentCommission, PaymentMethod, PaymentRecord, PaymentReceiptSnapshot, ReceiptPreferences, ClinicalFeeSettings, ClinicalFeeCompletionResult } from '../types';
 import { DEFAULT_PATIENT_TYPE_NAME, DEFAULT_PATIENT_TYPE_OPTIONS, DOCTOR_DASHBOARD_TABS, FULL_ACCESS_TAB_PERMISSIONS } from '../constants';
 import { resolveAllowedTabs } from '../utils/permissions';
 import { EmailSettings, loadEmailSettingsAsync, saveEmailSettingsAsync } from '../utils/emailSettings';
@@ -146,6 +146,21 @@ const getAppointmentDoctorDisplayName = (appointmentRow: any, clinicalDoctorName
 
   return getTrimmedDoctorName(appointmentRow?.doctors?.name);
 };
+
+const mapAppointmentRescheduleLog = (row: any): AppointmentRescheduleLog => ({
+  id: row.id,
+  appointment_id: row.appointment_id,
+  location_id: row.location_id,
+  patient_id: row.patient_id ?? null,
+  patient_name: row.patient_name || 'Unknown',
+  doctor_name: row.doctor_name ?? null,
+  original_date: row.original_date,
+  new_date: row.new_date,
+  reason: row.reason || '',
+  admin_user_id: row.admin_user_id ?? null,
+  admin_name: row.admin_name ?? null,
+  created_at: row.created_at
+});
 
 export const normalizeMyanmarPhoneForLookup = (value?: string | null): string | null => {
   const digits = (value || '').replace(/\D/g, '');
@@ -1631,10 +1646,20 @@ export const api = {
         console.warn('Recall automation sync failed on appointment status update:', syncErr);
       }
     },
-    update: async (id: string, data: Partial<Appointment>): Promise<Appointment> => {
+    update: async (
+      id: string,
+      data: Partial<Appointment>,
+      options?: {
+        rescheduleAudit?: {
+          reason: string;
+          adminUserId?: string | null;
+          adminName?: string | null;
+        };
+      }
+    ): Promise<Appointment> => {
       const { data: existingAppointment, error: existingAppointmentError } = await supabase
         .from('appointments')
-        .select('status, clinical_fee_status, patient_id, location_id, date, time')
+        .select('status, clinical_fee_status, patient_id, location_id, date, time, guest_name, patients!appointments_patient_id_fkey(name), doctors(name)')
         .eq('id', id)
         .single();
 
@@ -1686,6 +1711,41 @@ export const api = {
         .single();
 
       if (error) throw new Error(error.message);
+
+      const originalDate = existingAppointment.date;
+      const newDate = data.date ?? result.date;
+      const shouldCreateRescheduleAudit = Boolean(
+        options?.rescheduleAudit &&
+        originalDate &&
+        newDate &&
+        originalDate !== newDate
+      );
+
+      if (shouldCreateRescheduleAudit) {
+        const patientName =
+          result.patients?.name ||
+          existingAppointment.patients?.name ||
+          result.guest_name ||
+          existingAppointment.guest_name ||
+          'Unknown';
+        const doctorName =
+          getTrimmedDoctorName(result.doctors?.name) ||
+          getTrimmedDoctorName(existingAppointment.doctors?.name) ||
+          null;
+
+        await api.appointmentRescheduleLogs.create({
+          appointment_id: result.id,
+          location_id: result.location_id,
+          patient_id: result.patient_id || existingAppointment.patient_id || null,
+          patient_name: patientName,
+          doctor_name: doctorName,
+          original_date: originalDate,
+          new_date: newDate,
+          reason: options?.rescheduleAudit?.reason || '',
+          admin_user_id: options?.rescheduleAudit?.adminUserId || null,
+          admin_name: options?.rescheduleAudit?.adminName || null
+        });
+      }
 
       if (shouldComplete) {
         await completeAppointmentWithClinicalFee(id);
@@ -1765,6 +1825,71 @@ export const api = {
       
       // Return count of deleted records
       return data?.length || 0;
+    }
+  },
+
+  appointmentRescheduleLogs: {
+    getAll: async (locationId?: string): Promise<AppointmentRescheduleLog[]> => {
+      try {
+        let query = supabase
+          .from('appointment_reschedule_logs')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (locationId) {
+          query = query.eq('location_id', locationId);
+        }
+
+        const { data, error } = await query;
+        if (error) {
+          if (isMissingRelationError(error, 'appointment_reschedule_logs')) {
+            return [];
+          }
+          throw error;
+        }
+
+        return (data || []).map(mapAppointmentRescheduleLog);
+      } catch (error: any) {
+        if (isMissingRelationError(error, 'appointment_reschedule_logs')) {
+          return [];
+        }
+        console.warn('Failed to load appointment reschedule logs:', error?.message || error);
+        return [];
+      }
+    },
+
+    create: async (data: Omit<AppointmentRescheduleLog, 'id' | 'created_at'>): Promise<AppointmentRescheduleLog> => {
+      const payload = {
+        appointment_id: data.appointment_id,
+        location_id: data.location_id,
+        patient_id: data.patient_id || null,
+        patient_name: (data.patient_name || '').trim() || 'Unknown',
+        doctor_name: data.doctor_name?.trim() || null,
+        original_date: data.original_date,
+        new_date: data.new_date,
+        reason: (data.reason || '').trim(),
+        admin_user_id: data.admin_user_id || null,
+        admin_name: data.admin_name?.trim() || null
+      };
+
+      if (!payload.reason) {
+        throw new Error('Reschedule reason is required.');
+      }
+
+      const { data: result, error } = await supabase
+        .from('appointment_reschedule_logs')
+        .insert(payload)
+        .select('*')
+        .single();
+
+      if (error) {
+        if (isMissingRelationError(error, 'appointment_reschedule_logs')) {
+          throw new Error('Appointment reschedule audit is not installed. Run database/appointment_reschedule_audit_migration.sql in Supabase.');
+        }
+        throw new Error(error.message);
+      }
+
+      return mapAppointmentRescheduleLog(result);
     }
   },
 

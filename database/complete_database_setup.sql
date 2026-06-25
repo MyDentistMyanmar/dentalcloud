@@ -227,7 +227,8 @@ CREATE TABLE doctor_schedules (
 
 -- Link optional doctor login accounts to users (one doctor -> one staff login)
 ALTER TABLE users
-ADD COLUMN doctor_id UUID UNIQUE REFERENCES doctors(id) ON DELETE SET NULL;
+ADD COLUMN doctor_id UUID
+  CONSTRAINT users_doctor_id_fkey REFERENCES doctors(id) ON DELETE SET NULL;
 
 -- Treatment Types (Services/Procedures)
 CREATE TABLE treatment_types (
@@ -236,6 +237,7 @@ CREATE TABLE treatment_types (
   name VARCHAR(255) NOT NULL,
   cost DECIMAL(12,2) NOT NULL,
   category VARCHAR(50),
+  color VARCHAR(50) DEFAULT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -290,7 +292,9 @@ CREATE TABLE payments (
 CREATE TABLE doctor_treatment_commissions (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   doctor_id UUID NOT NULL REFERENCES doctors(id) ON DELETE CASCADE,
-  treatment_id UUID NOT NULL REFERENCES treatment_types(id) ON DELETE CASCADE,
+  treatment_id UUID NOT NULL
+    CONSTRAINT doctor_treatment_commissions_treatment_id_fkey
+    REFERENCES treatment_types(id) ON DELETE CASCADE,
   commission_rate DECIMAL(5,2) NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -341,6 +345,28 @@ CREATE TABLE appointments (
 ALTER TABLE appointments
 ADD CONSTRAINT appointments_converted_patient_id_fkey
 FOREIGN KEY (converted_patient_id) REFERENCES patients(id) ON DELETE SET NULL;
+
+ALTER TABLE appointments
+DROP CONSTRAINT IF EXISTS appointments_patient_id_fkey;
+
+ALTER TABLE appointments
+ADD CONSTRAINT appointments_patient_id_fkey
+FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE SET NULL;
+
+CREATE TABLE appointment_reschedule_logs (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  appointment_id UUID NOT NULL REFERENCES appointments(id) ON DELETE CASCADE,
+  location_id UUID NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+  patient_id UUID REFERENCES patients(id) ON DELETE SET NULL,
+  patient_name VARCHAR(255) NOT NULL,
+  doctor_name VARCHAR(255),
+  original_date DATE NOT NULL,
+  new_date DATE NOT NULL,
+  reason TEXT NOT NULL,
+  admin_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  admin_name VARCHAR(255),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
 -- Medicines (Inventory)
 CREATE TABLE medicines (
@@ -412,14 +438,16 @@ CREATE TABLE expenses (
 CREATE TABLE conversations (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   patient_id UUID REFERENCES patients(id) ON DELETE CASCADE,
-  doctor_user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  doctor_user_id UUID
+    CONSTRAINT conversations_doctor_user_id_fkey
+    REFERENCES users(id) ON DELETE CASCADE,
   admin_id UUID REFERENCES users(id) ON DELETE CASCADE,
   location_id UUID REFERENCES locations(id) ON DELETE SET NULL,
   last_message TEXT,
   last_message_time TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  CHECK (
+  CONSTRAINT conversations_participant_check CHECK (
     (patient_id IS NOT NULL AND doctor_user_id IS NULL) OR
     (patient_id IS NULL AND doctor_user_id IS NOT NULL)
   )
@@ -534,16 +562,43 @@ SET
   clinical_fee_amount = COALESCE(clinical_fee_amount, 0);
 
 ALTER TABLE app_settings
+  DROP CONSTRAINT IF EXISTS app_settings_clinical_fee_amount_check,
   ALTER COLUMN clinical_fee_new_patient_amount SET DEFAULT 0,
   ALTER COLUMN clinical_fee_returning_patient_amount SET DEFAULT 0,
   DROP CONSTRAINT IF EXISTS app_settings_clinical_fee_new_patient_amount_check,
   DROP CONSTRAINT IF EXISTS app_settings_clinical_fee_returning_patient_amount_check;
 
 ALTER TABLE app_settings
+  ADD CONSTRAINT app_settings_clinical_fee_amount_check
+    CHECK (clinical_fee_amount >= 0),
   ADD CONSTRAINT app_settings_clinical_fee_new_patient_amount_check
     CHECK (clinical_fee_new_patient_amount >= 0),
   ADD CONSTRAINT app_settings_clinical_fee_returning_patient_amount_check
     CHECK (clinical_fee_returning_patient_amount >= 0);
+
+ALTER TABLE medicines
+  DROP CONSTRAINT IF EXISTS medicines_item_type_check,
+  DROP CONSTRAINT IF EXISTS medicines_quantity_step_check;
+
+ALTER TABLE medicines
+  ADD CONSTRAINT medicines_item_type_check
+    CHECK (item_type IN ('Medicine', 'Retail', 'Supply', 'Other')),
+  ADD CONSTRAINT medicines_quantity_step_check
+    CHECK (quantity_step > 0);
+
+ALTER TABLE medicine_sales
+  DROP CONSTRAINT IF EXISTS medicine_sales_quantity_check;
+
+ALTER TABLE medicine_sales
+  ADD CONSTRAINT medicine_sales_quantity_check
+    CHECK (quantity > 0);
+
+ALTER TABLE payments
+  DROP CONSTRAINT IF EXISTS payments_balance_before_check;
+
+ALTER TABLE payments
+  ADD CONSTRAINT payments_balance_before_check
+    CHECK (balance_before >= 0);
 
 ALTER TABLE appointments
   DROP CONSTRAINT IF EXISTS appointments_clinical_fee_status_check,
@@ -608,6 +663,9 @@ END $$;
 -- ============================================================================
 CREATE INDEX idx_users_username ON users(username);
 CREATE INDEX idx_users_location ON users(location_id);
+CREATE UNIQUE INDEX users_doctor_id_unique_idx
+ON users(doctor_id)
+WHERE doctor_id IS NOT NULL;
 CREATE INDEX idx_patient_types_sort_order ON patient_types(sort_order);
 CREATE INDEX idx_patient_types_active ON patient_types(is_active);
 CREATE INDEX idx_appointment_types_sort_order ON appointment_types(sort_order);
@@ -649,6 +707,9 @@ CREATE INDEX idx_appointments_created_by_user_id ON appointments(created_by_user
 CREATE INDEX idx_appointments_created_at ON appointments(created_at);
 CREATE INDEX idx_appointments_guest_phone ON appointments(guest_phone);
 CREATE INDEX idx_appointments_guest_source ON appointments(guest_source);
+CREATE INDEX idx_appointment_reschedule_logs_location_id ON appointment_reschedule_logs(location_id);
+CREATE INDEX idx_appointment_reschedule_logs_appointment_id ON appointment_reschedule_logs(appointment_id);
+CREATE INDEX idx_appointment_reschedule_logs_created_at ON appointment_reschedule_logs(created_at DESC);
 CREATE INDEX idx_medicines_location ON medicines(location_id);
 CREATE INDEX idx_medicines_name ON medicines(name);
 CREATE INDEX idx_medicines_category ON medicines(category);
@@ -959,6 +1020,14 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+CREATE OR REPLACE FUNCTION set_doctor_treatment_commissions_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
 CREATE OR REPLACE FUNCTION get_applicable_commission_rate(
   p_doctor_id UUID,
   p_treatment_id UUID
@@ -1005,9 +1074,9 @@ CREATE TRIGGER update_expenses_updated_at
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Trigger: Update doctor_treatment_commissions.updated_at
-CREATE TRIGGER update_doctor_treatment_commissions_updated_at
+CREATE TRIGGER trg_doctor_treatment_commissions_updated_at
     BEFORE UPDATE ON doctor_treatment_commissions
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    FOR EACH ROW EXECUTE FUNCTION set_doctor_treatment_commissions_updated_at();
 
 -- Trigger: Update patient_auth.updated_at
 CREATE TRIGGER update_patient_auth_updated_at 
@@ -1182,45 +1251,33 @@ BEGIN
   END IF;
 END $$;
 
--- Default admin user
-INSERT INTO users (username, password, role, location_id)
-SELECT 'admin', 'admin123', 'admin', id FROM locations WHERE id = 'fffda6dc-a75d-450c-bc96-94602c5d1194';
+-- Default admin user bootstrap
+-- Change this password immediately after first production login if needed.
+INSERT INTO users (username, password, role, location_id, allowed_tabs)
+SELECT
+  'admin',
+  'admin123',
+  'admin',
+  id,
+  '[
+    "dashboard",
+    "patients",
+    "appointments",
+    "doctors",
+    "finance",
+    "treatments",
+    "records",
+    "inventory",
+    "messaging",
+    "recalls",
+    "ai-assistant",
+    "users",
+    "settings"
+  ]'::jsonb
+FROM locations
+WHERE id = 'fffda6dc-a75d-450c-bc96-94602c5d1194';
 
--- Default staff user
-INSERT INTO users (username, password, role, location_id)
-SELECT 'staff', 'staff123', 'normal', id FROM locations WHERE id = 'fffda6dc-a75d-450c-bc96-94602c5d1194';
-
--- Sample patient (patient_unique_id auto-generated by trigger)
-INSERT INTO patients (location_id, name, email, phone)
-VALUES ('fffda6dc-a75d-450c-bc96-94602c5d1194', 'John Doe', 'john@example.com', '09-111111111');
-
--- Sample doctor
-INSERT INTO doctors (location_id, name, email, phone, specialization)
-VALUES ('fffda6dc-a75d-450c-bc96-94602c5d1194', 'Dr. Smith', 'drsmith@clinic.com', '09-222222222', 'General Dentistry');
-
--- Sample treatment types
-INSERT INTO treatment_types (location_id, name, cost, category)
-VALUES 
-  ('fffda6dc-a75d-450c-bc96-94602c5d1194', 'Scaling', 30000, 'Preventative'),
-  ('fffda6dc-a75d-450c-bc96-94602c5d1194', 'Filling', 50000, 'Restorative'),
-  ('fffda6dc-a75d-450c-bc96-94602c5d1194', 'Extraction', 40000, 'Surgery'),
-  ('fffda6dc-a75d-450c-bc96-94602c5d1194', 'Root Canal', 150000, 'Endodontics'),
-  ('fffda6dc-a75d-450c-bc96-94602c5d1194', 'Crown', 200000, 'Prosthodontics');
-
--- Sample medicines
-INSERT INTO medicines (location_id, name, description, unit, price, stock, min_stock, category)
-VALUES 
-  ('fffda6dc-a75d-450c-bc96-94602c5d1194', 'Paracetamol', 'Pain reliever for mild to moderate pain', 'tablet', 500, 100, 20, 'Pain Management'),
-  ('fffda6dc-a75d-450c-bc96-94602c5d1194', 'Amoxicillin', 'Antibiotic for bacterial infections', 'capsule', 1000, 50, 10, 'Antibiotics'),
-  ('fffda6dc-a75d-450c-bc96-94602c5d1194', 'Ibuprofen', 'Anti-inflammatory pain reliever', 'tablet', 800, 75, 15, 'Pain Management'),
-  ('fffda6dc-a75d-450c-bc96-94602c5d1194', 'Chlorhexidine', 'Antiseptic mouthwash', 'bottle', 5000, 30, 5, 'Antiseptics');
-
--- Sample loyalty rules
-INSERT INTO loyalty_rules (location_id, name, event_type, points_per_unit, min_amount, active)
-VALUES 
-  ('fffda6dc-a75d-450c-bc96-94602c5d1194', 'Treatment Points', 'TREATMENT', 0.001, 10000, true),
-  ('fffda6dc-a75d-450c-bc96-94602c5d1194', 'Purchase Points', 'PURCHASE', 0.002, 5000, true),
-  ('fffda6dc-a75d-450c-bc96-94602c5d1194', 'Default Redemption', 'REDEEM', 1, 500, true);
+-- No demo/sample operational data is inserted in this setup file.
 
 -- ============================================================================
 -- 7. ROW LEVEL SECURITY (RLS) POLICIES
@@ -1254,6 +1311,7 @@ DECLARE
     'treatments',
     'payments',
     'appointments',
+    'appointment_reschedule_logs',
     'medicines',
     'medicine_sales',
     'loyalty_rules',

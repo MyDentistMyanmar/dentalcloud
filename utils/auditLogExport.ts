@@ -1,14 +1,15 @@
-import type { Appointment, ClinicalRecord, PaymentRecord } from '../types';
+import type { Appointment, AppointmentRescheduleLog, ClinicalRecord, PaymentRecord } from '../types';
 import { Currency, formatCurrency } from './currency';
 import { filterAuditRowsByDateRange } from './auditLogFilters';
 import { formatTeethArray, formatTeethWithPosition } from './toothNumbering';
 import { formatPaymentMethod } from './paymentMethods';
 
-export type AuditFilter = 'all' | 'appointments' | 'treatments' | 'payments';
+export type AuditFilter = 'all' | 'appointments' | 'reschedules' | 'treatments' | 'payments';
 
 export type AuditExportRow =
   | { kind: 'treatment'; sortDate: string; record: ClinicalRecord & { _groupedRecords?: ClinicalRecord[] } }
   | { kind: 'appointment'; sortDate: string; appointment: Appointment }
+  | { kind: 'reschedule'; sortDate: string; rescheduleLog: AppointmentRescheduleLog }
   | { kind: 'payment'; sortDate: string; payment: PaymentRecord };
 
 export interface AuditLogFilterOptions {
@@ -19,7 +20,7 @@ export interface AuditLogFilterOptions {
 }
 
 export interface AuditLogExportTableRow {
-  type: 'Appointment' | 'Treatment' | 'Payment';
+  type: 'Appointment' | 'Rescheduled Appointment' | 'Treatment' | 'Payment';
   dateTime: string;
   patient: string;
   clinician: string;
@@ -55,7 +56,8 @@ export const buildAuditLogRows = (
   records: ClinicalRecord[],
   appointments: Appointment[] = [],
   includeAppointments = true,
-  payments: PaymentRecord[] = []
+  payments: PaymentRecord[] = [],
+  rescheduleLogs: AppointmentRescheduleLog[] = []
 ): AuditExportRow[] => {
   const groupedTreatmentMap = new Map<string, ClinicalRecord[]>();
 
@@ -108,12 +110,21 @@ export const buildAuditLogRows = (
       }))
     : [];
 
-  return [...treatmentRows, ...appointmentRows, ...paymentRows].sort((a, b) => b.sortDate.localeCompare(a.sortDate));
+  const rescheduleRows: AuditExportRow[] = includeAppointments
+    ? rescheduleLogs.map((rescheduleLog) => ({
+        kind: 'reschedule',
+        sortDate: rescheduleLog.created_at || `${rescheduleLog.new_date || ''}T23:59:57`,
+        rescheduleLog
+      }))
+    : [];
+
+  return [...treatmentRows, ...appointmentRows, ...paymentRows, ...rescheduleRows].sort((a, b) => b.sortDate.localeCompare(a.sortDate));
 };
 
 export const filterAuditLogRowsForExport = <T extends AuditExportRow>(rows: T[], options: AuditLogFilterOptions): T[] => {
   const scopedRows = rows.filter((row) => {
     if (options.auditFilter === 'appointments') return row.kind === 'appointment';
+    if (options.auditFilter === 'reschedules') return row.kind === 'reschedule';
     if (options.auditFilter === 'treatments') return row.kind === 'treatment';
     if (options.auditFilter === 'payments') return row.kind === 'payment';
     return true;
@@ -150,6 +161,19 @@ export const filterAuditLogRowsForExport = <T extends AuditExportRow>(rows: T[],
       );
     }
 
+    if (row.kind === 'reschedule') {
+      const rescheduleLog = row.rescheduleLog;
+      return (
+        (rescheduleLog.patient_name || '').toLowerCase().includes(term) ||
+        (rescheduleLog.doctor_name || '').toLowerCase().includes(term) ||
+        (rescheduleLog.admin_name || '').toLowerCase().includes(term) ||
+        (rescheduleLog.reason || '').toLowerCase().includes(term) ||
+        (rescheduleLog.original_date || '').toLowerCase().includes(term) ||
+        (rescheduleLog.new_date || '').toLowerCase().includes(term) ||
+        (rescheduleLog.created_at || '').toLowerCase().includes(term)
+      );
+    }
+
     const appointment = row.appointment;
     return (
       (appointment.patient_name || '').toLowerCase().includes(term) ||
@@ -176,6 +200,22 @@ export const buildAuditLogExportTableRows = (rows: AuditExportRow[], currency: C
         activity: `Appointment made for ${appointment.date || '-'} at ${appointment.time || '-'} (${appointment.type || 'Checkup'}, ${appointment.status || '-'})`,
         recordedBy: `${appointment.created_by_user_name || 'Unknown'}\n${formatAuditCreatedAt(appointment.created_at)}`,
         patientBalance: formatAuditPatientBalance(appointment.patient_balance, currency),
+        amount: null,
+        doctorEarned: null,
+        paymentMethod: '-'
+      };
+    }
+
+    if (row.kind === 'reschedule') {
+      const rescheduleLog = row.rescheduleLog;
+      return {
+        type: 'Rescheduled Appointment',
+        dateTime: formatAuditCreatedAt(rescheduleLog.created_at),
+        patient: rescheduleLog.patient_name || 'Unknown',
+        clinician: rescheduleLog.doctor_name ? `Dr. ${rescheduleLog.doctor_name}` : '-',
+        activity: `Original Date: ${rescheduleLog.original_date || '-'} -> New Date: ${rescheduleLog.new_date || '-'}\nReason: ${rescheduleLog.reason || '-'}`,
+        recordedBy: `${rescheduleLog.admin_name || 'Unknown'}\n${formatAuditCreatedAt(rescheduleLog.created_at)}`,
+        patientBalance: '-',
         amount: null,
         doctorEarned: null,
         paymentMethod: '-'

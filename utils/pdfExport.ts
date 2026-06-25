@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Patient, Appointment, ClinicalRecord, Doctor, Medicine, Expense, PaymentRecord } from '../types';
+import { Patient, Appointment, AppointmentRescheduleLog, ClinicalRecord, Doctor, Medicine, Expense, PaymentRecord } from '../types';
 import { formatCurrency, Currency } from './currency';
 import { formatTeethWithPosition } from './toothNumbering';
 import { buildAuditLogExportTableRows, buildAuditLogRows, filterAuditLogRowsForExport, type AuditLogFilterOptions } from './auditLogExport';
@@ -198,12 +198,13 @@ export const exportAppointmentsToPDF = (appointments: Appointment[]) => {
 interface ClinicalRecordsExportOptions extends AuditLogFilterOptions {
   appointments?: Appointment[];
   payments?: PaymentRecord[];
+  rescheduleLogs?: AppointmentRescheduleLog[];
   includeAppointments?: boolean;
 }
 
 export const exportClinicalRecordsToPDF = (records: ClinicalRecord[], currency: Currency, options: ClinicalRecordsExportOptions = {}) => {
   const exportRows = filterAuditLogRowsForExport(
-    buildAuditLogRows(records, options.appointments || [], options.includeAppointments ?? false, options.payments || []),
+    buildAuditLogRows(records, options.appointments || [], options.includeAppointments ?? false, options.payments || [], options.rescheduleLogs || []),
     options
   );
   const tableRows = buildAuditLogExportTableRows(exportRows, currency);
