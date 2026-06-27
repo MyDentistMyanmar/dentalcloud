@@ -511,6 +511,48 @@ const App: React.FC = () => {
     api.messages.toggleMessagingFeature(enabled);
   };
 
+  const handleUpdateLoyaltyRule = async (id: string, data: Partial<LoyaltyRule>) => {
+    try {
+      const updated = await api.loyalty.updateRule(id, data);
+      setLoyaltyRules(prev => prev.map(rule => rule.id === id ? updated : rule));
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleCreateLoyaltyRule = async (data: Partial<LoyaltyRule>) => {
+    try {
+      const created = await api.loyalty.createRule({ ...data, location_id: currentLocationId || data.location_id });
+      setLoyaltyRules(prev => [...prev, created]);
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleDeleteLoyaltyRule = async (id: string) => {
+    if (!window.confirm('Delete this loyalty rule?')) return;
+    try {
+      await api.loyalty.deleteRule(id);
+      setLoyaltyRules(prev => prev.filter(rule => rule.id !== id));
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleResetAllLoyaltyPoints = async () => {
+    if (!window.confirm('Reset all patient loyalty points? This cannot be undone.')) return;
+    try {
+      await api.loyalty.resetAllPoints(currentLocationId || undefined);
+      setPatients(prev => prev.map(patient => ({ ...patient, loyalty_points: 0 })));
+      setDashboardPatients(prev => prev.map(patient => ({ ...patient, loyalty_points: 0 })));
+      setAssistantPatients(prev => prev.map(patient => ({ ...patient, loyalty_points: 0 })));
+      if (selectedPatient) setSelectedPatient({ ...selectedPatient, loyalty_points: 0 });
+      setLoyaltyTransactions([]);
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
   const handleSaveClinicalFeeSettings = async (
     enabled: boolean,
     newPatientAmount: number,
