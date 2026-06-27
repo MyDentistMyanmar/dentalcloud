@@ -2391,6 +2391,7 @@ AUDIT LOG AND APPOINTMENT REPORTING:
 - Audit Log PDF/Excel columns include Type, Date / Time, Patient, Clinician, Clinical Activity, Recorded By, Patient Balance, Amount, and Doctor Earned. Appointment rows show creator/timestamp and no amount; treatment rows show Clinical record, patient balance, treatment totals, and doctor earnings.
 - Admin Audit Log exports are saved as clinic-audit-logs-YYYY-MM-DD.pdf/xlsx. Doctor patient-record exports remain treatment-only clinical-records exports without appointment audit rows.
 - Dashboard includes Appointment Makers, ranking users by appointments created in the selected date range.
+- Dashboard has a Recalls & Cancels tab. Upcoming Recalls are future Scheduled registered-patient appointments created from Clinical Focus next appointment. Late / No-show are past Scheduled appointments, including unregistered leads. Cancelled Appointments lists all Cancelled appointments with patient or guest names.
 - When Agent Mode creates an appointment, it is recorded under the currently logged-in staff user.
 - Older appointments created before the audit migration may show creator as Unknown.
 - Marketing lead appointments do not have patient charts yet. They keep guest_name, guest_phone, guest_source, and guest_notes for follow-up and can be converted into a registered patient later.

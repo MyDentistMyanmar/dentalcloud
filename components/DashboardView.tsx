@@ -4,6 +4,7 @@ import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, CartesianGrid, XAx
 import { Patient, Appointment, ClinicalRecord, Location, Expense, PaymentRecord } from '../types';
 import { formatCurrency, Currency } from '../utils/currency';
 import { formatPaymentMethod } from '../utils/paymentMethods';
+import { appointmentPatientName, buildRecallsCancelsLists } from '../utils/recallsCancels';
 
 interface DashboardViewProps {
   patients: Patient[];
@@ -47,6 +48,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({
   }, [allBranchesValue, locations, selectedLocationId]);
 
   const todayKey = useMemo(() => toLocalISODate(new Date()), []);
+  const [activeTab, setActiveTab] = useState<'overview' | 'recalls-cancels'>('overview');
   const [dateFrom, setDateFrom] = useState(todayKey);
   const [dateTo, setDateTo] = useState(todayKey);
 
@@ -121,6 +123,37 @@ const DashboardView: React.FC<DashboardViewProps> = ({
   const filteredPaymentRecords = useMemo(
     () => paymentRecords.filter(record => isWithinRange(record.date)),
     [paymentRecords, dateFrom, dateTo]
+  );
+
+  const recallsCancelsLists = useMemo(() => buildRecallsCancelsLists(appointments, todayKey), [appointments, todayKey]);
+
+  const renderAppointmentRows = (rows: Appointment[], emptyMessage: string) => rows.length === 0 ? (
+    <p className="text-sm italic text-gray-400">{emptyMessage}</p>
+  ) : (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead className="border-b border-gray-100 text-xs uppercase text-gray-400">
+          <tr>
+            <th className="py-2 pr-4 text-left">Patient</th>
+            <th className="py-2 pr-4 text-left">Date</th>
+            <th className="py-2 pr-4 text-left">Time</th>
+            <th className="py-2 pr-4 text-left">Type</th>
+            <th className="py-2 text-left">Status</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100">
+          {rows.map(appointment => (
+            <tr key={appointment.id} className="text-gray-700">
+              <td className="py-2 pr-4 font-medium text-gray-900">{appointmentPatientName(appointment)}</td>
+              <td className="whitespace-nowrap py-2 pr-4 text-gray-500">{appointment.date}</td>
+              <td className="whitespace-nowrap py-2 pr-4 text-gray-500">{appointment.time}</td>
+              <td className="py-2 pr-4 text-gray-600">{appointment.type || '-'}</td>
+              <td className="py-2 font-semibold text-gray-800">{appointment.status}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 
   const rangeTreatmentRevenue = useMemo(
@@ -493,6 +526,45 @@ const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
       </div>
+
+      <div className="flex flex-wrap gap-2 rounded-xl border border-gray-100 bg-white p-2 shadow-sm">
+        {[
+          { id: 'overview', label: 'Overview' },
+          { id: 'recalls-cancels', label: 'Recalls & Cancels' }
+        ].map(tab => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setActiveTab(tab.id as 'overview' | 'recalls-cancels')}
+            className={`rounded-lg px-4 py-2 text-sm font-bold transition-colors ${activeTab === tab.id ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'recalls-cancels' ? (
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+          <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
+            <h3 className="text-lg font-semibold text-gray-800">Upcoming Recalls</h3>
+            <p className="mb-4 mt-1 text-xs text-gray-500">Scheduled registered-patient appointments from Clinical Focus next appointment</p>
+            {renderAppointmentRows(recallsCancelsLists.recalls, 'No upcoming recalls.')}
+          </div>
+
+          <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
+            <h3 className="text-lg font-semibold text-gray-800">Late / No-show</h3>
+            <p className="mb-4 mt-1 text-xs text-gray-500">Past scheduled appointments, including new patient leads without accounts</p>
+            {renderAppointmentRows(recallsCancelsLists.late, 'No late or no-show appointments.')}
+          </div>
+
+          <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
+            <h3 className="text-lg font-semibold text-gray-800">Cancelled Appointments</h3>
+            <p className="mb-4 mt-1 text-xs text-gray-500">All cancelled appointments with registered or lead patient names</p>
+            {renderAppointmentRows(recallsCancelsLists.cancelled, 'No cancelled appointments.')}
+          </div>
+        </div>
+      ) : (
+        <>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[0.9fr_1.1fr]">
         <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
@@ -1071,6 +1143,9 @@ const DashboardView: React.FC<DashboardViewProps> = ({
           )}
         </div>
       </div>
+
+        </>
+      )}
 
     </div>
   );
