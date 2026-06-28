@@ -592,7 +592,7 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
                   className="rounded-2xl border border-indigo-200 bg-white px-5 py-3 text-base font-black text-indigo-900 shadow-sm outline-none transition hover:border-indigo-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                   aria-label="Apply treatment to half teeth"
                 >
-                  <option value="">HALF TEETH</option>
+                  <option value="">{selectedHalf ? 'Clear Half Teeth' : 'HALF TEETH'}</option>
                   <option value="upper">Upper</option>
                   <option value="lower">Lower</option>
                 </select>
