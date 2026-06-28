@@ -3692,6 +3692,7 @@ const App: React.FC = () => {
                 onUploadFilesWithProgress={handleUploadFilesWithProgress}
                 onDeleteFile={handleDeleteFile}
                 onToggleTooth={(id) => setSelectedTeeth(prev => prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id])}
+                onSelectTeeth={setSelectedTeeth}
                 onDoctorChange={setSelectedDoctorId}
                 onDeselectAll={() => setSelectedTeeth([])}
                 onTreatmentSubmit={handleTreatmentSubmit}

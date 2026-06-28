@@ -3,7 +3,7 @@ import { User, X, Upload, Trash2, FileText, Receipt as ReceiptIcon, Package, Rot
 import { ToothSelector } from './ToothSelector';
 import { Patient, TreatmentType, ClinicalRecord, PatientFile, LoyaltyTransaction, LoyaltyRule, Doctor, Appointment, TreatmentChargeLine, AppointmentType, Location } from '../types';
 import { formatCurrency, getCurrencySymbol, Currency } from '../utils/currency';
-import { formatTeethArray, formatTeethWithPosition } from '../utils/toothNumbering';
+import { formatTeethArray, formatTeethWithPosition, getTeethInQuadrant } from '../utils/toothNumbering';
 import { Modal, Input, TimeInput } from './Shared';
 import { SearchableSelect } from './SearchableSelect';
 import PatientQRScanButton from './PatientQRScanButton';
@@ -29,6 +29,7 @@ interface ClinicalViewProps {
   useFlatRate: boolean;
   currency: Currency;
   onToggleTooth: (id: number) => void;
+  onSelectTeeth: (teeth: number[]) => void;
   onDoctorChange: (doctorId: string) => void;
   onDeselectAll: () => void;
   onTreatmentSubmit: (t: TreatmentType, chargeLines?: TreatmentChargeLine[]) => Promise<void>;
@@ -70,6 +71,7 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
   useFlatRate,
   currency,
   onToggleTooth,
+  onSelectTeeth,
   onDoctorChange,
   onDeselectAll,
   onTreatmentSubmit,
@@ -182,6 +184,13 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
       return name.includes(query) || category.includes(query);
     });
   }, [treatmentTypes, treatmentSearchTerm]);
+  const halfTeeth = React.useMemo(() => ({
+    upper: [1, 2, 5, 6].flatMap((quadrant) => getTeethInQuadrant(quadrant, quadrant > 4)),
+    lower: [3, 4, 7, 8].flatMap((quadrant) => getTeethInQuadrant(quadrant, quadrant > 4))
+  }), []);
+  const selectedHalf = (['upper', 'lower'] as const).find(
+    (half) => selectedTeeth.length === halfTeeth[half].length && halfTeeth[half].every((tooth) => selectedTeeth.includes(tooth))
+  ) || '';
   const canApplyTreatment = useFlatRate || selectedTeeth.length > 0;
   const firstApplicableTreatment = React.useMemo(
     () => filteredTreatmentTypes.find(() => canApplyTreatment),
@@ -552,22 +561,42 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
               <h4 className="font-bold text-indigo-900 leading-tight">
                 {selectedTeeth.length > 0 ? `Apply to Teeth: ${formatTeethArray(selectedTeeth)}` : 'Select Teeth to Perform Treatment'}
               </h4>
-              <label className={`flex items-center gap-3 cursor-pointer self-start sm:self-auto rounded-2xl border px-5 py-3 shadow-sm transition ${
-                useFlatRate
-                  ? 'border-indigo-600 bg-indigo-600 text-white shadow-indigo-200'
-                  : 'border-indigo-200 bg-white text-indigo-900 hover:border-indigo-400 hover:bg-indigo-50'
-              }`}>
-                <input
-                  type="checkbox"
-                  checked={useFlatRate}
-                  onChange={(e) => onToggleFlatRate(e.target.checked)}
-                  aria-label="Apply treatment to all teeth"
-                  className="w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                />
-                <span className="text-base font-black">
-                  ALL TEETH
-                </span>
-              </label>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <label className={`flex items-center gap-3 cursor-pointer self-start sm:self-auto rounded-2xl border px-5 py-3 shadow-sm transition ${
+                  useFlatRate
+                    ? 'border-indigo-600 bg-indigo-600 text-white shadow-indigo-200'
+                    : 'border-indigo-200 bg-white text-indigo-900 hover:border-indigo-400 hover:bg-indigo-50'
+                }`}>
+                  <input
+                    type="checkbox"
+                    checked={useFlatRate}
+                    onChange={(e) => onToggleFlatRate(e.target.checked)}
+                    aria-label="Apply treatment to all teeth"
+                    className="w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                  />
+                  <span className="text-base font-black">
+                    ALL TEETH
+                  </span>
+                </label>
+                <select
+                  value={selectedHalf}
+                  onChange={(e) => {
+                    if (!e.target.value) {
+                      onSelectTeeth([]);
+                      onToggleFlatRate(false);
+                      return;
+                    }
+                    onSelectTeeth(halfTeeth[e.target.value as 'upper' | 'lower']);
+                    onToggleFlatRate(true);
+                  }}
+                  className="rounded-2xl border border-indigo-200 bg-white px-5 py-3 text-base font-black text-indigo-900 shadow-sm outline-none transition hover:border-indigo-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  aria-label="Apply treatment to half teeth"
+                >
+                  <option value="">HALF TEETH</option>
+                  <option value="upper">Upper</option>
+                  <option value="lower">Lower</option>
+                </select>
+              </div>
             </div>
             <div className="mb-4">
               <label className="block text-[10px] text-indigo-700 uppercase font-bold tracking-wider mb-1.5">Treating Doctor</label>
