@@ -137,6 +137,88 @@ const getTrimmedDoctorName = (value?: string | null): string | undefined => {
   return normalized || undefined;
 };
 
+const getJoinedOne = <T = any>(value: T | T[] | null | undefined): T | null => (
+  Array.isArray(value) ? (value[0] ?? null) : (value ?? null)
+);
+
+const getLocalISODate = (date = new Date()): string => {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+};
+
+const completeAppointmentWithClinicalFee = async (
+  appointmentId: string,
+  skipClinicalFee = false
+): Promise<ClinicalFeeCompletionResult> => {
+  const { data, error } = await supabase.rpc('complete_appointment_with_clinical_fee', {
+    p_appointment_id: appointmentId,
+    p_skip_clinical_fee: skipClinicalFee
+  });
+
+  if (error) {
+    if (isMissingFunctionError(error, 'complete_appointment_with_clinical_fee')) {
+      throw new Error('Per-visit clinical fees are not installed. Run database/clinical_fee_per_visit_migration.sql in Supabase.');
+    }
+    throw new Error(error.message);
+  }
+
+  const row = getJoinedOne(data);
+  return {
+    appointmentId: row?.appointment_id || appointmentId,
+    feeStatus: row?.fee_status || 'NOT_APPLICABLE',
+    feeAmount: Number(row?.fee_amount || 0),
+    patientCategory: row?.patient_category || null,
+    newBalance: row?.new_balance == null ? null : Number(row.new_balance)
+  };
+};
+
+const completeScheduledAppointmentForTreatment = async ({
+  locationId,
+  patientId,
+  doctorId,
+  treatmentDate
+}: {
+  locationId: string;
+  patientId: string;
+  doctorId?: string | null;
+  treatmentDate: string;
+}): Promise<string[]> => {
+  let query = supabase
+    .from('appointments')
+    .select('id')
+    .eq('location_id', locationId)
+    .eq('patient_id', patientId)
+    .eq('date', treatmentDate)
+    .eq('status', 'Scheduled')
+    .order('time')
+    .limit(1);
+
+  if (doctorId) query = query.eq('doctor_id', doctorId);
+
+  let { data, error } = await query;
+  if (!error && (!data || data.length === 0) && doctorId) {
+    const fallback = await supabase
+      .from('appointments')
+      .select('id')
+      .eq('location_id', locationId)
+      .eq('patient_id', patientId)
+      .eq('date', treatmentDate)
+      .eq('status', 'Scheduled')
+      .order('time')
+      .limit(1);
+    data = fallback.data;
+    error = fallback.error;
+  }
+
+  if (error) throw new Error(error.message);
+
+  const ids = (data || []).map((appointment) => appointment.id).filter(Boolean);
+  for (const id of ids) {
+    await completeAppointmentWithClinicalFee(id);
+  }
+  return ids;
+};
+
 const getAppointmentDoctorDisplayName = (appointmentRow: any, clinicalDoctorName?: string): string | undefined => {
   if (appointmentRow?.status === 'Completed') {
     const completedDoctorName = getTrimmedDoctorName(clinicalDoctorName);
@@ -1517,14 +1599,14 @@ export const api = {
 
       if (shouldCreateRescheduleAudit) {
         const patientName =
-          result.patients?.name ||
-          existingAppointment.patients?.name ||
+          getJoinedOne(result.patients)?.name ||
+          getJoinedOne(existingAppointment.patients)?.name ||
           result.guest_name ||
           existingAppointment.guest_name ||
           'Unknown';
         const doctorName =
-          getTrimmedDoctorName(result.doctors?.name) ||
-          getTrimmedDoctorName(existingAppointment.doctors?.name) ||
+          getTrimmedDoctorName(getJoinedOne(result.doctors)?.name) ||
+          getTrimmedDoctorName(getJoinedOne(existingAppointment.doctors)?.name) ||
           null;
 
         await api.appointmentRescheduleLogs.create({
@@ -1556,9 +1638,9 @@ export const api = {
       // Flatten the response
       return {
         ...result,
-        patient_name: result.patients?.name || result.guest_name || 'Unknown',
-        patient_balance: result.patients?.balance ?? null,
-        doctor_name: result.doctors?.name || undefined
+        patient_name: getJoinedOne(result.patients)?.name || result.guest_name || 'Unknown',
+        patient_balance: getJoinedOne(result.patients)?.balance ?? null,
+        doctor_name: getJoinedOne(result.doctors)?.name || undefined
       };
     },
     delete: async (id: string): Promise<void> => {
@@ -2798,7 +2880,7 @@ export const api = {
     },
     getClinicalFeeSettings: async (): Promise<ClinicalFeeSettings> => {
       try {
-        let { data, error } = await supabase
+        let { data, error }: { data: any; error: any } = await supabase
           .from('app_settings')
           .select('clinical_fee_enabled, clinical_fee_amount, clinical_fee_new_patient_amount, clinical_fee_returning_patient_amount')
           .eq('id', APP_SETTINGS_SINGLETON_ID)

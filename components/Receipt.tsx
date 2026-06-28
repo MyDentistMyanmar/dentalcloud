@@ -107,7 +107,7 @@ const Receipt: React.FC<ReceiptProps> = ({
       }))
     : medicines;
 
-  const getTreatmentPricing = (treatment: ClinicalRecord) => {
+  const getTreatmentPricing = (treatment: Pick<ClinicalRecord, 'cost' | 'description' | 'teeth'> & Partial<ClinicalRecord>) => {
     const finalCost = Number(treatment.cost || 0);
     const explicitStandard = Number((treatment as any).standardCost ?? (treatment as any).standard_cost);
     const explicitDiscount = Number((treatment as any).discountAmount ?? (treatment as any).discount_amount ?? 0);
