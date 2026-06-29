@@ -1,18 +1,39 @@
 import React, { useMemo } from 'react';
 import { Users, Activity, CalendarCheck2, TrendingUp, DollarSign } from 'lucide-react';
-import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
-import { Appointment, ClinicalRecord, Patient } from '../types';
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
+import { Appointment, ClinicalRecord, Location, Patient } from '../types';
 import PatientQRScanButton from './PatientQRScanButton';
 
 interface DoctorHomeViewProps {
   appointments: Appointment[];
   treatmentRecords: ClinicalRecord[];
   patients: Patient[];
+  locations: Location[];
   onSelectPatient: (patient: Patient) => void;
+  onOpenAppointmentsForDate: (filter: 'today' | 'tomorrow') => void;
 }
 
-const DoctorHomeView: React.FC<DoctorHomeViewProps> = ({ appointments, treatmentRecords, patients, onSelectPatient }) => {
-  const today = useMemo(() => new Date().toISOString().split('T')[0], []);
+const DoctorHomeView: React.FC<DoctorHomeViewProps> = ({
+  appointments,
+  treatmentRecords,
+  patients,
+  locations,
+  onSelectPatient,
+  onOpenAppointmentsForDate
+}) => {
+  const toLocalISODate = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const today = useMemo(() => toLocalISODate(new Date()), []);
+  const tomorrow = useMemo(() => {
+    const nextDay = new Date();
+    nextDay.setDate(nextDay.getDate() + 1);
+    return toLocalISODate(nextDay);
+  }, []);
   const currentMonthKey = useMemo(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -42,6 +63,63 @@ const DoctorHomeView: React.FC<DoctorHomeViewProps> = ({ appointments, treatment
   const todayAppointments = useMemo(() => {
     return appointments.filter((appointment) => appointment.date === today).length;
   }, [appointments, today]);
+
+  const tomorrowAppointments = useMemo(() => {
+    return appointments.filter((appointment) => appointment.date === tomorrow).length;
+  }, [appointments, tomorrow]);
+
+  const branchNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    locations.forEach((location, index) => {
+      map.set(location.id, location.name?.trim() || `Branch-${index + 1}`);
+    });
+    return map;
+  }, [locations]);
+
+  const getBranchName = (locationId: string | undefined, fallbackIndex = 0) => {
+    if (!locationId) return 'Unassigned branch';
+    return branchNameById.get(locationId) || `Branch-${fallbackIndex + 1}`;
+  };
+
+  const buildBranchTotals = <T extends { location_id?: string }>(
+    items: T[],
+    valueSelector: (item: T) => number
+  ) => {
+    const totals = new Map<string, { locationId: string; name: string; value: number }>();
+    items.forEach((item) => {
+      const locationId = item.location_id || 'unassigned';
+      const current = totals.get(locationId) || {
+        locationId,
+        name: getBranchName(item.location_id, totals.size),
+        value: 0
+      };
+      current.value += valueSelector(item);
+      totals.set(locationId, current);
+    });
+
+    return Array.from(totals.values()).sort((a, b) => a.name.localeCompare(b.name));
+  };
+
+  const todayIncomeByBranch = useMemo(() => {
+    return buildBranchTotals(
+      treatmentRecords.filter((record) => record.date === today),
+      (record) => Number(record.cost || 0)
+    );
+  }, [treatmentRecords, today, branchNameById]);
+
+  const todayAppointmentsByBranch = useMemo(() => {
+    return buildBranchTotals(
+      appointments.filter((appointment) => appointment.date === today),
+      () => 1
+    );
+  }, [appointments, today, branchNameById]);
+
+  const tomorrowAppointmentsByBranch = useMemo(() => {
+    return buildBranchTotals(
+      appointments.filter((appointment) => appointment.date === tomorrow),
+      () => 1
+    );
+  }, [appointments, tomorrow, branchNameById]);
   
   const monthlyIncome = useMemo(() => {
     return treatmentRecords
@@ -95,6 +173,23 @@ const DoctorHomeView: React.FC<DoctorHomeViewProps> = ({ appointments, treatment
   const chartData = topTreatments.length > 0 ? topTreatments : [{ name: 'No Data', count: 1 }];
   const pieColors = ['#4f46e5', '#06b6d4', '#10b981', '#f59e0b', '#f97316', '#8b5cf6'];
 
+  const renderBranchBreakdown = (
+    rows: Array<{ locationId: string; name: string; value: number }>,
+    formatter: (value: number) => string,
+    emptyText: string
+  ) => (
+    <div className="mt-3 space-y-1.5 border-t border-gray-100 pt-2">
+      {rows.length === 0 ? (
+        <p className="text-[11px] font-medium text-gray-400">{emptyText}</p>
+      ) : rows.map((row) => (
+        <div key={row.locationId} className="flex items-center justify-between gap-2 rounded-lg bg-gray-50 px-2 py-1">
+          <span className="truncate text-[11px] font-semibold text-gray-500">{row.name}</span>
+          <span className="text-[11px] font-black text-gray-900">{formatter(row.value)}</span>
+        </div>
+      ))}
+    </div>
+  );
+
   return (
     <div className="space-y-4 p-4">
       <div className="flex flex-col gap-3 rounded-2xl border border-emerald-100 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
@@ -130,12 +225,39 @@ const DoctorHomeView: React.FC<DoctorHomeViewProps> = ({ appointments, treatment
           </div>
           <p className="text-2xl font-bold text-gray-900">{completedAppointments}</p>
         </div>
-        <div className="rounded-xl border border-amber-100 bg-white p-3">
+        <button
+          type="button"
+          onClick={() => onOpenAppointmentsForDate('today')}
+          className="rounded-xl border border-amber-100 bg-white p-3 text-left transition-all hover:-translate-y-0.5 hover:border-amber-200 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-amber-400"
+        >
           <div className="mb-1 flex items-center gap-2 text-amber-600">
             <TrendingUp className="h-4 w-4" />
             <p className="text-[11px] font-semibold uppercase tracking-wide">Today Appointments</p>
           </div>
           <p className="text-2xl font-bold text-gray-900">{todayAppointments}</p>
+          {renderBranchBreakdown(todayAppointmentsByBranch, (value) => `${value} apt${value === 1 ? '' : 's'}`, 'No appointments today.')}
+        </button>
+        <button
+          type="button"
+          onClick={() => onOpenAppointmentsForDate('tomorrow')}
+          className="rounded-xl border border-blue-100 bg-white p-3 text-left transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-400"
+        >
+          <div className="mb-1 flex items-center gap-2 text-blue-600">
+            <CalendarCheck2 className="h-4 w-4" />
+            <p className="text-[11px] font-semibold uppercase tracking-wide">Tomorrow Appointments</p>
+          </div>
+          <p className="text-2xl font-bold text-gray-900">{tomorrowAppointments}</p>
+          {renderBranchBreakdown(tomorrowAppointmentsByBranch, (value) => `${value} apt${value === 1 ? '' : 's'}`, 'No appointments tomorrow.')}
+        </button>
+        <div className="rounded-xl border border-teal-100 bg-white p-3">
+          <div className="mb-1 flex items-center gap-2 text-teal-600">
+            <DollarSign className="h-4 w-4" />
+            <p className="text-[11px] font-semibold uppercase tracking-wide">Today Income Total</p>
+          </div>
+          <p className="text-2xl font-bold text-gray-900">
+            {todayIncomeByBranch.reduce((sum, row) => sum + row.value, 0).toLocaleString()} MMK
+          </p>
+          {renderBranchBreakdown(todayIncomeByBranch, (value) => `${value.toLocaleString()} MMK`, 'No income recorded today.')}
         </div>
         <div className="rounded-xl border border-purple-100 bg-white p-3">
           <div className="mb-1 flex items-center gap-2 text-purple-600">

@@ -646,6 +646,7 @@ const App: React.FC = () => {
   const [isTabPending, startTabTransition] = useTransition();
   const [doctorActiveTab, setDoctorActiveTab] = useState<ViewState>('dashboard');
   const [recordsInitialFilter, setRecordsInitialFilter] = useState<'all' | 'appointments' | 'treatments'>('all');
+  const [appointmentsInitialDateQuickFilter, setAppointmentsInitialDateQuickFilter] = useState<'all' | 'tomorrow' | 'today'>('today');
   
   // -- Form State --
   const [paymentDraft, setPaymentDraft] = useState<PaymentDraft>({
@@ -939,6 +940,14 @@ const App: React.FC = () => {
     setDoctorActiveTab(nextView);
     startTabTransition(() => {
       setCurrentView(nextView);
+    });
+  };
+
+  const handleOpenDoctorAppointmentsForDate = (filter: 'today' | 'tomorrow') => {
+    setAppointmentsInitialDateQuickFilter(filter);
+    setDoctorActiveTab('appointments');
+    startTabTransition(() => {
+      setCurrentView('appointments');
     });
   };
 
@@ -1437,12 +1446,28 @@ const App: React.FC = () => {
       // Only fetch data if we have a valid location
       if (locId) {
         // � Critical data: what the main views need immediately �
+        const sessionDoctorId = session?.role === 'doctor' ? session.doctor_id : null;
+        const allDoctorsForSession = sessionDoctorId ? await api.doctors.getAll() : [];
+        const activeSessionDoctor = sessionDoctorId
+          ? allDoctorsForSession.find((doctor) => doctor.id === sessionDoctorId) || null
+          : null;
+        const doctorLocationIds = activeSessionDoctor
+          ? Array.from(new Set([...(activeSessionDoctor.location_ids || []), activeSessionDoctor.location_id].filter(Boolean)))
+          : [];
+        const doctorQueryLocationIds = sessionDoctorId && doctorLocationIds.length > 0 ? doctorLocationIds : [locId];
+        const isDoctorMultiBranchSession = !!sessionDoctorId && doctorQueryLocationIds.length > 1;
         const [patData, aptData, docData, typeData, recordsData, medData, paymentsData, rescheduleLogsData] = await Promise.all([
-          api.patients.getAll(locId),
-          api.appointments.getAll(locId),
-          api.doctors.getAll(locId),
+          isDoctorMultiBranchSession
+            ? Promise.all(doctorQueryLocationIds.map((locationId) => api.patients.getAll(locationId))).then((groups) => groups.flat())
+            : api.patients.getAll(locId),
+          isDoctorMultiBranchSession
+            ? Promise.all(doctorQueryLocationIds.map((locationId) => api.appointments.getAll(locationId))).then((groups) => groups.flat())
+            : api.appointments.getAll(locId),
+          activeSessionDoctor ? Promise.resolve([activeSessionDoctor]) : api.doctors.getAll(locId),
           api.treatments.getTypes(locId),
-          api.treatments.getAllRecords(locId),
+          isDoctorMultiBranchSession
+            ? Promise.all(doctorQueryLocationIds.map((locationId) => api.treatments.getAllRecords(locationId))).then((groups) => groups.flat())
+            : api.treatments.getAllRecords(locId),
           api.medicines.getAll(locId),
           api.finance.getPayments(locId),
           api.appointmentRescheduleLogs.getAll(locId)
@@ -3406,7 +3431,9 @@ const App: React.FC = () => {
                   appointments={appointments}
                   treatmentRecords={globalRecords}
                   patients={patients}
+                  locations={locations}
                   onSelectPatient={handlePatientSelect}
+                  onOpenAppointmentsForDate={handleOpenDoctorAppointmentsForDate}
                 />
               ) : (
                 <DashboardView
@@ -3547,6 +3574,7 @@ const App: React.FC = () => {
                 canViewChart={true}
                 canExport={!isDoctor}
                 uiStyle={isDoctor || isCompactScreen ? 'cards' : 'table'}
+                initialDateQuickFilter={appointmentsInitialDateQuickFilter}
                 onExportPDF={async () => {
                    const freshAppointments = await api.appointments.getAll(currentLocationId || undefined);
                    const { exportAppointmentsToPDF } = await import('./utils/pdfExport');

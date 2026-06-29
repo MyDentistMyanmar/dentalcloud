@@ -1,4 +1,4 @@
-﻿import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Calendar, Plus, Loader2, Edit2, Trash2, Clock, User, FileText, ChevronLeft, ChevronRight, List, CalendarDays, Eye } from 'lucide-react';
 import { Appointment, Doctor, Patient, TreatmentType } from '../types';
 import { exportAppointmentsToPDF } from '../utils/pdfExport';
@@ -37,6 +37,7 @@ interface AppointmentsViewProps {
   canViewChart?: boolean;
   canExport?: boolean;
   uiStyle?: 'table' | 'cards';
+  initialDateQuickFilter?: 'all' | 'tomorrow' | 'today';
 }
 
 const AppointmentsView: React.FC<AppointmentsViewProps> = ({
@@ -60,7 +61,8 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
   canDelete = true,
   canViewChart = true,
   canExport = true,
-  uiStyle = 'table'
+  uiStyle = 'table',
+  initialDateQuickFilter = 'today'
 }) => {
   const [viewMode, setViewMode] = useState<'current' | 'calendar'>('current');
   const [upcomingPage, setUpcomingPage] = useState(1);
@@ -68,7 +70,7 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
   const [showAllUpcoming, setShowAllUpcoming] = useState(false);
   const [showAllPast, setShowAllPast] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [dateQuickFilter, setDateQuickFilter] = useState<'all' | 'tomorrow' | 'today' | 'custom'>('today');
+  const [dateQuickFilter, setDateQuickFilter] = useState<'all' | 'tomorrow' | 'today' | 'custom'>(initialDateQuickFilter);
   const [dateFilter, setDateFilter] = useState('');
   const [doctorFilter, setDoctorFilter] = useState('');
   const [treatmentFilter, setTreatmentFilter] = useState('');
@@ -116,6 +118,13 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
     setSelectedCalendarDate(null);
     resetAppointmentPages();
   };
+
+  useEffect(() => {
+    setDateQuickFilter(initialDateQuickFilter);
+    setDateFilter('');
+    setSelectedCalendarDate(null);
+    resetAppointmentPages();
+  }, [initialDateQuickFilter]);
 
   const tomorrowISO = useMemo(() => {
     const nextDay = new Date();
