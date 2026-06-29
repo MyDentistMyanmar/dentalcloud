@@ -1867,7 +1867,7 @@ const App: React.FC = () => {
       setConvertingLeadAppointment(null);
       const createdBranch = locations.find((loc) => loc.id === createdPatient.location_id);
       const viewingDifferentBranch = !!createdPatient.location_id && !!currentLocationId && createdPatient.location_id !== currentLocationId;
-      const baseSuccessMessage = 'Patient registered successfully. The new-patient clinical fee will be handled when the first appointment is completed.';
+      const baseSuccessMessage = 'Patient registered successfully. Service fees will be handled during payment collection based on the fee settings.';
       const branchHint = viewingDifferentBranch
         ? ` Saved to ${createdBranch?.name || 'another branch'}. Switch branch in Settings to view it.`
         : '';
@@ -2617,12 +2617,7 @@ const App: React.FC = () => {
       const result = await api.appointments.updateStatus(id, status, options);
       await fetchInitialData(currentLocationId || undefined);
       if (status === 'Completed' && result) {
-        const feeMessage = result.feeStatus === 'APPLIED'
-          ? `${result.patientCategory === 'NEW' ? 'New-patient' : 'Returning-patient'} clinical fee applied: ${formatCurrency(result.feeAmount, currency)}.`
-          : result.feeStatus === 'SKIPPED'
-          ? 'Appointment completed and the clinical fee was skipped.'
-          : 'Appointment completed with no clinical fee.';
-        setToast({ message: feeMessage, type: 'success', show: true });
+        setToast({ message: 'Appointment completed successfully.', type: 'success', show: true });
       }
     } catch (err: any) {
       alert(err.message);
@@ -3837,10 +3832,10 @@ const App: React.FC = () => {
             </div>
 
             <div className="rounded-xl border border-indigo-100 bg-indigo-50/70 p-4">
-              <p className="text-[10px] font-black uppercase tracking-wide text-indigo-700 mb-2">First Visit Clinical Fee</p>
+              <p className="text-[10px] font-black uppercase tracking-wide text-indigo-700 mb-2">Patient Service Fee</p>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm font-medium text-gray-700">
-                  The fee is applied when this patient's first appointment is completed.
+                  The fee is shown during payment collection based on whether this patient is new or returning.
                 </p>
                 <span className="text-xs font-semibold text-indigo-700">
                   New patient: {formatCurrency(clinicalFeeNewPatientAmount, currency)}
@@ -3848,8 +3843,8 @@ const App: React.FC = () => {
               </div>
               <p className={`mt-2 text-xs ${clinicalFeeEnabled ? 'text-indigo-700' : 'text-amber-700'}`}>
                 {clinicalFeeEnabled
-                  ? 'Use “Complete & Skip Fee” on the appointment when the fee should be waived.'
-                  : 'Clinical visit fees are currently disabled in Settings.'}
+                  ? 'During payment collection, staff can continue with the suggested service fee or continue without it.'
+                  : 'Patient service fees are currently disabled in Settings.'}
               </p>
             </div>
 
@@ -5200,4 +5195,5 @@ const App: React.FC = () => {
 };
 
 export default App;
+
 

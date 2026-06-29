@@ -1642,7 +1642,7 @@ Finding Patients:
 Adding Patients (Agent Mode):
 • "Add new patient Michael Brown" 
 • The current registration form supports name, email, phone, age, patient type, branch, address, city, township, optional portal password, and medical history
-• Clinical fees are charged when appointments are completed: first visit uses the new-patient rate, later visits use the returning-patient rate, and staff can explicitly skip the fee
+• Service fees are suggested during payment collection: first-time patients use the new-patient rate, later visits use the returning-patient rate, and staff can continue with or without the suggested fee
 
 Scheduling Appointments:
 • "Book Sarah Johnson for a checkup next Tuesday at 2 PM"
@@ -2374,7 +2374,7 @@ APPOINTMENT MANAGEMENT:
 - apt_u(id, data): Update appointment. data can include {date, time, status, doctor_id, type, location_id, notes, guest_name, guest_phone, guest_source, guest_notes}.
 - apt_d(id): Delete appointment.
 - apt_reschedule(id, dt, t): Reschedule appointment.
-- apt_status(id, status, skip_clinical_fee): Update appointment status. Completing a registered-patient appointment applies the configured per-visit clinical fee once. Set skip_clinical_fee=true only when the user explicitly asks to waive it.
+- apt_status(id, status, skip_clinical_fee): Update appointment status. Completing an appointment no longer adds any automatic service fee. Service fees are handled during payment collection.
 - apt_find_patient(name): Find appointments for patient.
 - apt_get_past(name): Get past appointment history for patient.
 - staff_availability(date, dr_id): Check doctor availability for date.

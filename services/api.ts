@@ -217,25 +217,52 @@ const completeAppointmentWithClinicalFee = async (
   appointmentId: string,
   skipClinicalFee = false
 ): Promise<ClinicalFeeCompletionResult> => {
-  const { data, error } = await supabase.rpc('complete_appointment_with_clinical_fee', {
-    p_appointment_id: appointmentId,
-    p_skip_clinical_fee: skipClinicalFee
-  });
+  const statusToPersist = skipClinicalFee ? 'SKIPPED' : 'NOT_APPLICABLE';
+  const { data, error } = await supabase
+    .from('appointments')
+    .update({
+      status: 'Completed',
+      clinical_fee_status: statusToPersist,
+      clinical_fee_amount: 0,
+      clinical_fee_patient_category: null,
+      clinical_fee_applied_at: null
+    })
+    .eq('id', appointmentId)
+    .select('id, clinical_fee_status, clinical_fee_amount, clinical_fee_patient_category')
+    .single();
 
   if (error) {
-    if (isMissingFunctionError(error, 'complete_appointment_with_clinical_fee')) {
-      throw new Error('Per-visit clinical fees are not installed. Run database/clinical_fee_per_visit_migration.sql in Supabase.');
+    if (isMissingColumnError(error, 'clinical_fee_status')) {
+      const legacyResult = await supabase
+        .from('appointments')
+        .update({ status: 'Completed' })
+        .eq('id', appointmentId)
+        .select('id')
+        .single();
+
+      if (legacyResult.error) {
+        throw new Error(legacyResult.error.message);
+      }
+
+      return {
+        appointmentId,
+        feeStatus: 'NOT_APPLICABLE',
+        feeAmount: 0,
+        patientCategory: null,
+        newBalance: null
+      };
     }
+
     throw new Error(error.message);
   }
 
   const row = getJoinedOne(data);
   return {
-    appointmentId: row?.appointment_id || appointmentId,
-    feeStatus: row?.fee_status || 'NOT_APPLICABLE',
-    feeAmount: Number(row?.fee_amount || 0),
-    patientCategory: row?.patient_category || null,
-    newBalance: row?.new_balance == null ? null : Number(row.new_balance)
+    appointmentId: row?.id || appointmentId,
+    feeStatus: row?.clinical_fee_status || 'NOT_APPLICABLE',
+    feeAmount: Number(row?.clinical_fee_amount || 0),
+    patientCategory: row?.clinical_fee_patient_category || null,
+    newBalance: null
   };
 };
 

@@ -959,10 +959,10 @@ const SettingsView: React.FC<SettingsViewProps> = ({
         <div className="border border-gray-200 rounded-xl p-6">
           <div className="flex items-center gap-3 mb-4">
             <DollarSign className="w-5 h-5 text-indigo-600" />
-            <h3 className="text-lg font-semibold text-gray-800">Patient Visit Clinical Fee</h3>
+            <h3 className="text-lg font-semibold text-gray-800">Patient Service Fee</h3>
           </div>
           <p className="text-sm text-gray-600 mb-4">
-            Charge a clinical fee when a registered patient's appointment is completed. The first completed visit uses the new-patient price; later visits use the returning-patient price.
+            Configure the service fee shown during payment collection. The system suggests the new-patient price for first-time patients and the returning-patient price for later visits.
           </p>
 
           <div className="space-y-4">
@@ -976,12 +976,12 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                 }}
                 className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
               />
-              <span className="text-sm font-medium text-gray-700">Enable clinical fee on completed patient visits</span>
+              <span className="text-sm font-medium text-gray-700">Enable patient service fee during payment collection</span>
             </label>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <Input
-                label={`New Patient / First Visit (${currencySymbols[currency]})`}
+                label={`New Patient Fee (${currencySymbols[currency]})`}
                 type="number"
                 min="0"
                 step="0.01"
@@ -992,7 +992,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                 }}
               />
               <Input
-                label={`Returning Patient / Later Visits (${currencySymbols[currency]})`}
+                label={`Returning Patient Fee (${currencySymbols[currency]})`}
                 type="number"
                 min="0"
                 step="0.01"
@@ -1005,7 +1005,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
 
             <p className="text-xs text-gray-500">
-              Staff can use “Complete &amp; Skip Fee” on an appointment when the fee should be waived.
+              During payment collection, staff can continue with the suggested service fee or continue without it.
             </p>
 
             <button
@@ -1013,7 +1013,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
               onClick={handleSaveClinicalFee}
               className="w-full md:w-auto rounded-xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-600/20 transition hover:bg-indigo-700"
             >
-              Save Clinical Fee Settings
+              Save Service Fee Settings
             </button>
 
             {clinicalFeeMessage && (
@@ -2400,3 +2400,4 @@ const SettingsView: React.FC<SettingsViewProps> = ({
 };
 
 export default SettingsView;
+

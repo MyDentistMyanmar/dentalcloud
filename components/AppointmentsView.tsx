@@ -4,7 +4,7 @@ import { Appointment, Doctor, Patient, TreatmentType } from '../types';
 import { exportAppointmentsToPDF } from '../utils/pdfExport';
 import { exportAppointmentsToExcel } from '../utils/excelExport';
 import { parseAppointmentClinicalFocus } from '../utils/appointmentClinicalFocus';
-import { formatCurrency, type Currency } from '../utils/currency';
+import { type Currency } from '../utils/currency';
 import Pagination from './Pagination';
 import { ConfirmDialog } from './Shared';
 import ExportMenu from './ExportMenu';
@@ -49,7 +49,6 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
   onEditAppointment,
   onDeleteAppointment,
   onUpdateStatus,
-  currency,
   onViewChart,
   onSelectPatient,
   onConvertLead,
@@ -78,43 +77,6 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [appointmentToDelete, setAppointmentToDelete] = useState<string | null>(null);
   const itemsPerPage = 10;
-
-  const renderClinicalFeeBadge = (appointment: Appointment) => {
-    if (appointment.clinical_fee_status === 'APPLIED') {
-      return (
-        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
-          {appointment.clinical_fee_patient_category === 'NEW' ? 'New' : 'Returning'} fee {formatCurrency(Number(appointment.clinical_fee_amount || 0), currency)}
-        </span>
-      );
-    }
-
-    if (appointment.clinical_fee_status === 'SKIPPED') {
-      return (
-        <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">
-          Fee skipped
-        </span>
-      );
-    }
-
-    return null;
-  };
-
-  const renderSkipClinicalFeeButton = (appointment: Appointment, compact = false) => {
-    if (appointment.status !== 'Scheduled' || !appointment.patient_id) return null;
-
-    return (
-      <button
-        type="button"
-        onClick={() => onUpdateStatus(appointment.id, 'Completed', { skipClinicalFee: true })}
-        className={`inline-flex items-center rounded-lg border border-amber-200 bg-amber-50 font-semibold text-amber-700 hover:bg-amber-100 transition-colors ${
-          compact ? 'px-2 py-1 text-[11px]' : 'px-3 py-1.5 text-xs'
-        }`}
-        title="Complete this appointment without adding a clinical fee"
-      >
-        Complete &amp; Skip Fee
-      </button>
-    );
-  };
 
   const toLocalISODate = (date: Date) => {
     const year = date.getFullYear();
@@ -660,7 +622,6 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
                                 <div className="flex flex-wrap items-center gap-2">
                                   <p className="font-semibold text-gray-900">{appointment.patient_name || 'Unknown Patient'}</p>
                                   {isNewPatientAppointment(appointment) && renderNewPatientBadge()}
-                                  {renderClinicalFeeBadge(appointment)}
                                 </div>
                                 <p className="text-xs text-gray-500 mt-1">
                                   Dr. {appointment.doctor_name || '-'} • {formatDateDDMMYYYY(appointment.date)} • {formatTime(appointment.time)}
@@ -694,7 +655,6 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
                                 <option value="Completed">Completed</option>
                                 <option value="Cancelled">Cancelled</option>
                               </select>
-                              {renderSkipClinicalFeeButton(appointment)}
                             </div>
                           </div>
                         ))}
@@ -717,7 +677,6 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
                                 <div className="flex flex-wrap items-center gap-2">
                                   <p className="font-semibold text-gray-800">{appointment.patient_name || 'Unknown Patient'}</p>
                                   {isNewPatientAppointment(appointment) && renderNewPatientBadge()}
-                                  {renderClinicalFeeBadge(appointment)}
                                 </div>
                                 <p className="text-xs text-gray-500 mt-1">
                                   Dr. {appointment.doctor_name || '-'} • {formatDateDDMMYYYY(appointment.date)} • {formatTime(appointment.time)}
@@ -787,7 +746,6 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
                                     <div className="flex flex-wrap items-center gap-2">
                                       <span>{appointment.patient_name || 'Unknown Patient'}</span>
                                       {isNewPatientAppointment(appointment) && renderNewPatientBadge(true)}
-                                      {renderClinicalFeeBadge(appointment)}
                                     </div>
                                     {isNewPatientAppointment(appointment) && (
                                       <div className="mt-1 text-xs font-normal text-amber-700">
@@ -850,7 +808,6 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
                                           <Trash2 className="w-4 h-4" />
                                         </button>
                                       )}
-                                      {renderSkipClinicalFeeButton(appointment, true)}
                                     </div>
                                   </td>
                                 </tr>
@@ -1004,7 +961,6 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
                             <div className="flex flex-wrap items-center gap-1.5 md:gap-2 text-xs md:text-sm font-medium text-gray-900">
                               <span className="truncate">{appointment.patient_name || 'Unknown Patient'}</span>
                               {isNewPatientAppointment(appointment) && renderNewPatientBadge(true)}
-                              {renderClinicalFeeBadge(appointment)}
                             </div>
                             <div className="text-[11px] md:text-xs text-gray-500 mt-0.5 truncate">
                               {formatTime(appointment.time)} • {appointment.type || 'Checkup'}
@@ -1052,7 +1008,6 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
                               <option value="Completed">Completed</option>
                               <option value="Cancelled">Cancelled</option>
                             </select>
-                            {renderSkipClinicalFeeButton(appointment, true)}
                             {canEdit && (
                               <button onClick={() => onEditAppointment(appointment)} className="p-1.5 md:p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg">
                                 <Edit2 className="w-3.5 h-3.5 md:w-4 md:h-4" />
