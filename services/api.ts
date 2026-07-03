@@ -2983,6 +2983,7 @@ export const api = {
       paymentMethod: PaymentMethod;
       treatmentIds?: string[];
       paymentDate?: string;
+      submissionKey?: string | null;
       receiptSnapshot?: Record<string, unknown> | null;
       createdByUserId?: string | null;
       createdByUserName?: string | null;
@@ -2995,7 +2996,7 @@ export const api = {
         throw new Error('Select a valid payment method.');
       }
 
-      const { data, error } = await supabase.rpc('process_patient_payment', {
+      const rpcPayload = {
         p_patient_id: input.patientId,
         p_amount: normalizedAmount,
         p_payment_method: input.paymentMethod,
@@ -3004,7 +3005,54 @@ export const api = {
         p_receipt_snapshot: input.receiptSnapshot || null,
         p_created_by_user_id: input.createdByUserId || null,
         p_created_by_user_name: input.createdByUserName || null
-      });
+      };
+
+      const submissionKey = input.submissionKey?.trim() || null;
+      const { data, error } = await supabase.rpc('process_patient_payment', submissionKey
+        ? { ...rpcPayload, p_submission_key: submissionKey }
+        : rpcPayload);
+
+      if (error && submissionKey && isMissingFunctionError(error, 'process_patient_payment')) {
+        const retry = await supabase.rpc('process_patient_payment', rpcPayload);
+        if (retry.error) {
+          if (isMissingFunctionError(retry.error, 'process_patient_payment')) {
+            throw new Error('Payment receipt storage is not installed. Run database/payment_receipt_snapshot_migration.sql in Supabase.');
+          }
+          throw new Error(retry.error.message);
+        }
+
+        const retryRow = Array.isArray(retry.data) ? retry.data[0] : retry.data;
+        if (!retryRow) throw new Error('Payment was not recorded.');
+
+        const payment: PaymentRecord = {
+          id: retryRow.id,
+          location_id: retryRow.location_id,
+          patientId: retryRow.patient_id,
+          patient_name: retryRow.patient_name,
+          amount: Number(retryRow.amount || 0),
+          originalAmount: Number(retryRow.original_amount ?? retryRow.amount ?? 0),
+          clearedAmount: Number(retryRow.cleared_amount ?? retryRow.amount ?? 0),
+          treatmentIds: Array.isArray(retryRow.treatment_ids) ? retryRow.treatment_ids : [],
+          date: retryRow.payment_date || retryRow.created_at?.slice(0, 10) || '',
+          type: retryRow.payment_status === 'FULL' ? 'FULL' : 'PARTIAL',
+          balanceBefore: Number(retryRow.balance_before ?? (Number(retryRow.remaining_balance || 0) + Number(retryRow.amount || 0))),
+          remainingBalance: Number(retryRow.remaining_balance || 0),
+          paymentMethod: normalizePaymentMethod(retryRow.payment_method),
+          receiptNumber: retryRow.receipt_number,
+          receiptSnapshot: normalizePaymentReceiptSnapshot(retryRow.receipt_snapshot),
+          createdAt: retryRow.created_at,
+          createdByUserId: retryRow.created_by_user_id,
+          createdByUserName: retryRow.created_by_user_name
+        };
+
+        return {
+          status: 'success',
+          new_balance: payment.remainingBalance,
+          amount_collected: payment.amount,
+          cleared_amount: payment.clearedAmount ?? payment.amount,
+          payment
+        };
+      }
 
       if (error) {
         if (isMissingFunctionError(error, 'process_patient_payment')) {

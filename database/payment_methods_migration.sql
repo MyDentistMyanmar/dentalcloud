@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS payments (
   ),
   payment_date DATE NOT NULL DEFAULT CURRENT_DATE,
   receipt_snapshot JSONB,
+  submission_key VARCHAR(120) UNIQUE,
   created_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
   created_by_user_name VARCHAR(255),
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
@@ -42,6 +43,15 @@ CREATE POLICY "anon_full_access_payments" ON payments
   USING (true)
   WITH CHECK (true);
 
+ALTER TABLE payments
+  ADD COLUMN IF NOT EXISTS submission_key VARCHAR(120);
+
+CREATE UNIQUE INDEX IF NOT EXISTS payments_submission_key_unique
+  ON payments (submission_key)
+  WHERE submission_key IS NOT NULL;
+
+DROP FUNCTION IF EXISTS process_patient_payment(UUID, DECIMAL, TEXT, UUID[], DATE, JSONB, UUID, TEXT);
+
 CREATE OR REPLACE FUNCTION process_patient_payment(
   p_patient_id UUID,
   p_amount DECIMAL,
@@ -49,6 +59,7 @@ CREATE OR REPLACE FUNCTION process_patient_payment(
   p_treatment_ids UUID[] DEFAULT '{}',
   p_payment_date DATE DEFAULT CURRENT_DATE,
   p_receipt_snapshot JSONB DEFAULT NULL,
+  p_submission_key TEXT DEFAULT NULL,
   p_created_by_user_id UUID DEFAULT NULL,
   p_created_by_user_name TEXT DEFAULT NULL
 )
@@ -83,6 +94,7 @@ DECLARE
   v_amount DECIMAL(12,2) := ROUND(COALESCE(p_amount, 0)::NUMERIC, 2);
   v_balance_before DECIMAL(12,2);
   v_created_by_user_id UUID;
+  v_submission_key TEXT := NULLIF(BTRIM(COALESCE(p_submission_key, '')), '');
   v_service_fee_amount DECIMAL(12,2) := ROUND(COALESCE(NULLIF(BTRIM(COALESCE(p_receipt_snapshot #>> '{payment,serviceFeeAmount}', '')), ''), '0')::NUMERIC, 2);
 BEGIN
   IF v_amount <= 0 THEN
@@ -105,6 +117,37 @@ BEGIN
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Patient not found';
+  END IF;
+
+  IF v_submission_key IS NOT NULL THEN
+    SELECT *
+    INTO v_payment
+    FROM payments
+    WHERE payments.submission_key = v_submission_key;
+
+    IF FOUND THEN
+      RETURN QUERY
+      SELECT
+        v_payment.id,
+        v_payment.location_id,
+        v_payment.patient_id,
+        v_patient.name::TEXT,
+        v_payment.amount,
+        v_payment.original_amount,
+        v_payment.cleared_amount,
+        v_payment.balance_before,
+        v_payment.remaining_balance,
+        v_payment.payment_method,
+        v_payment.payment_status,
+        v_payment.treatment_ids,
+        v_payment.receipt_number,
+        v_payment.payment_date,
+        v_payment.receipt_snapshot,
+        v_payment.created_by_user_id,
+        v_payment.created_by_user_name,
+        v_payment.created_at;
+      RETURN;
+    END IF;
   END IF;
 
   IF (COALESCE(v_patient.balance, 0) + v_service_fee_amount) <= 0 THEN
@@ -140,6 +183,7 @@ BEGIN
     treatment_ids,
     payment_date,
     receipt_snapshot,
+    submission_key,
     created_by_user_id,
     created_by_user_name
   )
@@ -156,6 +200,7 @@ BEGIN
     COALESCE(p_treatment_ids, '{}'),
     COALESCE(p_payment_date, CURRENT_DATE),
     p_receipt_snapshot,
+    v_submission_key,
     v_created_by_user_id,
     NULLIF(BTRIM(COALESCE(p_created_by_user_name, '')), '')
   )
@@ -184,7 +229,7 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION process_patient_payment(UUID, DECIMAL, TEXT, UUID[], DATE, JSONB, UUID, TEXT) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION process_patient_payment(UUID, DECIMAL, TEXT, UUID[], DATE, JSONB, UUID, TEXT) TO anon, authenticated;
+REVOKE ALL ON FUNCTION process_patient_payment(UUID, DECIMAL, TEXT, UUID[], DATE, JSONB, TEXT, UUID, TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION process_patient_payment(UUID, DECIMAL, TEXT, UUID[], DATE, JSONB, TEXT, UUID, TEXT) TO anon, authenticated;
 
 SELECT 'Payment methods migration complete' AS status;

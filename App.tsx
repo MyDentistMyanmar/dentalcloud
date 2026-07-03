@@ -226,6 +226,14 @@ const isDuplicatePatientValidationError = (error: unknown): error is {
   );
 };
 
+const createPaymentSubmissionKey = (): string => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+
+  return `payment-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+};
+
 const buildDefaultPatientTypeRecords = (): PatientType[] =>
   DEFAULT_PATIENT_TYPE_OPTIONS.map((name, index) => ({
     id: `default-${index + 1}`,
@@ -421,6 +429,8 @@ const App: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const paymentSubmitInFlightRef = React.useRef(false);
+  const paymentSubmissionKeyRef = React.useRef<string | null>(null);
   const dashboardFetchRequestRef = React.useRef(0);
   const initialDataFetchRequestRef = React.useRef(0);
   const treatmentHistoryRequestRef = React.useRef(0);
@@ -2103,6 +2113,8 @@ const App: React.FC = () => {
       serviceFeeCategory: category,
       paymentMethod: 'UNKNOWN'
     });
+    paymentSubmitInFlightRef.current = false;
+    paymentSubmissionKeyRef.current = createPaymentSubmissionKey();
     setShowPaymentModal(true);
   };
 
@@ -2983,7 +2995,7 @@ const App: React.FC = () => {
 
   const handlePaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSubmitting) return;
+    if (paymentSubmitInFlightRef.current || isSubmitting) return;
     if (!selectedPatient) return;
     if (paymentOriginalAmount <= 0) {
       alert('This patient does not have an outstanding balance to collect.');
@@ -2997,10 +3009,13 @@ const App: React.FC = () => {
       alert('Please select a payment type.');
       return;
     }
+    paymentSubmitInFlightRef.current = true;
     setIsSubmitting(true);
     try {
       const session = auth.getSession();
       const paymentDate = toLocalISODate(new Date());
+      const submissionKey = paymentSubmissionKeyRef.current || createPaymentSubmissionKey();
+      paymentSubmissionKeyRef.current = submissionKey;
       const matchedMedicineSales = getMatchedMedicineSalesForReceipt(
         selectedPatient.id,
         selectedPaymentTreatments,
@@ -3020,6 +3035,7 @@ const App: React.FC = () => {
         paymentMethod: paymentDraft.paymentMethod,
         treatmentIds: selectedPaymentTreatments.map((treatment) => treatment.id),
         paymentDate,
+        submissionKey,
         receiptSnapshot: provisionalReceiptSnapshot,
         createdByUserId: null,
         createdByUserName: currentUser || session?.username || null
@@ -3082,11 +3098,14 @@ const App: React.FC = () => {
       setSelectedTreatmentsForReceipt([]);
       setSelectedMedicineSalesForReceipt([]);
       setShowPaymentModal(false);
+      paymentSubmitInFlightRef.current = false;
+      paymentSubmissionKeyRef.current = null;
       setPaymentDraft({ treatments: [], amountTendered: 0, previousBalance: 0, currentTreatmentTotal: 0, serviceFeeAmount: 0, serviceFeeCategory: null, paymentMethod: 'UNKNOWN' });
       // Ask whether to generate a receipt after posting payment.
       setShowReceiptPrompt(true);
       fetchInitialData(); 
     } catch (err: any) {
+      paymentSubmitInFlightRef.current = false;
       alert(err.message);
     } finally {
       setIsSubmitting(false);
@@ -5125,6 +5144,8 @@ const App: React.FC = () => {
           maxWidthClassName="max-w-4xl"
           onClose={() => {
             setShowPaymentModal(false);
+            paymentSubmitInFlightRef.current = false;
+            paymentSubmissionKeyRef.current = null;
             setPaymentDraft({ treatments: [], amountTendered: 0, previousBalance: 0, currentTreatmentTotal: 0, serviceFeeAmount: 0, serviceFeeCategory: null, paymentMethod: 'UNKNOWN' });
           }}
         >

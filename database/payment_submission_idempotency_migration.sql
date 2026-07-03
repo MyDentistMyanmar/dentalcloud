@@ -1,35 +1,14 @@
--- ============================================================================
--- PAYMENT RECEIPT SNAPSHOT MIGRATION
--- Purpose:
--- Persist immutable payment receipt facts so reprints stay correct even when
--- patient balances, treatment prices, or receipt settings change later.
---
--- Safe to run multiple times.
--- ============================================================================
+-- Adds idempotency protection to payment processing.
+-- Run this in Supabase SQL editor for existing deployments.
 
 BEGIN;
 
 ALTER TABLE payments
-  ADD COLUMN IF NOT EXISTS balance_before DECIMAL(12,2),
-  ADD COLUMN IF NOT EXISTS receipt_snapshot JSONB,
   ADD COLUMN IF NOT EXISTS submission_key VARCHAR(120);
 
 CREATE UNIQUE INDEX IF NOT EXISTS payments_submission_key_unique
   ON payments (submission_key)
   WHERE submission_key IS NOT NULL;
-
-UPDATE payments
-SET balance_before = ROUND((COALESCE(remaining_balance, 0) + COALESCE(amount, 0))::NUMERIC, 2)
-WHERE balance_before IS NULL;
-
-ALTER TABLE payments
-  DROP CONSTRAINT IF EXISTS payments_balance_before_check;
-
-ALTER TABLE payments
-  ADD CONSTRAINT payments_balance_before_check CHECK (balance_before >= 0);
-
-ALTER TABLE payments
-  ALTER COLUMN balance_before SET NOT NULL;
 
 DROP FUNCTION IF EXISTS process_patient_payment(UUID, DECIMAL, TEXT, UUID[], DATE, JSONB, UUID, TEXT);
 
@@ -78,14 +57,8 @@ DECLARE
   v_submission_key TEXT := NULLIF(BTRIM(COALESCE(p_submission_key, '')), '');
   v_service_fee_amount DECIMAL(12,2) := ROUND(COALESCE(NULLIF(BTRIM(COALESCE(p_receipt_snapshot #>> '{payment,serviceFeeAmount}', '')), ''), '0')::NUMERIC, 2);
 BEGIN
-  IF v_amount <= 0 THEN
-    RAISE EXCEPTION 'Payment amount must be greater than 0';
-  END IF;
-
-  IF v_service_fee_amount < 0 THEN
-    RAISE EXCEPTION 'Service fee amount cannot be negative';
-  END IF;
-
+  IF v_amount <= 0 THEN RAISE EXCEPTION 'Payment amount must be greater than 0'; END IF;
+  IF v_service_fee_amount < 0 THEN RAISE EXCEPTION 'Service fee amount cannot be negative'; END IF;
   IF v_method NOT IN ('KPAY', 'WAVEPAY', 'CASH', 'MMQR', 'DEBIT_CARD', 'CREDIT_CARD', 'AYA_PAY', 'UAB_PAY') THEN
     RAISE EXCEPTION 'Invalid payment method';
   END IF;
@@ -95,10 +68,7 @@ BEGIN
   FROM patients
   WHERE patients.id = p_patient_id
   FOR UPDATE;
-
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'Patient not found';
-  END IF;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Patient not found'; END IF;
 
   IF v_submission_key IS NOT NULL THEN
     SELECT *
@@ -131,10 +101,7 @@ BEGIN
     END IF;
   END IF;
 
-  IF (COALESCE(v_patient.balance, 0) + v_service_fee_amount) <= 0 THEN
-    RAISE EXCEPTION 'Patient has no outstanding balance';
-  END IF;
-
+  IF (COALESCE(v_patient.balance, 0) + v_service_fee_amount) <= 0 THEN RAISE EXCEPTION 'Patient has no outstanding balance'; END IF;
   IF v_amount > (COALESCE(v_patient.balance, 0) + v_service_fee_amount) THEN
     RAISE EXCEPTION 'Payment amount cannot exceed the outstanding balance';
   END IF;
@@ -152,38 +119,14 @@ BEGIN
   RETURNING * INTO v_patient;
 
   INSERT INTO payments (
-    location_id,
-    patient_id,
-    amount,
-    original_amount,
-    cleared_amount,
-    balance_before,
-    remaining_balance,
-    payment_method,
-    payment_status,
-    treatment_ids,
-    payment_date,
-    receipt_snapshot,
-    submission_key,
-    created_by_user_id,
-    created_by_user_name
-  )
-  VALUES (
-    v_patient.location_id,
-    v_patient.id,
-    v_amount,
-    v_amount,
-    v_amount,
-    v_balance_before,
-    COALESCE(v_patient.balance, 0),
-    v_method,
-    CASE WHEN COALESCE(v_patient.balance, 0) = 0 THEN 'FULL' ELSE 'PARTIAL' END,
-    COALESCE(p_treatment_ids, '{}'),
-    COALESCE(p_payment_date, CURRENT_DATE),
-    p_receipt_snapshot,
-    v_submission_key,
-    v_created_by_user_id,
-    NULLIF(BTRIM(COALESCE(p_created_by_user_name, '')), '')
+    location_id, patient_id, amount, original_amount, cleared_amount, balance_before, remaining_balance,
+    payment_method, payment_status, treatment_ids, payment_date, receipt_snapshot, submission_key,
+    created_by_user_id, created_by_user_name
+  ) VALUES (
+    v_patient.location_id, v_patient.id, v_amount, v_amount, v_amount, v_balance_before, COALESCE(v_patient.balance, 0),
+    v_method, CASE WHEN COALESCE(v_patient.balance, 0) = 0 THEN 'FULL' ELSE 'PARTIAL' END,
+    COALESCE(p_treatment_ids, '{}'), COALESCE(p_payment_date, CURRENT_DATE), p_receipt_snapshot, v_submission_key,
+    v_created_by_user_id, NULLIF(BTRIM(COALESCE(p_created_by_user_name, '')), '')
   )
   RETURNING * INTO v_payment;
 
@@ -214,5 +157,3 @@ REVOKE ALL ON FUNCTION process_patient_payment(UUID, DECIMAL, TEXT, UUID[], DATE
 GRANT EXECUTE ON FUNCTION process_patient_payment(UUID, DECIMAL, TEXT, UUID[], DATE, JSONB, TEXT, UUID, TEXT) TO anon, authenticated;
 
 COMMIT;
-
-SELECT 'payment_receipt_snapshot_migration_complete' AS status;

@@ -4927,6 +4927,7 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                   amount: params.amt,
                   paymentMethod,
                   paymentDate: new Date().toISOString().slice(0, 10),
+                  submissionKey: `assistant-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
                   createdByUserId: null,
                   createdByUserName: 'AI Assistant'
                 });
