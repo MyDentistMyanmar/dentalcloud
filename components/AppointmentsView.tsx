@@ -4,6 +4,7 @@ import { Appointment, Doctor, Patient, TreatmentType } from '../types';
 import { exportAppointmentsToPDF } from '../utils/pdfExport';
 import { exportAppointmentsToExcel } from '../utils/excelExport';
 import { parseAppointmentClinicalFocus } from '../utils/appointmentClinicalFocus';
+import { compareAppointmentStatus } from '../utils/appointmentSorting';
 import { type Currency } from '../utils/currency';
 import { formatDoctorName } from '../utils/doctorName';
 import Pagination from './Pagination';
@@ -419,6 +420,8 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
     return filteredAppointments
       .slice()
       .sort((a, b) => {
+        const statusCompare = compareAppointmentStatus(a, b);
+        if (statusCompare !== 0) return statusCompare;
         const dateCompare = a.date.localeCompare(b.date);
         if (dateCompare !== 0) return dateCompare;
         return a.time.localeCompare(b.time);
@@ -445,6 +448,8 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
     today.setHours(0, 0, 0, 0);
     return aptDate < today || apt.status !== 'Scheduled';
   }).sort((a, b) => {
+    const statusCompare = compareAppointmentStatus(a, b);
+    if (statusCompare !== 0) return statusCompare;
     const dateCompare = b.date.localeCompare(a.date);
     if (dateCompare !== 0) return dateCompare;
     return b.time.localeCompare(a.time);
@@ -539,7 +544,7 @@ const AppointmentsView: React.FC<AppointmentsViewProps> = ({
     });
 
     map.forEach((apts) => {
-      apts.sort((a, b) => a.time.localeCompare(b.time));
+      apts.sort((a, b) => compareAppointmentStatus(a, b) || a.time.localeCompare(b.time));
     });
 
     return map;

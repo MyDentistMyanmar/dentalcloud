@@ -9,6 +9,7 @@ import { Modal, Input, TimeInput } from './Shared';
 import { SearchableSelect } from './SearchableSelect';
 import Receipt from './Receipt';
 import PatientMessagingView from './PatientMessagingView';
+import { compareAppointmentStatus } from '../utils/appointmentSorting';
 import { formatTeethWithPosition } from '../utils/toothNumbering';
 import { formatDoctorName } from '../utils/doctorName';
 
@@ -84,6 +85,9 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ onLogout, messaging
   const [showReceipt, setShowReceipt] = useState(false);
   const [selectedTreatment, setSelectedTreatment] = useState<ClinicalRecord | null>(null);
   const [receiptSize, setReceiptSize] = useState<ReceiptSize>('A4');
+  const sortedAppointments = appointments.slice().sort((a, b) =>
+    compareAppointmentStatus(a, b) || a.date.localeCompare(b.date) || a.time.localeCompare(b.time)
+  );
   
   // State for showing/hiding passwords
   const [showPasswords, setShowPasswords] = useState({
@@ -624,7 +628,7 @@ const PatientDashboard: React.FC<PatientDashboardProps> = ({ onLogout, messaging
               <div className="p-4">
                 {appointments.length > 0 ? (
                   <div className="space-y-3">
-                    {appointments.map(apt => (
+                    {sortedAppointments.map(apt => (
                       <div key={apt.id} className="p-4 border border-gray-200 rounded-xl">
                         <div className="flex justify-between items-start mb-2">
                           <h3 className="text-sm font-medium text-gray-900">{apt.type}</h3>
