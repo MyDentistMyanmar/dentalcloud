@@ -923,7 +923,7 @@ const PatientsView: React.FC<PatientsViewProps> = ({
                                 </span>
                               )}
                             </div>
-                            <div className="mt-1 inline-flex rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
+                            <div className="mt-1 inline-flex items-center rounded-md border border-violet-200 bg-violet-600 px-2.5 py-1 text-xs font-bold text-white shadow-sm shadow-violet-200/70 ring-1 ring-cyan-200/70 border-l-4 border-l-cyan-300">
                               Next : {formatAppointmentDate(nextAppointment?.date)}
                             </div>
                           </div>
@@ -1091,7 +1091,7 @@ const PatientsView: React.FC<PatientsViewProps> = ({
                         <ShieldAlert size={12} className="text-gray-300" />
                       )}
                     </div>
-                    <div className="mt-1 inline-flex rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
+                    <div className="mt-1 inline-flex items-center rounded-md border border-violet-200 bg-violet-600 px-2.5 py-1 text-xs font-bold text-white shadow-sm shadow-violet-200/70 ring-1 ring-cyan-200/70 border-l-4 border-l-cyan-300">
                       Next : {formatAppointmentDate(nextAppointment?.date)}
                     </div>
                     <div className="text-xs text-gray-500">{patient.phone}</div>
