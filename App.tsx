@@ -302,6 +302,15 @@ const persistActiveBranchId = (branchId: string, userId?: string | null) => {
   }
 };
 
+const safeLoad = async <T,>(label: string, loader: Promise<T>, fallback: T): Promise<T> => {
+  try {
+    return await loader;
+  } catch (error) {
+    console.warn(`${label} failed. Continuing with a safe empty fallback.`, error);
+    return fallback;
+  }
+};
+
 const isRecoveryFlowActive = (): boolean => {
   if (typeof window === 'undefined') return false;
 
@@ -1365,11 +1374,11 @@ const App: React.FC = () => {
     const queryLocationId = sanitizedScope === ALL_BRANCHES_VALUE ? undefined : (sanitizedScope || undefined);
     // Use preloaded data when available; fetch missing dashboard datasets in parallel.
     const [patData, aptData, recordsData, expenseData, scopedPayments] = await Promise.all([
-      preloaded?.patients ? Promise.resolve(preloaded.patients) : api.patients.getAll(queryLocationId),
-      preloaded?.appointments ? Promise.resolve(preloaded.appointments) : api.appointments.getAll(queryLocationId),
-      preloaded?.records ? Promise.resolve(preloaded.records) : api.treatments.getAllRecords(queryLocationId),
-      preloaded?.expenses ? Promise.resolve(preloaded.expenses) : api.expenses.getAll(queryLocationId),
-      api.finance.getPayments(queryLocationId)
+      preloaded?.patients ? Promise.resolve(preloaded.patients) : safeLoad('Dashboard patients', api.patients.getAll(queryLocationId), []),
+      preloaded?.appointments ? Promise.resolve(preloaded.appointments) : safeLoad('Dashboard appointments', api.appointments.getAll(queryLocationId), []),
+      preloaded?.records ? Promise.resolve(preloaded.records) : safeLoad('Dashboard treatment records', api.treatments.getAllRecords(queryLocationId), []),
+      preloaded?.expenses ? Promise.resolve(preloaded.expenses) : safeLoad('Dashboard expenses', api.expenses.getAll(queryLocationId), []),
+      safeLoad('Dashboard payments', api.finance.getPayments(queryLocationId), [])
     ]);
 
     if (requestId !== dashboardFetchRequestRef.current) {
@@ -1392,15 +1401,15 @@ const App: React.FC = () => {
     const assistantLocationId = queryLocationId;
 
     const [patData, aptData, docData, typeData, recordsData, medData, expenseData, salesData, paymentData] = await Promise.all([
-      api.patients.getAll(assistantLocationId),
-      api.appointments.getAll(assistantLocationId),
-      api.doctors.getAll(assistantLocationId),
-      api.treatments.getTypes(assistantLocationId),
-      api.treatments.getAllRecords(assistantLocationId),
-      api.medicines.getAll(assistantLocationId),
-      api.expenses.getAll(assistantLocationId),
-      api.medicines.getSales(assistantLocationId),
-      api.finance.getPayments(assistantLocationId)
+      safeLoad('Assistant patients', api.patients.getAll(assistantLocationId), []),
+      safeLoad('Assistant appointments', api.appointments.getAll(assistantLocationId), []),
+      safeLoad('Assistant doctors', api.doctors.getAll(assistantLocationId), []),
+      safeLoad('Assistant treatment types', api.treatments.getTypes(assistantLocationId), []),
+      safeLoad('Assistant treatment records', api.treatments.getAllRecords(assistantLocationId), []),
+      safeLoad('Assistant medicines', api.medicines.getAll(assistantLocationId), []),
+      safeLoad('Assistant expenses', api.expenses.getAll(assistantLocationId), []),
+      safeLoad('Assistant medicine sales', api.medicines.getSales(assistantLocationId), []),
+      safeLoad('Assistant payments', api.finance.getPayments(assistantLocationId), [])
     ]);
 
     setAssistantPatients(patData);
@@ -1422,8 +1431,8 @@ const App: React.FC = () => {
       
       const [locData, patientTypeData, appointmentTypeData] = await Promise.all([
         api.locations.getAll(),
-        api.patientTypes.getAll(),
-        api.appointmentTypes.getAll()
+        safeLoad('Patient type options', api.patientTypes.getAll(), []),
+        safeLoad('Appointment type options', api.appointmentTypes.getAll(), [])
       ]);
       if (requestId !== initialDataFetchRequestRef.current) return;
 
@@ -1480,7 +1489,7 @@ const App: React.FC = () => {
       if (locId) {
         // � Critical data: what the main views need immediately �
         const sessionDoctorId = session?.role === 'doctor' ? session.doctor_id : null;
-        const allDoctorsForSession = sessionDoctorId ? await api.doctors.getAll() : [];
+        const allDoctorsForSession = sessionDoctorId ? await safeLoad('Doctor session branch lookup', api.doctors.getAll(), []) : [];
         const activeSessionDoctor = sessionDoctorId
           ? allDoctorsForSession.find((doctor) => doctor.id === sessionDoctorId) || null
           : null;
@@ -1491,19 +1500,19 @@ const App: React.FC = () => {
         const isDoctorMultiBranchSession = !!sessionDoctorId && doctorQueryLocationIds.length > 1;
         const [patData, aptData, docData, typeData, recordsData, medData, paymentsData, rescheduleLogsData] = await Promise.all([
           isDoctorMultiBranchSession
-            ? Promise.all(doctorQueryLocationIds.map((locationId) => api.patients.getAll(locationId))).then((groups) => groups.flat())
+            ? Promise.all(doctorQueryLocationIds.map((locationId) => safeLoad(`Patients for doctor branch ${locationId}`, api.patients.getAll(locationId), []))).then((groups) => groups.flat())
             : api.patients.getAll(locId),
           isDoctorMultiBranchSession
-            ? Promise.all(doctorQueryLocationIds.map((locationId) => api.appointments.getAll(locationId))).then((groups) => groups.flat())
+            ? Promise.all(doctorQueryLocationIds.map((locationId) => safeLoad(`Appointments for doctor branch ${locationId}`, api.appointments.getAll(locationId), []))).then((groups) => groups.flat())
             : api.appointments.getAll(locId),
-          activeSessionDoctor ? Promise.resolve([activeSessionDoctor]) : api.doctors.getAll(locId),
-          api.treatments.getTypes(locId),
+          activeSessionDoctor ? Promise.resolve([activeSessionDoctor]) : safeLoad('Doctors', api.doctors.getAll(locId), []),
+          safeLoad('Treatment types', api.treatments.getTypes(locId), []),
           isDoctorMultiBranchSession
-            ? Promise.all(doctorQueryLocationIds.map((locationId) => api.treatments.getAllRecords(locationId, { limit: null }))).then((groups) => groups.flat())
+            ? Promise.all(doctorQueryLocationIds.map((locationId) => safeLoad(`Treatment records for doctor branch ${locationId}`, api.treatments.getAllRecords(locationId, { limit: null }), []))).then((groups) => groups.flat())
             : api.treatments.getAllRecords(locId, sessionDoctorId ? { limit: null } : undefined),
-          api.medicines.getAll(locId),
-          api.finance.getPayments(locId),
-          api.appointmentRescheduleLogs.getAll(locId)
+          safeLoad('Medicines', api.medicines.getAll(locId), []),
+          safeLoad('Payments', api.finance.getPayments(locId), []),
+          safeLoad('Appointment reschedule logs', api.appointmentRescheduleLogs.getAll(locId), [])
         ]);
         if (requestId !== initialDataFetchRequestRef.current) return;
 
@@ -1547,9 +1556,9 @@ const App: React.FC = () => {
         void (async () => {
           try {
             const [loyaltyData, expenseData, salesData] = await Promise.all([
-              api.loyalty.getRules(locId),
-              api.expenses.getAll(locId),
-              api.medicines.getSales(locId),
+              safeLoad('Deferred loyalty rules', api.loyalty.getRules(locId), []),
+              safeLoad('Deferred expenses', api.expenses.getAll(locId), []),
+              safeLoad('Deferred medicine sales', api.medicines.getSales(locId), []),
             ]);
             if (requestId !== initialDataFetchRequestRef.current) return;
 
@@ -1642,11 +1651,11 @@ const App: React.FC = () => {
   const buildDailyReportEmailBody = async (task: ScheduledTask) => {
     const locationId = task.location_id || currentLocationId || undefined;
     const [reportTreatments, reportExpenses, reportMedicines, reportMedicineSales, scopedPayments] = await Promise.all([
-      api.treatments.getAllRecords(locationId),
-      api.expenses.getAll(locationId),
-      api.medicines.getAll(locationId),
-      api.medicines.getSales(locationId),
-      api.finance.getPayments(locationId)
+      safeLoad('Daily report treatment records', api.treatments.getAllRecords(locationId), []),
+      safeLoad('Daily report expenses', api.expenses.getAll(locationId), []),
+      safeLoad('Daily report medicines', api.medicines.getAll(locationId), []),
+      safeLoad('Daily report medicine sales', api.medicines.getSales(locationId), []),
+      safeLoad('Daily report payments', api.finance.getPayments(locationId), [])
     ]);
 
     const taskCurrency = (task.payload?.currency === 'MMK' || task.payload?.currency === 'USD')
@@ -1858,8 +1867,8 @@ const App: React.FC = () => {
     try {
       const [records, payments, rescheduleLogs] = await Promise.all([
         api.treatments.getAllRecords(currentLocationId || undefined),
-        api.finance.getPayments(currentLocationId || undefined),
-        api.appointmentRescheduleLogs.getAll(currentLocationId || undefined)
+        safeLoad('Audit log payments', api.finance.getPayments(currentLocationId || undefined), []),
+        safeLoad('Audit log reschedule logs', api.appointmentRescheduleLogs.getAll(currentLocationId || undefined), [])
       ]);
       const session = auth.getSession();
       if (session?.role === 'doctor' && session.doctor_id) {
@@ -3016,7 +3025,10 @@ const App: React.FC = () => {
       }
       
       // Refresh medicines to update stock
-      await Promise.all([fetchMedicines(), fetchMedicineSales()]);
+      await Promise.all([
+        safeLoad('Refresh medicines after inventory sale', fetchMedicines(), undefined),
+        safeLoad('Refresh medicine sales after inventory sale', fetchMedicineSales(), undefined)
+      ]);
       
       // Show success message
       setToast({

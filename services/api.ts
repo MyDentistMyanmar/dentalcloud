@@ -394,6 +394,45 @@ const getAppointmentDoctorDisplayName = (appointmentRow: any, clinicalDoctorName
   return getTrimmedDoctorName(appointmentRow?.doctors?.name);
 };
 
+const fetchAppointmentPrimaryById = async (id: string): Promise<any> => {
+  const { data, error } = await supabase
+    .from('appointments')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (error) throw new Error(error.message);
+  return data;
+};
+
+const fetchDoctorWithOptionalRelations = async (id: string): Promise<any> => {
+  let supportsDoctorLocations = false;
+  try {
+    supportsDoctorLocations = await detectDoctorLocationsSupport();
+  } catch (supportError) {
+    console.warn('Could not check doctor branch assignments. Fetching doctor without optional branch assignments.', supportError);
+  }
+
+  let { data, error } = await supabase
+    .from('doctors')
+    .select(`*, doctor_schedules(*)${supportsDoctorLocations ? ', doctor_locations(location_id)' : ''}`)
+    .eq('id', id)
+    .single();
+
+  if (error && isOptionalRelationAccessError(error, ['doctor_schedules', 'doctor_locations'])) {
+    const fallback = await supabase
+      .from('doctors')
+      .select('*')
+      .eq('id', id)
+      .single();
+    data = fallback.data;
+    error = fallback.error;
+  }
+
+  if (error) throw new Error(error.message);
+  return data;
+};
+
 const mapAppointmentRescheduleLog = (row: any): AppointmentRescheduleLog => ({
   id: row.id,
   appointment_id: row.appointment_id,
@@ -1832,7 +1871,7 @@ export const api = {
       let { data: result, error } = await supabase
         .from('appointments')
         .insert(payload)
-        .select('*, patients!appointments_patient_id_fkey(name, balance), doctors(name)')
+        .select('*')
         .single();
 
       if (error && /created_by_user_(id|name)/i.test(error.message || '')) {
@@ -1843,7 +1882,7 @@ export const api = {
         const legacyInsert = await supabase
           .from('appointments')
           .insert(legacyPayload)
-          .select('*, patients!appointments_patient_id_fkey(name, balance), doctors(name)')
+          .select('*')
           .single();
 
         result = legacyInsert.data;
@@ -1857,14 +1896,7 @@ export const api = {
 
       if (requestedStatus === 'Completed') {
         await completeAppointmentWithClinicalFee(result.id);
-        const completedResult = await supabase
-          .from('appointments')
-          .select('*, patients!appointments_patient_id_fkey(name, balance), doctors(name)')
-          .eq('id', result.id)
-          .single();
-
-        if (completedResult.error) throw new Error(completedResult.error.message);
-        result = completedResult.data;
+        result = await fetchAppointmentPrimaryById(result.id);
       }
       
       // Flatten the response
@@ -1923,7 +1955,7 @@ export const api = {
     ): Promise<Appointment> => {
       const { data: existingAppointment, error: existingAppointmentError } = await supabase
         .from('appointments')
-        .select('status, clinical_fee_status, patient_id, location_id, date, time, guest_name, patients!appointments_patient_id_fkey(name), doctors(name)')
+        .select('status, clinical_fee_status, patient_id, location_id, date, time, guest_name, doctor_id')
         .eq('id', id)
         .single();
 
@@ -1984,7 +2016,7 @@ export const api = {
         .from('appointments')
         .update(updatePayload)
         .eq('id', id)
-        .select('*, patients!appointments_patient_id_fkey(name, balance), doctors(name)')
+        .select('*')
         .single();
 
       if (error) throw new Error(error.message);
@@ -2000,15 +2032,21 @@ export const api = {
 
       if (shouldCreateRescheduleAudit) {
         const patientName =
-          getJoinedOne(result.patients)?.name ||
-          getJoinedOne(existingAppointment.patients)?.name ||
           result.guest_name ||
           existingAppointment.guest_name ||
           'Unknown';
-        const doctorName =
-          getTrimmedDoctorName(getJoinedOne(result.doctors)?.name) ||
-          getTrimmedDoctorName(getJoinedOne(existingAppointment.doctors)?.name) ||
-          null;
+        let doctorName: string | null = null;
+        const auditDoctorId = result.doctor_id || existingAppointment.doctor_id;
+        if (auditDoctorId) {
+          const { data: doctorRow, error: doctorNameError } = await supabase
+            .from('doctors')
+            .select('name')
+            .eq('id', auditDoctorId)
+            .maybeSingle();
+          if (!doctorNameError) {
+            doctorName = getTrimmedDoctorName(doctorRow?.name) || null;
+          }
+        }
 
         await api.appointmentRescheduleLogs.create({
           appointment_id: result.id,
@@ -2026,14 +2064,7 @@ export const api = {
 
       if (shouldComplete) {
         await completeAppointmentWithClinicalFee(id);
-        const completedResult = await supabase
-          .from('appointments')
-          .select('*, patients!appointments_patient_id_fkey(name, balance), doctors(name)')
-          .eq('id', id)
-          .single();
-
-        if (completedResult.error) throw new Error(completedResult.error.message);
-        result = completedResult.data;
+        result = await fetchAppointmentPrimaryById(id);
       }
       
       // Flatten the response
@@ -2379,11 +2410,11 @@ export const api = {
         doctor_earnings: doctorEarnings
       };
 
-      const { data: result, error } = await supabase
+      let { data: result, error } = await supabase
         .from('treatments')
         .update(payload)
         .eq('id', id)
-        .select('*, patients(name, balance), doctors(name)')
+        .select('*')
         .single();
 
       if (error) throw new Error(error.message);
@@ -2856,15 +2887,8 @@ export const api = {
         }
       }
 
-      // Fetch the complete doctor with schedules
-      const supportsDoctorLocations = await detectDoctorLocationsSupport();
-      const { data: completeDoctor, error: fetchError } = await supabase
-        .from('doctors')
-        .select(`*, doctor_schedules(*)${supportsDoctorLocations ? ', doctor_locations(location_id)' : ''}`)
-        .eq('id', doctorData.id)
-        .single();
-
-      if (fetchError) throw new Error(fetchError.message);
+      // Fetch the complete doctor with schedules when optional relations are available.
+      const completeDoctor = await fetchDoctorWithOptionalRelations(doctorData.id);
 
       return mapDoctor(completeDoctor);
     },
@@ -3040,15 +3064,8 @@ export const api = {
         }
       }
 
-      // Fetch updated doctor
-      const supportsDoctorLocations = await detectDoctorLocationsSupport();
-      const { data: updatedDoctor, error: fetchError } = await supabase
-        .from('doctors')
-        .select(`*, doctor_schedules(*)${supportsDoctorLocations ? ', doctor_locations(location_id)' : ''}`)
-        .eq('id', id)
-        .single();
-
-      if (fetchError) throw new Error(fetchError.message);
+      // Fetch updated doctor with schedules when optional relations are available.
+      const updatedDoctor = await fetchDoctorWithOptionalRelations(id);
 
       return mapDoctor(updatedDoctor);
     },
@@ -3077,11 +3094,33 @@ export const api = {
     },
     getAvailableTimes: async (doctorId: string, date: string): Promise<string[]> => {
       // Get doctor's schedules
-      const { data: doctor, error: doctorError } = await supabase
+      let { data: doctor, error: doctorError } = await supabase
         .from('doctors')
         .select('*, doctor_schedules(*)')
         .eq('id', doctorId)
         .single();
+
+      if (doctorError && isOptionalRelationAccessError(doctorError, ['doctor_schedules'])) {
+        const [doctorResult, schedulesResult] = await Promise.all([
+          supabase
+            .from('doctors')
+            .select('*')
+            .eq('id', doctorId)
+            .single(),
+          supabase
+            .from('doctor_schedules')
+            .select('*')
+            .eq('doctor_id', doctorId)
+        ]);
+
+        if (doctorResult.error) {
+          doctor = null;
+          doctorError = doctorResult.error;
+        } else {
+          doctor = { ...doctorResult.data, doctor_schedules: schedulesResult.error ? [] : (schedulesResult.data || []) };
+          doctorError = null;
+        }
+      }
 
       if (doctorError) throw new Error(doctorError.message);
 
@@ -3424,10 +3463,10 @@ export const api = {
         .single();
 
       if (error) {
-        if (isMissingRelationError(error, 'payment_corrections')) {
+        if (isOptionalRelationAccessError(error, ['patients', 'payment_corrections', 'users'])) {
           const fallback = await supabase
             .from('payments')
-            .select('*, patients(name, balance)')
+            .select('*')
             .eq('id', correctedPaymentId)
             .single();
           if (fallback.error) throw new Error(fallback.error.message);
@@ -4939,7 +4978,7 @@ export const api = {
       const { data: saleResult, error: saleError } = await supabase
         .from('medicine_sales')
         .insert(saleData)
-        .select('*, patients(name), medicines(name)')
+        .select('*')
         .single();
 
       if (saleError) throw new Error(`Sale failed: ${saleError.message}`);
