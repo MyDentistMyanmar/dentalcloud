@@ -221,12 +221,12 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], r
               {isDoctor ? 'Your completed treatments and patient clinical history.' : 'A daily operational record of appointments, treatments, responsible staff, and patient balances.'}
             </p>
             {!isDoctor && (
-              <div className="mt-3 grid grid-cols-1 gap-2 text-xs min-[380px]:grid-cols-3 sm:flex sm:flex-wrap">
-                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-center font-semibold text-slate-700 sm:text-left">{filteredRows.length} visible</span>
-                <span className="rounded-full border theme-accent-border theme-accent-soft-bg px-3 py-1 text-center font-semibold theme-accent-text sm:text-left">{filteredSummary.appointments} appts</span>
-                <span className="rounded-full border border-amber-100 bg-amber-50 px-3 py-1 text-center font-semibold text-amber-700 sm:text-left">{filteredSummary.reschedules} reschedules</span>
-                <span className="rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-center font-semibold text-emerald-700 sm:text-left">{filteredSummary.treatments} treatments</span>
-                <span className="rounded-full border border-violet-100 bg-violet-50 px-3 py-1 text-center font-semibold text-violet-700 sm:text-left">{filteredSummary.payments} payments</span>
+              <div className="mt-3 flex max-w-full gap-2 overflow-x-auto pb-1 text-xs sm:flex-wrap sm:overflow-visible sm:pb-0">
+                <span className="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1 text-center font-semibold text-slate-700 sm:text-left">{filteredRows.length} visible</span>
+                <span className="shrink-0 rounded-full border theme-accent-border theme-accent-soft-bg px-3 py-1 text-center font-semibold theme-accent-text sm:text-left">{filteredSummary.appointments} appts</span>
+                <span className="shrink-0 rounded-full border border-amber-100 bg-amber-50 px-3 py-1 text-center font-semibold text-amber-700 sm:text-left">{filteredSummary.reschedules} reschedules</span>
+                <span className="shrink-0 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-center font-semibold text-emerald-700 sm:text-left">{filteredSummary.treatments} treatments</span>
+                <span className="shrink-0 rounded-full border border-violet-100 bg-violet-50 px-3 py-1 text-center font-semibold text-violet-700 sm:text-left">{filteredSummary.payments} payments</span>
               </div>
             )}
           </div>
@@ -269,7 +269,7 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], r
                 {isTodayRange ? 'Today' : 'Custom'}
               </button>
             </div>
-                <div className="grid w-full grid-cols-5 rounded-xl border border-slate-200 bg-slate-50 p-1 sm:inline-grid sm:w-auto">
+                <div className="grid w-full grid-cols-2 rounded-xl border border-slate-200 bg-slate-50 p-1 min-[430px]:grid-cols-3 sm:inline-grid sm:w-auto sm:grid-cols-5">
               {[
                 { value: 'all', label: 'All' },
                 { value: 'appointments', label: 'Appointments' },
@@ -284,7 +284,7 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], r
                     setAuditFilter(item.value as AuditFilter);
                     setCurrentPage(1);
                   }}
-                  className={`rounded-lg px-2 py-2 text-xs transition-colors sm:px-3.5 ${
+                  className={`rounded-lg px-2 py-2 text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--hover-300)] sm:px-3.5 ${
                     auditFilter === item.value ? 'bg-white theme-accent-text shadow-sm font-bold' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
@@ -304,7 +304,7 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], r
                   setSearchTerm(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--hover-300)]"
               />
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             </div>
@@ -319,13 +319,13 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], r
             <button
               onClick={handleDownloadJSON}
               disabled={auditRows.length === 0}
-              className="flex min-h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
+              className="flex min-h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[var(--hover-300)] disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
             >
               <Download size={16} /> <span className="whitespace-nowrap">JSON Backup</span>
             </button>
             <button
               onClick={onRefresh}
-              className="refresh-action-button flex min-h-10 items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold sm:px-4"
+              className="refresh-action-button flex min-h-10 items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[var(--hover-300)] sm:px-4"
             >
               <RotateCw size={16} className="refresh-action-icon" /> Refresh
             </button>
@@ -343,8 +343,8 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], r
         </div>
       ) : (
         <>
-          <div className="hidden md:block overflow-x-auto">
-            <table className="w-full">
+          <div className="hidden lg:block overflow-x-auto">
+            <table className="min-w-[1180px] w-full">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
                   <th className="px-6 py-4 text-left text-[11px] font-black text-slate-500 uppercase tracking-[0.18em]">Type</th>
@@ -374,22 +374,22 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], r
                     if (row.kind === 'payment') {
                       const payment = row.payment;
                       return (
-                        <tr key={`payment-${payment.id}`} className="transition-colors hover:bg-violet-50/40">
-                          <td className="px-6 py-4 text-sm font-semibold text-violet-700">
+                         <tr key={`payment-${payment.id}`} className="border-l-4 border-violet-300 transition-colors hover:bg-violet-50/40">
+                          <td className="px-4 py-4 text-sm font-semibold text-violet-700 xl:px-6">
                             <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-100 bg-violet-50 px-2.5 py-1 text-xs font-bold">
                               <WalletCards size={14} /> Payment
                             </span>
                           </td>
-                          <td className="px-6 py-4 text-sm text-slate-500 whitespace-nowrap">{formatCreatedAt(payment.createdAt || payment.date)}</td>
-                          <td className="px-6 py-4 font-bold text-slate-900">{payment.patient_name || 'Unknown'}</td>
-                          <td className="px-6 py-4 text-sm text-slate-400">-</td>
-                          <td className="px-6 py-4 text-sm text-slate-700">
+                          <td className="px-4 py-4 text-sm text-slate-500 whitespace-nowrap xl:px-6">{formatCreatedAt(payment.createdAt || payment.date)}</td>
+                          <td className="px-4 py-4 font-bold text-slate-900 xl:px-6">{payment.patient_name || 'Unknown'}</td>
+                          <td className="px-4 py-4 text-sm text-slate-400 xl:px-6">-</td>
+                          <td className="px-4 py-4 text-sm text-slate-700 xl:px-6">
                             Patient paid {formatCurrency(payment.amount, currency)}{payment.receiptNumber ? ` · ${payment.receiptNumber}` : ''}
                           </td>
-                          <td className="px-6 py-4 text-sm text-slate-700">{payment.createdByUserName || 'Unknown'}</td>
-                          <td className="px-6 py-4 text-right text-sm">{renderPatientBalance(payment.remainingBalance)}</td>
-                          <td className="px-6 py-4 text-right text-sm font-black text-violet-700">{formatCurrency(payment.amount, currency)}</td>
-                          <td className="px-6 py-4 text-sm font-bold text-slate-800">
+                          <td className="px-4 py-4 text-sm text-slate-700 xl:px-6">{payment.createdByUserName || 'Unknown'}</td>
+                          <td className="px-4 py-4 text-right text-sm xl:px-6">{renderPatientBalance(payment.remainingBalance)}</td>
+                          <td className="px-4 py-4 text-right text-sm font-black text-violet-700 xl:px-6">{formatCurrency(payment.amount, currency)}</td>
+                          <td className="px-4 py-4 text-sm font-bold text-slate-800 xl:px-6">
                             <div className="flex items-center justify-between gap-3">
                               <span>{formatPaymentMethod(payment.paymentMethod)}</span>
                               <div className="flex items-center gap-2">
@@ -417,7 +417,7 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], r
                             </div>
                             {renderPaymentCorrections(payment)}
                           </td>
-                          <td className="px-6 py-4 text-right text-sm text-slate-400">-</td>
+                          <td className="px-4 py-4 text-right text-sm text-slate-400 xl:px-6">-</td>
                         </tr>
                       );
                     }
@@ -425,29 +425,29 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], r
                     if (row.kind === 'reschedule') {
                       const rescheduleLog = row.rescheduleLog;
                       return (
-                        <tr key={`reschedule-${rescheduleLog.id}`} className="transition-colors hover:bg-amber-50/40">
-                          <td className="px-6 py-4 text-sm font-semibold text-amber-700">
+                        <tr key={`reschedule-${rescheduleLog.id}`} className="border-l-4 border-amber-300 transition-colors hover:bg-amber-50/40">
+                          <td className="px-4 py-4 text-sm font-semibold text-amber-700 xl:px-6">
                             <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-100 bg-amber-50 px-2.5 py-1 text-xs font-bold">
                               <CalendarDays size={14} /> Rescheduled Appointment
                             </span>
                           </td>
-                          <td className="px-6 py-4 text-sm text-slate-500 whitespace-nowrap">{formatCreatedAt(rescheduleLog.created_at)}</td>
-                          <td className="px-6 py-4 font-bold text-slate-900">{rescheduleLog.patient_name || 'Unknown'}</td>
-                          <td className="px-6 py-4 text-sm text-slate-700">{formatDoctorName(rescheduleLog.doctor_name)}</td>
-                          <td className="px-6 py-4 text-sm text-slate-700 max-w-md">
+                          <td className="px-4 py-4 text-sm text-slate-500 whitespace-nowrap xl:px-6">{formatCreatedAt(rescheduleLog.created_at)}</td>
+                          <td className="px-4 py-4 font-bold text-slate-900 xl:px-6">{rescheduleLog.patient_name || 'Unknown'}</td>
+                          <td className="px-4 py-4 text-sm text-slate-700 xl:px-6">{formatDoctorName(rescheduleLog.doctor_name)}</td>
+                          <td className="px-4 py-4 text-sm text-slate-700 max-w-md xl:px-6">
                             <div className="space-y-1">
                               <p className="font-semibold text-amber-800">Original Date: {rescheduleLog.original_date} -&gt; New Date: {rescheduleLog.new_date}</p>
                               <p>Reason: {rescheduleLog.reason || '-'}</p>
                             </div>
                           </td>
-                          <td className="px-6 py-4 text-sm text-slate-700">
+                          <td className="px-4 py-4 text-sm text-slate-700 xl:px-6">
                             <span className="font-semibold">{rescheduleLog.admin_name || 'Unknown'}</span>
                             <span className="block text-xs text-slate-500">{formatCreatedAt(rescheduleLog.created_at)}</span>
                           </td>
-                          <td className="px-6 py-4 text-right text-sm text-slate-400">-</td>
-                          <td className="px-6 py-4 text-right text-sm font-black text-slate-900">-</td>
-                          <td className="px-6 py-4 text-sm text-slate-400">-</td>
-                          <td className="px-6 py-4 text-right text-sm text-slate-400">-</td>
+                          <td className="px-4 py-4 text-right text-sm text-slate-400 xl:px-6">-</td>
+                          <td className="px-4 py-4 text-right text-sm font-black text-slate-900 xl:px-6">-</td>
+                          <td className="px-4 py-4 text-sm text-slate-400 xl:px-6">-</td>
+                          <td className="px-4 py-4 text-right text-sm text-slate-400 xl:px-6">-</td>
                         </tr>
                       );
                     }
@@ -455,52 +455,52 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], r
                     if (row.kind === 'appointment') {
                       const appointment = row.appointment;
                       return (
-                        <tr key={`appointment-${appointment.id}`} className="hover:bg-blue-50/40 transition-colors">
-                          <td className="px-6 py-4 text-sm theme-accent-text font-semibold">
+                        <tr key={`appointment-${appointment.id}`} className="border-l-4 border-[var(--hover-300)] transition-colors hover:bg-[var(--hover-50)]/40">
+                          <td className="px-4 py-4 text-sm theme-accent-text font-semibold xl:px-6">
                             <span className="inline-flex items-center gap-1.5 rounded-full border theme-accent-border theme-accent-soft-bg px-2.5 py-1 text-xs font-bold">
                               <CalendarDays size={14} /> Appointment
                             </span>
                           </td>
-                          <td className="px-6 py-4 text-sm text-slate-500 whitespace-nowrap">{appointment.date} {appointment.time}</td>
-                          <td className="px-6 py-4 font-bold text-slate-900">{appointment.patient_name || 'Unknown'}</td>
-                          <td className="px-6 py-4 text-sm text-slate-700">{formatDoctorName(appointment.doctor_name)}</td>
-                          <td className="px-6 py-4 text-sm text-slate-700 max-w-md">
+                          <td className="px-4 py-4 text-sm text-slate-500 whitespace-nowrap xl:px-6">{appointment.date} {appointment.time}</td>
+                          <td className="px-4 py-4 font-bold text-slate-900 xl:px-6">{appointment.patient_name || 'Unknown'}</td>
+                          <td className="px-4 py-4 text-sm text-slate-700 xl:px-6">{formatDoctorName(appointment.doctor_name)}</td>
+                          <td className="px-4 py-4 text-sm text-slate-700 max-w-md xl:px-6">
                             Appointment made for {appointment.date} at {appointment.time} ({appointment.type || 'Checkup'}, {appointment.status})
                           </td>
-                          <td className="px-6 py-4 text-sm text-slate-700">
+                          <td className="px-4 py-4 text-sm text-slate-700 xl:px-6">
                             <span className="font-semibold">{appointment.created_by_user_name || 'Unknown'}</span>
                             <span className="block text-xs text-slate-500">{formatCreatedAt(appointment.created_at)}</span>
                           </td>
-                          <td className="px-6 py-4 text-right text-sm">{renderPatientBalance(appointment.patient_balance)}</td>
-                          <td className="px-6 py-4 text-right text-sm font-black text-slate-900">-</td>
-                          <td className="px-6 py-4 text-sm text-slate-400">-</td>
-                          <td className="px-6 py-4 text-right text-sm text-slate-400">-</td>
+                          <td className="px-4 py-4 text-right text-sm xl:px-6">{renderPatientBalance(appointment.patient_balance)}</td>
+                          <td className="px-4 py-4 text-right text-sm font-black text-slate-900 xl:px-6">-</td>
+                          <td className="px-4 py-4 text-sm text-slate-400 xl:px-6">-</td>
+                          <td className="px-4 py-4 text-right text-sm text-slate-400 xl:px-6">-</td>
                         </tr>
                       );
                     }
 
                     const rec = row.record;
                     return (
-                      <tr key={`treatment-${rec.id}`} className="hover:bg-emerald-50/30 transition-colors">
-                        <td className="px-6 py-4 text-sm text-emerald-700 font-semibold">
+                      <tr key={`treatment-${rec.id}`} className="border-l-4 border-emerald-300 transition-colors hover:bg-emerald-50/30">
+                        <td className="px-4 py-4 text-sm text-emerald-700 font-semibold xl:px-6">
                           <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-xs font-bold">
                             <Stethoscope size={14} /> Treatment
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-sm text-slate-500 whitespace-nowrap">{rec.date}</td>
-                        <td className="px-6 py-4 font-bold text-slate-900">{rec.patient_name || 'Unknown'}</td>
-                        <td className="px-6 py-4 text-sm text-slate-700">{formatDoctorName(rec.doctor_name)}</td>
-                        <td className="px-6 py-4 text-sm text-slate-700 max-w-md">
+                        <td className="px-4 py-4 text-sm text-slate-500 whitespace-nowrap xl:px-6">{rec.date}</td>
+                        <td className="px-4 py-4 font-bold text-slate-900 xl:px-6">{rec.patient_name || 'Unknown'}</td>
+                        <td className="px-4 py-4 text-sm text-slate-700 xl:px-6">{formatDoctorName(rec.doctor_name)}</td>
+                        <td className="px-4 py-4 text-sm text-slate-700 max-w-md xl:px-6">
                           {renderTreatmentDescriptionList(rec)}
                           <span className="block text-xs font-mono text-gray-500 mt-1">
                             {rec.teeth && rec.teeth.length > 0 ? formatTeethWithPosition(rec.teeth) : 'General'}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-sm text-slate-700">Clinical record</td>
-                        <td className="px-6 py-4 text-right text-sm">{renderPatientBalance(rec.patient_balance)}</td>
-                        <td className="px-6 py-4 text-right text-sm font-black text-slate-900">{formatCurrency(rec.cost || 0, currency)}</td>
-                        <td className="px-6 py-4 text-sm text-slate-400">-</td>
-                        <td className="px-6 py-4 text-right text-sm font-bold text-emerald-700">{rec.doctorEarnings ? formatCurrency(rec.doctorEarnings, currency) : '-'}</td>
+                        <td className="px-4 py-4 text-sm text-slate-700 xl:px-6">Clinical record</td>
+                        <td className="px-4 py-4 text-right text-sm xl:px-6">{renderPatientBalance(rec.patient_balance)}</td>
+                        <td className="px-4 py-4 text-right text-sm font-black text-slate-900 xl:px-6">{formatCurrency(rec.cost || 0, currency)}</td>
+                        <td className="px-4 py-4 text-sm text-slate-400 xl:px-6">-</td>
+                        <td className="px-4 py-4 text-right text-sm font-bold text-emerald-700 xl:px-6">{rec.doctorEarnings ? formatCurrency(rec.doctorEarnings, currency) : '-'}</td>
                       </tr>
                     );
                   })
@@ -509,7 +509,7 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], r
             </table>
           </div>
 
-          <div className="md:hidden divide-y divide-slate-100 bg-slate-50/40 p-2">
+          <div className="lg:hidden bg-slate-50/60 p-2 sm:p-3">
             {filteredRows.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-10 text-center">
                 <p className="text-sm font-semibold text-slate-600">{isDoctor ? 'No patient treatment records found' : 'No audit records found'}</p>
@@ -520,7 +520,8 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], r
                 if (row.kind === 'payment') {
                   const payment = row.payment;
                   return (
-                    <div key={`payment-${payment.id}`} className="my-2 min-w-0 rounded-2xl border border-violet-100 bg-white p-3 shadow-sm min-[380px]:p-4">
+                    <div key={`payment-${payment.id}`} className="my-2 min-w-0 overflow-hidden rounded-2xl border border-violet-100 bg-white shadow-sm ring-1 ring-violet-50">
+                      <div className="border-l-4 border-violet-400 p-3 min-[380px]:p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="text-[11px] font-black uppercase tracking-wider text-violet-600">Payment</p>
@@ -565,6 +566,7 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], r
                         ) : null}
                       </div>
                       {renderPaymentCorrections(payment)}
+                      </div>
                     </div>
                   );
                 }
@@ -572,7 +574,8 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], r
                 if (row.kind === 'reschedule') {
                   const rescheduleLog = row.rescheduleLog;
                   return (
-                    <div key={`reschedule-${rescheduleLog.id}`} className="my-2 min-w-0 rounded-2xl border border-amber-100 bg-white p-3 shadow-sm min-[380px]:p-4">
+                    <div key={`reschedule-${rescheduleLog.id}`} className="my-2 min-w-0 overflow-hidden rounded-2xl border border-amber-100 bg-white shadow-sm ring-1 ring-amber-50">
+                      <div className="border-l-4 border-amber-400 p-3 min-[380px]:p-4">
                       <div className="flex min-w-0 items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
                           <p className="text-[11px] font-black uppercase tracking-wider text-amber-600">Rescheduled Appointment</p>
@@ -594,6 +597,7 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], r
                         <p className="break-words text-sm text-slate-800">{rescheduleLog.admin_name || 'Unknown'}</p>
                         <p className="text-xs text-slate-500 mt-1">{formatCreatedAt(rescheduleLog.created_at)}</p>
                       </div>
+                      </div>
                     </div>
                   );
                 }
@@ -601,7 +605,8 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], r
                 if (row.kind === 'appointment') {
                   const appointment = row.appointment;
                   return (
-                    <div key={`appointment-${appointment.id}`} className="my-2 min-w-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm min-[380px]:p-4">
+                    <div key={`appointment-${appointment.id}`} className="my-2 min-w-0 overflow-hidden rounded-2xl border theme-accent-border bg-white shadow-sm ring-1 ring-[var(--hover-50)]">
+                      <div className="border-l-4 border-[var(--hover-400)] p-3 min-[380px]:p-4">
                       <div className="flex min-w-0 items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
                           <p className="text-[11px] font-black uppercase tracking-wider theme-accent-text">Appointment</p>
@@ -626,13 +631,15 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], r
                         <span className="text-xs font-semibold text-rose-700">Patient Balance</span>
                         <span className="min-w-0 text-right text-sm">{renderPatientBalance(appointment.patient_balance)}</span>
                       </div>
+                      </div>
                     </div>
                   );
                 }
 
                 const rec = row.record;
                 return (
-                  <div key={`treatment-${rec.id}`} className="my-2 min-w-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm min-[380px]:p-4">
+                  <div key={`treatment-${rec.id}`} className="my-2 min-w-0 overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-sm ring-1 ring-emerald-50">
+                    <div className="border-l-4 border-emerald-400 p-3 min-[380px]:p-4">
                     <div className="flex min-w-0 items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
                         <p className="text-[11px] font-black uppercase tracking-wider text-emerald-500">Treatment</p>
@@ -658,6 +665,7 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], r
                       <p className="mt-2 break-words font-mono text-xs text-slate-500">
                         {rec.teeth && rec.teeth.length > 0 ? formatTeethWithPosition(rec.teeth) : 'General'}
                       </p>
+                    </div>
                     </div>
                   </div>
                 );
