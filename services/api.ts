@@ -1472,13 +1472,22 @@ export const api = {
       try {
         const trimmedIdentifier = identifier.trim();
         const normalizedIdentifier = normalizePatientUsernameForAuth(trimmedIdentifier) || trimmedIdentifier.toLowerCase();
+        type PatientAuthCandidate = {
+          patient_id: string;
+          password: string | null;
+          is_verified?: boolean | null;
+          phone?: string | null;
+        };
+        const findVerifiedPasswordMatch = (rows: PatientAuthCandidate[]): PatientAuthCandidate | null => {
+          return rows.find((row) => row.is_verified !== false && row.password === password) || null;
+        };
         
         // 1. Try to find patient_auth by email, phone, or username
         const lookupAuthMatch = async (
           column: 'email' | 'phone' | 'username',
           value: string
-        ): Promise<{ patient_id: string; password: string | null; is_verified?: boolean | null } | null> => {
-          if (!value) return null;
+        ): Promise<PatientAuthCandidate[]> => {
+          if (!value) return [];
 
           const { data, error } = await supabase
             .from('patient_auth')
@@ -1490,16 +1499,15 @@ export const api = {
 
           if (error) {
             console.warn(`Patient auth lookup error (${column}):`, error.message);
-            return null;
+            return [];
           }
 
-          const rows = data || [];
-          return rows.find((row: any) => row.is_verified !== false) || rows[0] || null;
+          return data || [];
         };
 
-        const lookupPhoneByNormalizedDigits = async (): Promise<{ patient_id: string; password: string | null; is_verified?: boolean | null } | null> => {
+        const lookupPhoneByNormalizedDigits = async (): Promise<PatientAuthCandidate[]> => {
           const normalizedPhoneDigits = normalizePhoneDigitsForLookup(trimmedIdentifier);
-          if (!normalizedPhoneDigits) return null;
+          if (!normalizedPhoneDigits) return [];
 
           const { data, error } = await supabase
             .from('patient_auth')
@@ -1509,29 +1517,35 @@ export const api = {
 
           if (error) {
             console.warn('Patient auth normalized phone lookup error:', error.message);
-            return null;
+            return [];
           }
 
-          const matchingRows = (data || []).filter((record: any) => normalizePhoneDigitsForLookup(record.phone) === normalizedPhoneDigits);
-          return matchingRows.find((record: any) => record.is_verified !== false) || matchingRows[0] || null;
+          return (data || []).filter((record: any) => normalizePhoneDigitsForLookup(record.phone) === normalizedPhoneDigits);
         };
 
         const normalizedPhone = normalizeMyanmarPhoneForLookup(trimmedIdentifier);
-        const authMatch =
-          await lookupAuthMatch('email', normalizedIdentifier) ||
-          await lookupAuthMatch('username', normalizedIdentifier) ||
-          await lookupAuthMatch('phone', trimmedIdentifier) ||
-          await lookupAuthMatch('phone', normalizedPhone || '') ||
-          await lookupPhoneByNormalizedDigits();
+        const authCandidates = [
+          ...await lookupAuthMatch('email', normalizedIdentifier),
+          ...await lookupAuthMatch('username', normalizedIdentifier),
+          ...await lookupAuthMatch('phone', trimmedIdentifier),
+          ...await lookupAuthMatch('phone', normalizedPhone || ''),
+          ...await lookupPhoneByNormalizedDigits()
+        ];
+        const authMatch = findVerifiedPasswordMatch(authCandidates);
 
-        if (authMatch?.patient_id) {
-          if (authMatch.is_verified === false) {
-            console.log('Patient auth record is not verified yet.');
+        if (authCandidates.length > 0) {
+          if (!authMatch) {
+            const hasVerifiedCandidate = authCandidates.some((candidate) => candidate.is_verified !== false);
+            if (!hasVerifiedCandidate) {
+              console.log('Patient auth record is not verified yet.');
+            } else {
+              console.log('Password mismatch for patient_auth records.');
+            }
             return null;
           }
 
-          if (authMatch.password !== password) {
-            console.log('Password mismatch for patient_auth record.');
+          if (authMatch.is_verified === false) {
+            console.log('Patient auth record is not verified yet.');
             return null;
           }
 

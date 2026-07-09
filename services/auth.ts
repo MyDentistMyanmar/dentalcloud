@@ -109,7 +109,11 @@ export const auth = {
   async logout(): Promise<void> {
     const session = this.getSession();
     if (session && session.role !== 'patient') {
-      await activeStaffPresence.markInactive(session);
+      try {
+        await activeStaffPresence.markInactive(session);
+      } catch (error) {
+        console.warn('Unable to clear active staff presence during logout. Continuing local logout.', error);
+      }
     }
 
     localStorage.removeItem(SESSION_KEY);
@@ -247,13 +251,11 @@ export const auth = {
 
     try {
       await activeStaffPresence.markActive(session);
-      return session;
     } catch (error) {
-      localStorage.removeItem(SESSION_KEY);
-      localStorage.removeItem(SESSION_USER_KEY);
-      localStorage.removeItem(SESSION_INSTANCE_KEY);
-      throw error;
+      console.warn('Unable to update active staff presence during login. Continuing authenticated session.', error);
     }
+
+    return session;
   }
 };
 
