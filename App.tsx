@@ -1509,7 +1509,7 @@ const App: React.FC = () => {
           safeLoad('Treatment types', api.treatments.getTypes(locId), []),
           isDoctorMultiBranchSession
             ? Promise.all(doctorQueryLocationIds.map((locationId) => safeLoad(`Treatment records for doctor branch ${locationId}`, api.treatments.getAllRecords(locationId, { limit: null }), []))).then((groups) => groups.flat())
-            : api.treatments.getAllRecords(locId, sessionDoctorId ? { limit: null } : undefined),
+            : api.treatments.getAllRecords(locId, { limit: null }),
           safeLoad('Medicines', api.medicines.getAll(locId), []),
           safeLoad('Payments', api.finance.getPayments(locId), []),
           safeLoad('Appointment reschedule logs', api.appointmentRescheduleLogs.getAll(locId), [])
@@ -1866,7 +1866,7 @@ const App: React.FC = () => {
     setLoading(true);
     try {
       const [records, payments, rescheduleLogs] = await Promise.all([
-        api.treatments.getAllRecords(currentLocationId || undefined),
+        api.treatments.getAllRecords(currentLocationId || undefined, { limit: null }),
         safeLoad('Audit log payments', api.finance.getPayments(currentLocationId || undefined), []),
         safeLoad('Audit log reschedule logs', api.appointmentRescheduleLogs.getAll(currentLocationId || undefined), [])
       ]);
