@@ -35,6 +35,7 @@ interface ClinicalViewProps {
   onDeselectAll: () => void;
   onTreatmentSubmit: (t: TreatmentType, chargeLines?: TreatmentChargeLine[]) => Promise<void>;
   onPaymentRequest: (treatments: ClinicalRecord[]) => void;
+  onServiceFeeRequest?: () => void;
   onClosePatient: () => void;
   onSelectPatient: (patient: Patient) => void;
   onOpenDirectory: () => void;
@@ -77,6 +78,7 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
   onDeselectAll,
   onTreatmentSubmit,
   onPaymentRequest,
+  onServiceFeeRequest,
   onClosePatient,
   onSelectPatient,
   onOpenDirectory,
@@ -120,6 +122,7 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
   };
 
   const currencySymbol = getCurrencySymbol(currency);
+  const outstandingBalance = Math.max(0, Number(selectedPatient?.balance || 0));
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [authModal, setAuthModal] = React.useState(false);
   const [editModal, setEditModal] = React.useState(false);
@@ -830,18 +833,25 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
              <div className="grid grid-cols-1 gap-3">
                <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
                  <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-1">Outstanding Balance</p>
-                 <div className="flex justify-between items-baseline">
-                    <p className={`text-xl font-black ${selectedPatient.balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                  <div className="flex justify-between items-baseline gap-3">
+                     <p className={`text-xl font-black ${outstandingBalance > 0 ? 'text-red-600' : 'text-green-600'}`}>
                       {formatCurrency(selectedPatient.balance || 0, currency)}
                     </p>
-                    {selectedPatient.balance > 0 && (
+                     {outstandingBalance > 0 ? (
                       <button
                         onClick={() => onPaymentRequest(treatmentHistory)}
                         className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm"
                       >
                         Collect Payment
                       </button>
-                  )}
+                     ) : onServiceFeeRequest ? (
+                       <button
+                         onClick={onServiceFeeRequest}
+                         className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm"
+                       >
+                         Wanna add service fees?
+                       </button>
+                     ) : null}
                  </div>
                </div>
 

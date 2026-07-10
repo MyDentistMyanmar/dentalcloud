@@ -74,6 +74,42 @@ describe('finance.processPayment', () => {
     expect(result.payment.id).toBe('payment-1');
   });
 
+  it('passes service fee metadata through the receipt snapshot for server-side balance validation', async () => {
+    supabaseMock.rpcResults.push({ data: [paymentRow], error: null });
+
+    await api.finance.processPayment({
+      patientId: 'patient-1',
+      amount: 5000,
+      paymentMethod: 'CASH',
+      treatmentIds: [],
+      paymentDate: '2026-07-03',
+      submissionKey: 'service-fee-123',
+      receiptSnapshot: {
+        payment: {
+          serviceFeeAmount: 5000,
+          serviceFeeCategory: 'RETURNING'
+        }
+      },
+      createdByUserName: 'Front Desk'
+    });
+
+    expect(supabaseMock.rpcCalls).toHaveLength(1);
+    expect(supabaseMock.rpcCalls[0]).toMatchObject({
+      functionName: 'process_patient_payment',
+      payload: {
+        p_amount: 5000,
+        p_treatment_ids: [],
+        p_receipt_snapshot: {
+          payment: {
+            serviceFeeAmount: 5000,
+            serviceFeeCategory: 'RETURNING'
+          }
+        },
+        p_submission_key: 'service-fee-123'
+      }
+    });
+  });
+
   it('falls back to the old RPC signature when the database migration is not installed yet', async () => {
     supabaseMock.rpcResults.push(
       { data: null, error: { code: 'PGRST202', message: 'Could not find the function public.process_patient_payment with parameter p_submission_key' } },

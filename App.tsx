@@ -2161,49 +2161,70 @@ const App: React.FC = () => {
     setShowPaymentModal(true);
   };
 
-  const handleOpenPaymentModal = (_treatments: ClinicalRecord[]) => {
-    const shouldAskPatientCategory = clinicalFeeEnabled
+  const resolvePaymentServiceFeePreview = (): PaymentServiceFeePreview => {
+    const shouldApplyServiceFee = clinicalFeeEnabled
       && (clinicalFeeNewPatientAmount > 0 || clinicalFeeReturningPatientAmount > 0);
 
-    if (shouldAskPatientCategory) {
-      if (!selectedPatient?.id) {
-        openPaymentModalWithCategory(null);
-        return;
-      }
+    if (!shouldApplyServiceFee || !selectedPatient?.id) {
+      return null;
+    }
 
-      const today = toLocalISODate(new Date());
-      const hasPreviousCompletedAppointment = appointments.some((appointment) => {
-        const patientId = (appointment.patient_id || '').trim();
-        return (
-          patientId === selectedPatient.id &&
-          appointment.status === 'Completed' &&
-          typeof appointment.date === 'string' &&
-          appointment.date < today
-        );
-      });
-      const hasPreviousTreatment = [...treatmentHistory, ...globalRecords].some((record) => {
-        return (
-          record.patient_id === selectedPatient.id &&
-          typeof record.date === 'string' &&
-          record.date < today
-        );
-      });
-      const category: 'NEW' | 'RETURNING' = hasPreviousCompletedAppointment || hasPreviousTreatment ? 'RETURNING' : 'NEW';
-      const feeAmount = category === 'RETURNING'
-        ? Math.max(0, clinicalFeeReturningPatientAmount)
-        : Math.max(0, clinicalFeeNewPatientAmount);
+    const today = toLocalISODate(new Date());
+    const hasPreviousCompletedAppointment = appointments.some((appointment) => {
+      const patientId = (appointment.patient_id || '').trim();
+      return (
+        patientId === selectedPatient.id &&
+        appointment.status === 'Completed' &&
+        typeof appointment.date === 'string' &&
+        appointment.date < today
+      );
+    });
+    const hasPreviousTreatment = [...treatmentHistory, ...globalRecords].some((record) => {
+      return (
+        record.patient_id === selectedPatient.id &&
+        typeof record.date === 'string' &&
+        record.date < today
+      );
+    });
+    const category: 'NEW' | 'RETURNING' = hasPreviousCompletedAppointment || hasPreviousTreatment ? 'RETURNING' : 'NEW';
+    const feeAmount = category === 'RETURNING'
+      ? Math.max(0, clinicalFeeReturningPatientAmount)
+      : Math.max(0, clinicalFeeNewPatientAmount);
 
-      if (feeAmount <= 0) {
-        openPaymentModalWithCategory(null);
-        return;
-      }
+    if (feeAmount <= 0) {
+      return null;
+    }
 
-      setPaymentServiceFeePreview({ category, feeAmount });
+    return { category, feeAmount };
+  };
+
+  const handleOpenPaymentModal = (_treatments: ClinicalRecord[]) => {
+    const preview = resolvePaymentServiceFeePreview();
+
+    if (preview) {
+      setPaymentServiceFeePreview(preview);
       setShowPaymentCategoryModal(true);
       return;
     }
 
     openPaymentModalWithCategory(null);
+  };
+
+  const handleOpenServiceFeePayment = () => {
+    if (!selectedPatient) return;
+
+    if (Math.max(0, Number(selectedPatient.balance || 0)) > 0) {
+      handleOpenPaymentModal(treatmentHistory);
+      return;
+    }
+
+    const preview = resolvePaymentServiceFeePreview();
+    if (!preview) {
+      alert('Patient service fee is not enabled or the configured fee amount is 0. Please update the Patient Service Fee settings first.');
+      return;
+    }
+
+    openPaymentModalWithCategory(preview.category, preview.feeAmount);
   };
 
   const resetAppointmentForm = () => {
@@ -3926,6 +3947,7 @@ const App: React.FC = () => {
                 onDeselectAll={() => setSelectedTeeth([])}
                 onTreatmentSubmit={handleTreatmentSubmit}
                 onPaymentRequest={handleOpenPaymentModal}
+                onServiceFeeRequest={handleOpenServiceFeePayment}
                 onClosePatient={handleClosePatient}
                 onSelectPatient={handlePatientSelect}
                 onOpenDirectory={() => setCurrentView('patients')}
