@@ -218,6 +218,57 @@ describe('audit log export rows', () => {
     expect(tableRow.serviceCharges).toBe(2000);
   });
 
+  it('uses payment service charge metadata carefully without double counting unrelated same-day payments', () => {
+    const rows = buildAuditLogRows(
+      [records[0]],
+      [
+        {
+          ...appointments[0],
+          id: 'apt-duplicate-fallback',
+          patient_id: 'pat-1',
+          patient_name: 'Aung Min',
+          date: '2026-05-30',
+          status: 'Completed',
+          clinical_fee_status: 'APPLIED',
+          clinical_fee_amount: 3000
+        }
+      ],
+      true,
+      [
+        payments[0],
+        { ...payments[0] },
+        {
+          ...payments[0],
+          id: 'pay-unrelated-treatment-same-day',
+          treatmentIds: ['different-treatment-id'],
+          receiptSnapshot: {
+            payment: {
+              ...payments[0].receiptSnapshot!.payment,
+              serviceFeeAmount: 7000
+            }
+          }
+        },
+        {
+          ...payments[0],
+          id: 'pay-service-fee-only-same-day',
+          treatmentIds: [],
+          receiptSnapshot: {
+            payment: {
+              ...payments[0].receiptSnapshot!.payment,
+              serviceFeeAmount: 1500
+            }
+          }
+        }
+      ]
+    );
+    const treatmentRow = rows.find((row) => row.kind === 'treatment');
+
+    expect(treatmentRow?.kind).toBe('treatment');
+    if (treatmentRow?.kind === 'treatment') {
+      expect(treatmentRow.record.serviceCharges).toBe(4500);
+    }
+  });
+
   it('can omit appointment rows for doctor/patient-record exports', () => {
     const rows = buildAuditLogRows(records, appointments, false);
 

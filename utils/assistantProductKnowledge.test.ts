@@ -6,7 +6,7 @@ import {
 
 describe('assistant product knowledge', () => {
   it('documents the current payment and immutable receipt workflow', () => {
-    expect(ASSISTANT_PRODUCT_KNOWLEDGE_VERSION).toBe('2026-07-05');
+    expect(ASSISTANT_PRODUCT_KNOWLEDGE_VERSION).toBe('2026-07-11');
     expect(ASSISTANT_PRODUCT_KNOWLEDGE).toContain('Every payment requires one supported payment type');
     expect(ASSISTANT_PRODUCT_KNOWLEDGE).toContain('submission key');
     expect(ASSISTANT_PRODUCT_KNOWLEDGE).toContain('immutable receipt snapshot');
@@ -31,5 +31,8 @@ describe('assistant product knowledge', () => {
     expect(ASSISTANT_PRODUCT_KNOWLEDGE).toContain('Last Visit');
     expect(ASSISTANT_PRODUCT_KNOWLEDGE).toContain('deleting a patient is blocked by related records');
     expect(ASSISTANT_PRODUCT_KNOWLEDGE).toContain('payment correction access is limited to admins');
+    expect(ASSISTANT_PRODUCT_KNOWLEDGE).toContain('Patient Type and Service Charges');
+    expect(ASSISTANT_PRODUCT_KNOWLEDGE).toContain('serviceFeeAmount first');
+    expect(ASSISTANT_PRODUCT_KNOWLEDGE).toContain('Do not treat treatment Amount or Patient Balance as Service Charges');
   });
 });

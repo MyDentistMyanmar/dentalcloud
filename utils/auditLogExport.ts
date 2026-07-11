@@ -64,9 +64,10 @@ const calculateTreatmentServiceCharges = (
     if (payment.patientId !== patientId) return;
 
     const paymentTreatmentIds = payment.treatmentIds || [];
+    const hasPaymentTreatmentIds = paymentTreatmentIds.length > 0;
     const matchesTreatmentId = paymentTreatmentIds.some((treatmentId) => treatmentIds.has(treatmentId));
     const matchesTreatmentVisitDate = (payment.date || '') === treatmentDate;
-    if (!matchesTreatmentId && !matchesTreatmentVisitDate) return;
+    if (hasPaymentTreatmentIds ? !matchesTreatmentId : !matchesTreatmentVisitDate) return;
 
     const serviceFeeAmount = getPaymentServiceFeeAmount(payment);
     if (serviceFeeAmount <= 0 || matchedPaymentIds.has(payment.id)) return;
