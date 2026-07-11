@@ -56,6 +56,7 @@ describe('treatments.getAllRecords', () => {
   it('does not apply the recent-record limit when audit log asks for all records', async () => {
     await api.treatments.getAllRecords('location-1', { limit: null });
 
+    expect(supabaseMock.calls).toContainEqual({ table: 'treatments', action: 'select', columns: '*, patients(name, balance, patient_type), doctors(name)' });
     expect(supabaseMock.calls).not.toContainEqual({ action: 'limit', count: 50 });
     expect(supabaseMock.calls).toContainEqual({ action: 'eq', column: 'location_id', value: 'location-1' });
   });

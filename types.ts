@@ -67,7 +67,9 @@ export interface ClinicalRecord {
   location_id: string;
   patient_id: string;
   patient_name?: string; // Joined field for global view
+  patient_type?: string | null; // Joined field for audit log patient type display
   patient_balance?: number; // Joined field for audit log balance/debt display
+  serviceCharges?: number; // Audit-only calculated patient service charge total for this treatment visit
   doctor_id?: string;
   doctor_name?: string; // Joined field for clinical ownership
   teeth: number[];
@@ -85,6 +87,7 @@ export interface PaymentRecord {
   location_id?: string;
   patientId: string;
   patient_name?: string;
+  patient_type?: string | null;
   amount: number;
   originalAmount?: number;
   clearedAmount?: number;

@@ -352,10 +352,10 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], r
                   <th className="px-6 py-4 text-left text-[11px] font-black text-slate-500 uppercase tracking-[0.18em]">Patient</th>
                   <th className="px-6 py-4 text-left text-[11px] font-black text-slate-500 uppercase tracking-[0.18em]">Clinician</th>
                   <th className="px-6 py-4 text-left text-[11px] font-black text-slate-500 uppercase tracking-[0.18em]">Clinical Activity</th>
-                  <th className="px-6 py-4 text-left text-[11px] font-black text-slate-500 uppercase tracking-[0.18em]">Recorded By</th>
+                  <th className="px-6 py-4 text-left text-[11px] font-black text-slate-500 uppercase tracking-[0.18em]">Patient Type</th>
                   <th className="px-6 py-4 text-right text-[11px] font-black text-slate-500 uppercase tracking-[0.18em]">Patient Balance</th>
                   <th className="px-6 py-4 text-right text-[11px] font-black text-slate-500 uppercase tracking-[0.18em]">Amount</th>
-                  <th className="px-6 py-4 text-left text-[11px] font-black text-slate-500 uppercase tracking-[0.18em]">Payment Type</th>
+                  <th className="px-6 py-4 text-right text-[11px] font-black text-slate-500 uppercase tracking-[0.18em]">Service Charges</th>
                   <th className="px-6 py-4 text-right text-[11px] font-black text-slate-500 uppercase tracking-[0.18em]">Doctor Earned</th>
                 </tr>
               </thead>
@@ -386,12 +386,13 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], r
                           <td className="px-4 py-4 text-sm text-slate-700 xl:px-6">
                             Patient paid {formatCurrency(payment.amount, currency)}{payment.receiptNumber ? ` · ${payment.receiptNumber}` : ''}
                           </td>
-                          <td className="px-4 py-4 text-sm text-slate-700 xl:px-6">{payment.createdByUserName || 'Unknown'}</td>
+                          <td className="px-4 py-4 text-sm text-slate-400 xl:px-6">-</td>
                           <td className="px-4 py-4 text-right text-sm xl:px-6">{renderPatientBalance(payment.remainingBalance)}</td>
                           <td className="px-4 py-4 text-right text-sm font-black text-violet-700 xl:px-6">{formatCurrency(payment.amount, currency)}</td>
+                          <td className="px-4 py-4 text-right text-sm text-slate-400 xl:px-6">-</td>
                           <td className="px-4 py-4 text-sm font-bold text-slate-800 xl:px-6">
                             <div className="flex items-center justify-between gap-3">
-                              <span>{formatPaymentMethod(payment.paymentMethod)}</span>
+                              <span className="text-xs font-semibold text-slate-500">{payment.createdByUserName || 'Unknown'} · {formatPaymentMethod(payment.paymentMethod)}</span>
                               <div className="flex items-center gap-2">
                                 {canEditPayments ? (
                                   <button
@@ -417,7 +418,6 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], r
                             </div>
                             {renderPaymentCorrections(payment)}
                           </td>
-                          <td className="px-4 py-4 text-right text-sm text-slate-400 xl:px-6">-</td>
                         </tr>
                       );
                     }
@@ -440,13 +440,10 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], r
                               <p>Reason: {rescheduleLog.reason || '-'}</p>
                             </div>
                           </td>
-                          <td className="px-4 py-4 text-sm text-slate-700 xl:px-6">
-                            <span className="font-semibold">{rescheduleLog.admin_name || 'Unknown'}</span>
-                            <span className="block text-xs text-slate-500">{formatCreatedAt(rescheduleLog.created_at)}</span>
-                          </td>
+                          <td className="px-4 py-4 text-sm text-slate-400 xl:px-6">-</td>
                           <td className="px-4 py-4 text-right text-sm text-slate-400 xl:px-6">-</td>
                           <td className="px-4 py-4 text-right text-sm font-black text-slate-900 xl:px-6">-</td>
-                          <td className="px-4 py-4 text-sm text-slate-400 xl:px-6">-</td>
+                          <td className="px-4 py-4 text-right text-sm text-slate-400 xl:px-6">-</td>
                           <td className="px-4 py-4 text-right text-sm text-slate-400 xl:px-6">-</td>
                         </tr>
                       );
@@ -467,13 +464,10 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], r
                           <td className="px-4 py-4 text-sm text-slate-700 max-w-md xl:px-6">
                             Appointment made for {appointment.date} at {appointment.time} ({appointment.type || 'Checkup'}, {appointment.status})
                           </td>
-                          <td className="px-4 py-4 text-sm text-slate-700 xl:px-6">
-                            <span className="font-semibold">{appointment.created_by_user_name || 'Unknown'}</span>
-                            <span className="block text-xs text-slate-500">{formatCreatedAt(appointment.created_at)}</span>
-                          </td>
+                          <td className="px-4 py-4 text-sm text-slate-400 xl:px-6">-</td>
                           <td className="px-4 py-4 text-right text-sm xl:px-6">{renderPatientBalance(appointment.patient_balance)}</td>
                           <td className="px-4 py-4 text-right text-sm font-black text-slate-900 xl:px-6">-</td>
-                          <td className="px-4 py-4 text-sm text-slate-400 xl:px-6">-</td>
+                          <td className="px-4 py-4 text-right text-sm text-slate-400 xl:px-6">-</td>
                           <td className="px-4 py-4 text-right text-sm text-slate-400 xl:px-6">-</td>
                         </tr>
                       );
@@ -496,10 +490,10 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], r
                             {rec.teeth && rec.teeth.length > 0 ? formatTeethWithPosition(rec.teeth) : 'General'}
                           </span>
                         </td>
-                        <td className="px-4 py-4 text-sm text-slate-700 xl:px-6">Clinical record</td>
+                        <td className="px-4 py-4 text-sm font-semibold text-slate-700 xl:px-6">{rec.patient_type || '-'}</td>
                         <td className="px-4 py-4 text-right text-sm xl:px-6">{renderPatientBalance(rec.patient_balance)}</td>
                         <td className="px-4 py-4 text-right text-sm font-black text-slate-900 xl:px-6">{formatCurrency(rec.cost || 0, currency)}</td>
-                        <td className="px-4 py-4 text-sm text-slate-400 xl:px-6">-</td>
+                        <td className="px-4 py-4 text-right text-sm font-bold text-indigo-700 xl:px-6">{rec.serviceCharges ? formatCurrency(rec.serviceCharges, currency) : '-'}</td>
                         <td className="px-4 py-4 text-right text-sm font-bold text-emerald-700 xl:px-6">{rec.doctorEarnings ? formatCurrency(rec.doctorEarnings, currency) : '-'}</td>
                       </tr>
                     );

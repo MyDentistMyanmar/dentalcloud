@@ -231,17 +231,17 @@ export const exportClinicalRecordsToPDF = (records: ClinicalRecord[], currency: 
   // Table
   autoTable(doc, {
     startY: options.dateFrom && options.dateTo ? 52 : 46,
-    head: [['Type', 'Date / Time', 'Patient', 'Clinician', 'Clinical Activity', 'Recorded By', 'Patient Balance', 'Amount', 'Payment Type', 'Doctor Earned']],
+    head: [['Type', 'Date / Time', 'Patient', 'Clinician', 'Clinical Activity', 'Patient Type', 'Patient Balance', 'Amount', 'Service Charges', 'Doctor Earned']],
     body: tableRows.map((row) => [
       row.type,
       row.dateTime,
       row.patient,
       row.clinician,
       row.activity,
-      row.recordedBy,
+      row.patientType,
       row.patientBalance,
       row.amount === null ? '-' : formatCurrency(row.amount, currency),
-      row.paymentMethod,
+      row.serviceCharges === null ? '-' : formatCurrency(row.serviceCharges, currency),
       row.doctorEarned === null ? '-' : formatCurrency(row.doctorEarned, currency)
     ]),
     theme: 'grid',

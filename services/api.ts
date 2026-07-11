@@ -174,6 +174,7 @@ const mapPaymentRow = (row: any): PaymentRecord => ({
   location_id: row.location_id,
   patientId: row.patient_id,
   patient_name: row.patients?.name || row.patient_name,
+  patient_type: row.patients?.patient_type || row.patient_type || null,
   amount: Number(row.amount || 0),
   originalAmount: Number(row.original_amount ?? row.amount ?? 0),
   clearedAmount: Number(row.cleared_amount ?? row.amount ?? 0),
@@ -2410,7 +2411,7 @@ export const api = {
       try {
         let query = supabase
           .from('treatments')
-          .select('*, patients(name, balance), doctors(name)')
+          .select('*, patients(name, balance, patient_type), doctors(name)')
           .order('date', { ascending: false });
 
         const limit = options?.limit === undefined ? 50 : options.limit;
@@ -2454,6 +2455,7 @@ export const api = {
           pricingNote: rec.pricing_note || null,
           doctorEarnings: Number(rec.doctor_earnings || 0),
           patient_name: rec.patients?.name || 'Unknown',
+          patient_type: rec.patients?.patient_type || null,
           patient_balance: Number(rec.patients?.balance || 0),
           doctor_name: rec.doctors?.name || undefined
         }));
@@ -3339,7 +3341,7 @@ export const api = {
         .from('payments')
         .select(`
           *,
-          patients(name, balance),
+          patients(name, balance, patient_type),
           payment_corrections (
             id,
             payment_id,
@@ -3363,7 +3365,7 @@ export const api = {
       if (error && isMissingRelationError(error, 'payment_corrections')) {
         let fallbackQuery = supabase
           .from('payments')
-          .select('*, patients(name, balance)')
+          .select('*, patients(name, balance, patient_type)')
           .order('created_at', { ascending: false });
         if (locationId) fallbackQuery = fallbackQuery.eq('location_id', locationId);
         const fallback = await fallbackQuery;

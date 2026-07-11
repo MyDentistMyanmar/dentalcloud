@@ -9,6 +9,7 @@ describe('audit log export rows', () => {
       location_id: 'loc-1',
       patient_id: 'pat-1',
       patient_name: 'Aung Min',
+      patient_type: 'Marketing',
       patient_balance: 15000,
       doctor_name: 'Hnin',
       teeth: [11],
@@ -22,6 +23,7 @@ describe('audit log export rows', () => {
       location_id: 'loc-1',
       patient_id: 'pat-1',
       patient_name: 'Aung Min',
+      patient_type: 'Marketing',
       patient_balance: 15000,
       doctor_name: 'Hnin',
       teeth: [12],
@@ -85,6 +87,19 @@ describe('audit log export rows', () => {
       remainingBalance: 5000,
       paymentMethod: 'KPAY',
       receiptNumber: 'REC-20260530-000001',
+      receiptSnapshot: {
+        payment: {
+          receiptNumber: 'REC-20260530-000001',
+          date: '2026-05-30',
+          amountPaid: 10000,
+          method: 'KPAY',
+          status: 'PARTIAL',
+          balanceBefore: 15000,
+          balanceAfter: 5000,
+          serviceFeeAmount: 3000,
+          serviceFeeCategory: 'NEW'
+        }
+      },
       createdAt: '2026-05-30T10:00:00Z',
       createdByUserName: 'Reception One'
     }
@@ -140,19 +155,24 @@ describe('audit log export rows', () => {
   });
 
   it('builds PDF/Excel friendly table rows with balances and recorded-by details', () => {
-    const rows = filterAuditLogRowsForExport(buildAuditLogRows(records, appointments, true), {
+    const rows = filterAuditLogRowsForExport(buildAuditLogRows(records, appointments, true, payments), {
       dateFrom: '2026-05-30',
       dateTo: '2026-05-30'
     });
-    const tableRows = buildAuditLogExportTableRows(rows, 'MMK');
+    const tableRows = buildAuditLogExportTableRows(
+      rows.filter((row) => row.kind !== 'payment'),
+      'MMK'
+    );
 
     expect(tableRows).toHaveLength(2);
     expect(tableRows[0]).toMatchObject({
       type: 'Treatment',
       patient: 'Aung Min',
       clinician: 'Dr. Hnin',
+      patientType: 'Marketing',
       patientBalance: '15,000Ks',
       amount: 30000,
+      serviceCharges: 3000,
       doctorEarned: 12000
     });
     expect(tableRows[0].activity).toContain('• Filling');
@@ -163,10 +183,39 @@ describe('audit log export rows', () => {
       type: 'Appointment',
       patient: 'Su Su',
       recordedBy: expect.stringContaining('Reception One'),
+      patientType: '-',
       patientBalance: 'Clear',
       amount: null,
+      serviceCharges: null,
       doctorEarned: null
     });
+  });
+
+  it('falls back to applied appointment clinical fee when payment service charge metadata is unavailable', () => {
+    const completedAppointment: Appointment = {
+      ...appointments[0],
+      id: 'apt-service-fee',
+      patient_id: 'pat-2',
+      patient_name: 'Mya Mya',
+      date: '2026-05-29',
+      status: 'Completed',
+      clinical_fee_status: 'APPLIED',
+      clinical_fee_amount: 2000,
+      clinical_fee_patient_category: 'RETURNING'
+    };
+    const rows = buildAuditLogRows([records[2]], [completedAppointment], true, []);
+    const treatmentRow = rows.find((row) => row.kind === 'treatment');
+
+    expect(treatmentRow?.kind).toBe('treatment');
+    if (treatmentRow?.kind === 'treatment') {
+      expect(treatmentRow.record.serviceCharges).toBe(2000);
+    }
+
+    const [tableRow] = buildAuditLogExportTableRows(
+      rows.filter((row) => row.kind === 'treatment'),
+      'MMK'
+    );
+    expect(tableRow.serviceCharges).toBe(2000);
   });
 
   it('can omit appointment rows for doctor/patient-record exports', () => {

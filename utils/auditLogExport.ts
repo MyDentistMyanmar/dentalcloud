@@ -27,11 +27,72 @@ export interface AuditLogExportTableRow {
   clinician: string;
   activity: string;
   recordedBy: string;
+  patientType: string;
   patientBalance: string;
   amount: number | null;
+  serviceCharges: number | null;
   doctorEarned: number | null;
   paymentMethod: string;
 }
+
+const getPositiveNumber = (value: unknown): number => {
+  const numericValue = Number(value || 0);
+  return Number.isFinite(numericValue) && numericValue > 0 ? numericValue : 0;
+};
+
+const getPaymentServiceFeeAmount = (payment: PaymentRecord): number => {
+  const snapshotFee = getPositiveNumber(payment.receiptSnapshot?.payment?.serviceFeeAmount);
+  if (snapshotFee > 0) return snapshotFee;
+
+  return getPositiveNumber((payment as PaymentRecord & { serviceFeeAmount?: number }).serviceFeeAmount);
+};
+
+const calculateTreatmentServiceCharges = (
+  treatmentRecords: ClinicalRecord[],
+  payments: PaymentRecord[],
+  appointments: Appointment[]
+): number => {
+  if (treatmentRecords.length === 0) return 0;
+
+  const patientId = treatmentRecords[0].patient_id;
+  const treatmentDate = treatmentRecords[0].date;
+  const treatmentIds = new Set(treatmentRecords.map((record) => record.id).filter(Boolean));
+  const matchedPaymentIds = new Set<string>();
+  let serviceChargeTotal = 0;
+
+  payments.forEach((payment) => {
+    if (payment.patientId !== patientId) return;
+
+    const paymentTreatmentIds = payment.treatmentIds || [];
+    const matchesTreatmentId = paymentTreatmentIds.some((treatmentId) => treatmentIds.has(treatmentId));
+    const matchesTreatmentVisitDate = (payment.date || '') === treatmentDate;
+    if (!matchesTreatmentId && !matchesTreatmentVisitDate) return;
+
+    const serviceFeeAmount = getPaymentServiceFeeAmount(payment);
+    if (serviceFeeAmount <= 0 || matchedPaymentIds.has(payment.id)) return;
+
+    matchedPaymentIds.add(payment.id);
+    serviceChargeTotal += serviceFeeAmount;
+  });
+
+  if (serviceChargeTotal > 0) return serviceChargeTotal;
+
+  const matchedAppointmentIds = new Set<string>();
+  appointments.forEach((appointment) => {
+    if (appointment.patient_id !== patientId) return;
+    if (appointment.status !== 'Completed') return;
+    if ((appointment.date || '') !== treatmentDate) return;
+    if (appointment.clinical_fee_status && appointment.clinical_fee_status !== 'APPLIED') return;
+
+    const clinicalFeeAmount = getPositiveNumber(appointment.clinical_fee_amount);
+    if (clinicalFeeAmount <= 0 || matchedAppointmentIds.has(appointment.id)) return;
+
+    matchedAppointmentIds.add(appointment.id);
+    serviceChargeTotal += clinicalFeeAmount;
+  });
+
+  return serviceChargeTotal;
+};
 
 export const formatAuditCreatedAt = (value?: string | null): string => {
   if (!value) return 'Unknown';
@@ -85,11 +146,14 @@ export const buildAuditLogRows = (
     const allTeeth = sorted.flatMap((record) => record.teeth || []);
     const totalCost = sorted.reduce((sum, record) => sum + (record.cost || 0), 0);
     const totalEarnings = sorted.reduce((sum, record) => sum + (record.doctorEarnings || 0), 0);
+    const patientType = sorted.find((record) => (record.patient_type || '').trim())?.patient_type || base.patient_type || null;
 
     base.description = allDescriptions.join(' + ');
     base.teeth = [...new Set(allTeeth)].sort((a, b) => a - b);
     base.cost = totalCost;
     base.doctorEarnings = totalEarnings > 0 ? totalEarnings : base.doctorEarnings;
+    base.patient_type = patientType;
+    base.serviceCharges = calculateTreatmentServiceCharges(sorted, payments, appointments);
     base._groupedRecords = sorted;
 
     treatmentRows.push({
@@ -204,8 +268,10 @@ export const buildAuditLogExportTableRows = (rows: AuditExportRow[], currency: C
         clinician: formatAuditDoctorName(appointment.doctor_name),
         activity: `Appointment made for ${appointment.date || '-'} at ${appointment.time || '-'} (${appointment.type || 'Checkup'}, ${appointment.status || '-'})`,
         recordedBy: `${appointment.created_by_user_name || 'Unknown'}\n${formatAuditCreatedAt(appointment.created_at)}`,
+        patientType: '-',
         patientBalance: formatAuditPatientBalance(appointment.patient_balance, currency),
         amount: null,
+        serviceCharges: null,
         doctorEarned: null,
         paymentMethod: '-'
       };
@@ -220,8 +286,10 @@ export const buildAuditLogExportTableRows = (rows: AuditExportRow[], currency: C
         clinician: formatAuditDoctorName(rescheduleLog.doctor_name),
         activity: `Original Date: ${rescheduleLog.original_date || '-'} -> New Date: ${rescheduleLog.new_date || '-'}\nReason: ${rescheduleLog.reason || '-'}`,
         recordedBy: `${rescheduleLog.admin_name || 'Unknown'}\n${formatAuditCreatedAt(rescheduleLog.created_at)}`,
+        patientType: '-',
         patientBalance: '-',
         amount: null,
+        serviceCharges: null,
         doctorEarned: null,
         paymentMethod: '-'
       };
@@ -236,8 +304,10 @@ export const buildAuditLogExportTableRows = (rows: AuditExportRow[], currency: C
         clinician: '-',
         activity: `Patient paid ${formatCurrency(payment.amount, currency)}${payment.receiptNumber ? ` (${payment.receiptNumber})` : ''}`,
         recordedBy: payment.createdByUserName || 'Unknown',
+        patientType: '-',
         patientBalance: formatAuditPatientBalance(payment.remainingBalance, currency),
         amount: payment.amount,
+        serviceCharges: null,
         doctorEarned: null,
         paymentMethod: formatPaymentMethod(payment.paymentMethod)
       };
@@ -255,8 +325,10 @@ export const buildAuditLogExportTableRows = (rows: AuditExportRow[], currency: C
       clinician: formatAuditDoctorName(record.doctor_name),
       activity: `${activityLines}\nTeeth: ${teethLabel}`,
       recordedBy: 'Clinical record',
+      patientType: record.patient_type || '-',
       patientBalance: formatAuditPatientBalance(record.patient_balance, currency),
       amount: record.cost || 0,
+      serviceCharges: getPositiveNumber(record.serviceCharges) || null,
       doctorEarned: record.doctorEarnings || null,
       paymentMethod: '-'
     };
