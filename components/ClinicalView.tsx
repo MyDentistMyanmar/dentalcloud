@@ -405,10 +405,31 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
     }
   };
 
-  const handleQuickDateApply = (daysAhead: number) => {
+  const toLocalISODate = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const addCalendarMonths = (date: Date, months: number) => {
+    const result = new Date(date);
+    const targetDay = result.getDate();
+    result.setDate(1);
+    result.setMonth(result.getMonth() + months);
+    const lastDayOfTargetMonth = new Date(result.getFullYear(), result.getMonth() + 1, 0).getDate();
+    result.setDate(Math.min(targetDay, lastDayOfTargetMonth));
+    return result;
+  };
+
+  const handleQuickDateApply = (amount: number, unit: 'days' | 'months' = 'days') => {
     const date = new Date();
-    date.setDate(date.getDate() + daysAhead);
-    setNextAppointmentForm((prev) => ({ ...prev, date: date.toISOString().split('T')[0] }));
+    if (unit === 'months') {
+      setNextAppointmentForm((prev) => ({ ...prev, date: toLocalISODate(addCalendarMonths(date, amount)) }));
+    } else {
+      date.setDate(date.getDate() + amount);
+      setNextAppointmentForm((prev) => ({ ...prev, date: toLocalISODate(date) }));
+    }
   };
 
   const handleCreateNextAppointment = async (e: React.FormEvent) => {
@@ -1626,8 +1647,8 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={() => handleQuickDateApply(7)} className="rounded-lg border border-indigo-200 bg-white px-2.5 py-1 text-[11px] font-bold text-indigo-700 hover:bg-indigo-100">+1 Week</button>
               <button type="button" onClick={() => handleQuickDateApply(14)} className="rounded-lg border border-indigo-200 bg-white px-2.5 py-1 text-[11px] font-bold text-indigo-700 hover:bg-indigo-100">+2 Weeks</button>
-              <button type="button" onClick={() => handleQuickDateApply(30)} className="rounded-lg border border-indigo-200 bg-white px-2.5 py-1 text-[11px] font-bold text-indigo-700 hover:bg-indigo-100">+1 Month</button>
-              <button type="button" onClick={() => handleQuickDateApply(180)} className="rounded-lg border border-indigo-200 bg-white px-2.5 py-1 text-[11px] font-bold text-indigo-700 hover:bg-indigo-100">+6 Months</button>
+              <button type="button" onClick={() => handleQuickDateApply(1, 'months')} className="rounded-lg border border-indigo-200 bg-white px-2.5 py-1 text-[11px] font-bold text-indigo-700 hover:bg-indigo-100">+1 Month</button>
+              <button type="button" onClick={() => handleQuickDateApply(6, 'months')} className="rounded-lg border border-indigo-200 bg-white px-2.5 py-1 text-[11px] font-bold text-indigo-700 hover:bg-indigo-100">+6 Months</button>
             </div>
 
             <div className="grid grid-cols-2 gap-3">

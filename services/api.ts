@@ -2131,7 +2131,20 @@ export const api = {
       );
 
       if (shouldCreateRescheduleAudit) {
+        const auditPatientId = result.patient_id || existingAppointment.patient_id || null;
+        let registeredPatientName: string | null = null;
+        if (auditPatientId) {
+          const { data: patientRow, error: patientNameError } = await supabase
+            .from('patients')
+            .select('name')
+            .eq('id', auditPatientId)
+            .maybeSingle();
+          if (!patientNameError) {
+            registeredPatientName = (patientRow?.name || '').trim() || null;
+          }
+        }
         const patientName =
+          registeredPatientName ||
           result.guest_name ||
           existingAppointment.guest_name ||
           'Unknown';
@@ -2151,7 +2164,7 @@ export const api = {
         await api.appointmentRescheduleLogs.create({
           appointment_id: result.id,
           location_id: result.location_id,
-          patient_id: result.patient_id || existingAppointment.patient_id || null,
+          patient_id: auditPatientId,
           patient_name: patientName,
           doctor_name: doctorName,
           original_date: originalDate,
