@@ -288,7 +288,7 @@ export const buildAuditLogExportTableRows = (rows: AuditExportRow[], currency: C
         activity: `Original Date: ${rescheduleLog.original_date || '-'} -> New Date: ${rescheduleLog.new_date || '-'}\nReason: ${rescheduleLog.reason || '-'}`,
         recordedBy: `${rescheduleLog.admin_name || 'Unknown'}\n${formatAuditCreatedAt(rescheduleLog.created_at)}`,
         patientType: '-',
-        patientBalance: '-',
+        patientBalance: formatAuditPatientBalance(rescheduleLog.patient_balance, currency),
         amount: null,
         serviceCharges: null,
         doctorEarned: null,

@@ -353,6 +353,11 @@ const getJoinedOne = <T = any>(value: T | T[] | null | undefined): T | null => (
   Array.isArray(value) ? (value[0] ?? null) : (value ?? null)
 );
 
+const isUnknownLabel = (value?: string | null): boolean => {
+  const normalized = (value || '').trim().toLowerCase();
+  return !normalized || normalized === 'unknown' || normalized === 'unknown patient';
+};
+
 const getLocalISODate = (date = new Date()): string => {
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
   return local.toISOString().slice(0, 10);
@@ -508,20 +513,36 @@ const fetchDoctorWithOptionalRelations = async (id: string): Promise<any> => {
   return data;
 };
 
-const mapAppointmentRescheduleLog = (row: any): AppointmentRescheduleLog => ({
-  id: row.id,
-  appointment_id: row.appointment_id,
-  location_id: row.location_id,
-  patient_id: row.patient_id ?? null,
-  patient_name: row.patient_name || 'Unknown',
-  doctor_name: row.doctor_name ?? null,
-  original_date: row.original_date,
-  new_date: row.new_date,
-  reason: row.reason || '',
-  admin_user_id: row.admin_user_id ?? null,
-  admin_name: row.admin_name ?? null,
-  created_at: row.created_at
-});
+const mapAppointmentRescheduleLog = (row: any): AppointmentRescheduleLog => {
+  const appointment = getJoinedOne<any>(row.appointments);
+  const directPatient = getJoinedOne<any>(row.patients);
+  const appointmentPatient = getJoinedOne<any>(appointment?.patients);
+  const appointmentDoctor = getJoinedOne<any>(appointment?.doctors);
+  const resolvedPatientName = isUnknownLabel(row.patient_name)
+    ? (directPatient?.name || appointmentPatient?.name || appointment?.guest_name || row.patient_name || 'Unknown')
+    : row.patient_name;
+  const resolvedDoctorName = getTrimmedDoctorName(row.doctor_name) || getTrimmedDoctorName(appointmentDoctor?.name) || null;
+  const resolvedPatientId = row.patient_id ?? appointment?.patient_id ?? null;
+
+  return {
+    id: row.id,
+    appointment_id: row.appointment_id,
+    location_id: row.location_id,
+    patient_id: resolvedPatientId,
+    patient_name: resolvedPatientName || 'Unknown',
+    doctor_name: resolvedDoctorName,
+    patient_balance: directPatient?.balance ?? appointmentPatient?.balance ?? null,
+    appointment_patient_name: appointmentPatient?.name || directPatient?.name || null,
+    appointment_guest_name: appointment?.guest_name || null,
+    appointment_date: appointment?.date || null,
+    original_date: row.original_date,
+    new_date: row.new_date,
+    reason: row.reason || '',
+    admin_user_id: row.admin_user_id ?? null,
+    admin_name: row.admin_name ?? null,
+    created_at: row.created_at
+  };
+};
 
 export const normalizeMyanmarPhoneForLookup = (value?: string | null): string | null => {
   const digits = (value || '').replace(/\D/g, '');
@@ -2243,19 +2264,45 @@ export const api = {
       try {
         let query = supabase
           .from('appointment_reschedule_logs')
-          .select('*')
+          .select(`
+            *,
+            patients(name, balance),
+            appointments(
+              patient_id,
+              guest_name,
+              date,
+              patients(name, balance),
+              doctors(name)
+            )
+          `)
           .order('created_at', { ascending: false });
 
         if (locationId) {
           query = query.eq('location_id', locationId);
         }
 
-        const { data, error } = await query;
+        let { data, error } = await query;
+
+        if (error && isOptionalRelationAccessError(error, ['patients', 'appointments', 'doctors'])) {
+          let fallbackQuery = supabase
+            .from('appointment_reschedule_logs')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+          if (locationId) {
+            fallbackQuery = fallbackQuery.eq('location_id', locationId);
+          }
+
+          const fallback = await fallbackQuery;
+          data = fallback.data;
+          error = fallback.error;
+        }
+
         if (error) {
           if (isMissingRelationError(error, 'appointment_reschedule_logs')) {
             return [];
           }
-          throw error;
+          throw new Error(error.message || 'Failed to load appointment reschedule logs.');
         }
 
         return (data || []).map(mapAppointmentRescheduleLog);

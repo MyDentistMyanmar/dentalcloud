@@ -88,9 +88,22 @@ describe('audit log export rows', () => {
       paymentMethod: 'KPAY',
       receiptNumber: 'REC-20260530-000001',
       receiptSnapshot: {
+        version: 1,
+        receiptType: 'PAYMENT',
+        receiptNumber: 'REC-20260530-000001',
+        receiptDate: '2026-05-30',
+        currency: 'MMK',
+        clinic: {
+          appName: 'DentFlow Pro',
+          headerTitle: 'DentFlow Pro',
+          email: '',
+          phone: ''
+        },
+        patient: {
+          id: 'pat-1',
+          name: 'Aung Min'
+        },
         payment: {
-          receiptNumber: 'REC-20260530-000001',
-          date: '2026-05-30',
           amountPaid: 10000,
           method: 'KPAY',
           status: 'PARTIAL',
@@ -242,6 +255,7 @@ describe('audit log export rows', () => {
           id: 'pay-unrelated-treatment-same-day',
           treatmentIds: ['different-treatment-id'],
           receiptSnapshot: {
+            ...payments[0].receiptSnapshot!,
             payment: {
               ...payments[0].receiptSnapshot!.payment,
               serviceFeeAmount: 7000
@@ -253,6 +267,7 @@ describe('audit log export rows', () => {
           id: 'pay-service-fee-only-same-day',
           treatmentIds: [],
           receiptSnapshot: {
+            ...payments[0].receiptSnapshot!,
             payment: {
               ...payments[0].receiptSnapshot!.payment,
               serviceFeeAmount: 1500
@@ -335,6 +350,45 @@ describe('audit log export rows', () => {
     });
     expect(tableRow.activity).toContain('Original Date: 2026-05-30 -> New Date: 2026-06-02');
     expect(tableRow.activity).toContain('Reason: Patient did not arrive');
+  });
+
+  it('keeps legacy reschedule rows visible by date when created_at is missing', () => {
+    const rows = buildAuditLogRows(records, appointments, true, payments, [
+      {
+        ...rescheduleLogs[0],
+        id: 'res-legacy',
+        created_at: undefined,
+        original_date: '2026-05-30',
+        new_date: '2026-06-02'
+      }
+    ]);
+
+    const rescheduleRows = filterAuditLogRowsForExport(rows, {
+      auditFilter: 'reschedules',
+      dateFrom: '2026-06-02',
+      dateTo: '2026-06-02'
+    });
+
+    expect(rescheduleRows).toHaveLength(1);
+    expect(rescheduleRows[0].kind).toBe('reschedule');
+  });
+
+  it('exports reschedule patient balances when joined patient data is available', () => {
+    const rows = buildAuditLogRows(records, appointments, true, payments, [
+      {
+        ...rescheduleLogs[0],
+        patient_balance: 12000
+      }
+    ]);
+
+    const rescheduleRows = filterAuditLogRowsForExport(rows, {
+      auditFilter: 'reschedules',
+      dateFrom: '2026-05-30',
+      dateTo: '2026-05-30'
+    });
+
+    const [tableRow] = buildAuditLogExportTableRows(rescheduleRows, 'MMK');
+    expect(tableRow.patientBalance).toBe('12,000Ks');
   });
 
   it('searches primary teeth using the staff-facing labels', () => {

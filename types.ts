@@ -280,6 +280,10 @@ export interface AppointmentRescheduleLog {
   patient_id?: string | null;
   patient_name: string;
   doctor_name?: string | null;
+  patient_balance?: number | null;
+  appointment_patient_name?: string | null;
+  appointment_guest_name?: string | null;
+  appointment_date?: string | null;
   original_date: string;
   new_date: string;
   reason: string;
