@@ -1,10 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { Loader2, Package, Plus, RotateCw, Search } from 'lucide-react';
+import { Loader2, Package, Plus } from 'lucide-react';
 import type { ClinicalRecord } from '../types';
 import { api } from '../services/api';
 import { formatCurrency, type Currency } from '../utils/currency';
 import { toLocalISODate } from '../utils/auditLogFilters';
-import { filterAuditLogRowsForExport, type AuditExportRow } from '../utils/auditLogExport';
+import { buildAuditLogRows, filterAuditLogRowsForExport, type AuditExportRow } from '../utils/auditLogExport';
 import { formatTeethWithPosition } from '../utils/toothNumbering';
 import { formatDoctorName } from '../utils/doctorName';
 import {
@@ -33,7 +33,8 @@ const getTreatmentRecordIds = (record: ClinicalRecord & { _groupedRecords?: Clin
 const MaterialCostView: React.FC<MaterialCostViewProps> = ({ records, loading, currency, canManageMaterials, onRefresh }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [doctorSearchTerm, setDoctorSearchTerm] = useState('');
+  const [treatmentSearchTerm, setTreatmentSearchTerm] = useState('');
   const [materialFilter, setMaterialFilter] = useState<MaterialCostFilter>('today');
   const [editingRecord, setEditingRecord] = useState<(ClinicalRecord & { _groupedRecords?: ClinicalRecord[] }) | null>(null);
   const [materialSummaries, setMaterialSummaries] = useState<Record<string, { auditLogId: string; totalAmount: number; itemCount: number }>>({});
@@ -48,13 +49,8 @@ const MaterialCostView: React.FC<MaterialCostViewProps> = ({ records, loading, c
   const itemsPerPage = 10;
 
   const treatmentRows = useMemo<TreatmentAuditRow[]>(() => (
-    records
-      .map((record) => ({
-        kind: 'treatment' as const,
-        sortDate: `${record.date || ''}T23:59:59`,
-        record
-      }))
-      .sort((a, b) => b.sortDate.localeCompare(a.sortDate))
+    buildAuditLogRows(records, [], false, [], [])
+      .filter((row): row is TreatmentAuditRow => row.kind === 'treatment')
   ), [records]);
 
   const baseFilteredRows = useMemo(() => {
@@ -62,9 +58,26 @@ const MaterialCostView: React.FC<MaterialCostViewProps> = ({ records, loading, c
       auditFilter: 'treatments',
       dateFrom,
       dateTo,
-      searchTerm
+      searchTerm: ''
     }) as TreatmentAuditRow[];
-  }, [treatmentRows, dateFrom, dateTo, searchTerm]);
+  }, [treatmentRows, dateFrom, dateTo]);
+
+  const statusFilteredRows = useMemo(() => {
+    const doctorTerm = doctorSearchTerm.trim().toLowerCase();
+    const treatmentTerm = treatmentSearchTerm.trim().toLowerCase();
+
+    return baseFilteredRows.filter((row) => {
+      const record = row.record;
+      const groupedRecords = record._groupedRecords?.length ? record._groupedRecords : [record];
+
+      const matchesDoctor = !doctorTerm || (record.doctor_name || '').toLowerCase().includes(doctorTerm);
+      const matchesTreatment = !treatmentTerm || groupedRecords.some((item) =>
+        (item.description || '').toLowerCase().includes(treatmentTerm)
+      );
+
+      return matchesDoctor && matchesTreatment;
+    });
+  }, [baseFilteredRows, doctorSearchTerm, treatmentSearchTerm]);
 
   const loadMaterialSummaries = React.useCallback(async (rowsToLoad: TreatmentAuditRow[]) => {
     const treatmentIds = rowsToLoad.flatMap((row) => getTreatmentRecordIds(row.record));
@@ -85,20 +98,6 @@ const MaterialCostView: React.FC<MaterialCostViewProps> = ({ records, loading, c
       console.warn('Unable to refresh material cost summaries. Keeping current table totals.', error);
     }
   }, []);
-
-  const handleDateFromChange = (value: string) => {
-    setDateFrom(value);
-    if (value && (!dateTo || value > dateTo)) setDateTo(value);
-    setMaterialFilter('custom');
-    setCurrentPage(1);
-  };
-
-  const handleDateToChange = (value: string) => {
-    setDateTo(value);
-    if (value && (!dateFrom || value < dateFrom)) setDateFrom(value);
-    setMaterialFilter('custom');
-    setCurrentPage(1);
-  };
 
   const renderPatientBalance = (balance?: number | null) => {
     if (balance === null || balance === undefined) return <span className="text-slate-400">-</span>;
@@ -151,8 +150,6 @@ const MaterialCostView: React.FC<MaterialCostViewProps> = ({ records, loading, c
     );
   };
 
-  const statusFilteredRows = baseFilteredRows;
-
   const paginatedRows = useMemo(() => {
     if (showAll) return statusFilteredRows;
     const startIndex = (currentPage - 1) * itemsPerPage;
@@ -166,7 +163,7 @@ const MaterialCostView: React.FC<MaterialCostViewProps> = ({ records, loading, c
 
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [records, searchTerm, dateFrom, dateTo, materialFilter]);
+  }, [records, doctorSearchTerm, treatmentSearchTerm, dateFrom, dateTo, materialFilter]);
 
   const renderMaterialCost = (record: ClinicalRecord & { _groupedRecords?: ClinicalRecord[] }) => {
     const totalAmount = getMaterialTotal(record);
@@ -214,8 +211,6 @@ const MaterialCostView: React.FC<MaterialCostViewProps> = ({ records, loading, c
     }
     setCurrentPage(1);
   };
-  const isTodayRange = dateFrom === todayKey && dateTo === todayKey;
-
   return (
     <div className="w-full min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm animate-fade-in">
       <div className="border-b border-slate-200 bg-gradient-to-br from-slate-50 via-white to-[var(--hover-50)]/40">
@@ -235,7 +230,7 @@ const MaterialCostView: React.FC<MaterialCostViewProps> = ({ records, loading, c
                   {statusFilteredRows.length} visible
                 </span>
                 <span className="shrink-0 rounded-full border theme-accent-border theme-accent-soft-bg px-3 py-1 font-semibold theme-accent-text">
-                  {baseFilteredRows.length} treatments
+                  {statusFilteredRows.length} treatments
                 </span>
               </div>
             </div>
@@ -243,87 +238,77 @@ const MaterialCostView: React.FC<MaterialCostViewProps> = ({ records, loading, c
 
           <div className="w-full min-w-0 space-y-3 xl:max-w-5xl">
             <div className="rounded-2xl border border-slate-200 bg-white/90 p-3 shadow-sm">
-              <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                <div className="grid min-w-0 grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-                  <div className="min-w-0">
-                    <label className="mb-1 block text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">From</label>
+              <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:flex xl:flex-1 xl:flex-wrap xl:items-center">
+                  <div className="min-w-0 xl:w-36">
+                    <input
+                      type="text"
+                      placeholder="Doctor"
+                      value={doctorSearchTerm}
+                      onChange={(event) => {
+                        setDoctorSearchTerm(event.target.value);
+                        setCurrentPage(1);
+                      }}
+                      className="w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--hover-300)]"
+                    />
+                  </div>
+                  <div className="min-w-0 xl:w-40">
+                    <input
+                      type="text"
+                      placeholder="Treatment"
+                      value={treatmentSearchTerm}
+                      onChange={(event) => {
+                        setTreatmentSearchTerm(event.target.value);
+                        setCurrentPage(1);
+                      }}
+                      className="w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--hover-300)]"
+                    />
+                  </div>
+                  <div className="flex min-w-0 items-center gap-2 xl:w-auto">
+                    <label className="shrink-0 text-sm font-semibold text-slate-600">Filter day</label>
                     <input
                       type="date"
                       value={dateFrom}
-                      max={dateTo || undefined}
-                      onChange={(event) => handleDateFromChange(event.target.value)}
-                      className="w-full min-w-0 rounded-xl border border-slate-200 bg-white px-2.5 py-2.5 text-xs text-slate-800 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--hover-300)] min-[380px]:text-sm sm:w-36 sm:px-3"
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setDateFrom(value);
+                        setDateTo(value);
+                        setMaterialFilter('custom');
+                        setCurrentPage(1);
+                      }}
+                      className="w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--hover-300)] xl:w-36"
                     />
-                  </div>
-                  <div className="min-w-0">
-                    <label className="mb-1 block text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">To</label>
-                    <input
-                      type="date"
-                      value={dateTo}
-                      min={dateFrom || undefined}
-                      onChange={(event) => handleDateToChange(event.target.value)}
-                      className="w-full min-w-0 rounded-xl border border-slate-200 bg-white px-2.5 py-2.5 text-xs text-slate-800 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--hover-300)] min-[380px]:text-sm sm:w-36 sm:px-3"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDateFrom(todayKey);
-                      setDateTo(todayKey);
-                      setMaterialFilter('today');
-                      setCurrentPage(1);
-                    }}
-                    title={isTodayRange ? 'Showing today only' : 'Custom date range selected. Click to reset to today.'}
-                    className={`col-span-2 min-h-10 w-full self-end rounded-xl border px-4 py-2.5 text-xs font-bold transition-colors sm:col-span-1 sm:w-auto ${
-                      isTodayRange
-                        ? 'theme-accent-border theme-accent-soft-bg theme-accent-text'
-                        : 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
-                    }`}
-                  >
-                    {isTodayRange ? 'Today' : 'Custom'}
-                  </button>
-                </div>
-                <div className="grid w-full grid-cols-3 rounded-xl border border-slate-200 bg-slate-50 p-1 sm:inline-grid sm:w-auto">
-                  {materialFilterOptions.map((item) => (
                     <button
-                      key={item.value}
                       type="button"
-                      onClick={() => handleMaterialFilterChange(item.value)}
-                      className={`rounded-lg px-2 py-2 text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--hover-300)] sm:px-3.5 ${
-                        materialFilter === item.value
-                          ? 'bg-white font-bold theme-accent-text shadow-sm'
-                          : 'text-slate-600 hover:text-slate-900'
-                      }`}
+                      onClick={() => {
+                        setDateFrom('');
+                        setDateTo('');
+                        setMaterialFilter('all');
+                        setCurrentPage(1);
+                      }}
+                      className="shrink-0 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-600 shadow-sm transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[var(--hover-300)]"
                     >
-                      {item.label}
+                      Clear
                     </button>
-                  ))}
+                  </div>
+                </div>
+                <div className="grid w-full grid-cols-3 rounded-xl border border-slate-200 bg-slate-50 p-1 sm:w-auto sm:min-w-[240px] xl:ml-3 xl:flex-none">
+                    {materialFilterOptions.map((item) => (
+                      <button
+                        key={item.value}
+                        type="button"
+                        onClick={() => handleMaterialFilterChange(item.value)}
+                        className={`rounded-lg px-2 py-2 text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--hover-300)] sm:px-3.5 ${
+                          materialFilter === item.value
+                            ? 'bg-white font-bold theme-accent-text shadow-sm'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
                 </div>
               </div>
-            </div>
-
-            <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div className="relative w-full min-w-0 lg:max-w-md">
-                <input
-                  type="text"
-                  placeholder="Search patient, doctor, service..."
-                  value={searchTerm}
-                  onChange={(event) => {
-                    setSearchTerm(event.target.value);
-                    setCurrentPage(1);
-                  }}
-                  className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--hover-300)]"
-                />
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              </div>
-              <button
-                type="button"
-                onClick={() => void onRefresh()}
-                className="refresh-action-button flex min-h-10 items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[var(--hover-300)] sm:px-4"
-              >
-                <RotateCw size={16} className="refresh-action-icon" />
-                Refresh
-              </button>
             </div>
           </div>
         </div>

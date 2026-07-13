@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Plus, Edit2, Trash2, Loader2, BarChart3, Eye, TrendingDown, TrendingUp, DollarSign, Calendar, Tag, RotateCw } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, Cell } from 'recharts';
-import { ClinicalRecord, Expense, MedicineSale } from '../types';
+import { ClinicalRecord, Expense, Location, MedicineSale } from '../types';
 import { formatCurrency, Currency } from '../utils/currency';
 import { exportExpensesToPDF } from '../utils/pdfExport';
 import { exportExpensesToExcel } from '../utils/excelExport';
@@ -13,6 +13,8 @@ interface ExpensesViewProps {
   expenses: Expense[];
   treatmentRecords: ClinicalRecord[];
   medicineSales: MedicineSale[];
+  locations: Location[];
+  currentLocationId?: string;
   loading: boolean;
   currency: Currency;
   onAdd: () => void;
@@ -25,6 +27,8 @@ const ExpensesView: React.FC<ExpensesViewProps> = ({
   expenses,
   treatmentRecords,
   medicineSales,
+  locations,
+  currentLocationId,
   loading,
   currency,
   onAdd,
@@ -166,6 +170,11 @@ const ExpensesView: React.FC<ExpensesViewProps> = ({
   const closeDetailModal = () => {
     setShowDetailModal(false);
     setSelectedExpense(null);
+  };
+
+  const getLocationName = (locationId?: string | null) => {
+    const resolvedId = locationId || currentLocationId || '';
+    return locations.find((location) => location.id === resolvedId)?.name || 'Current Branch';
   };
 
   const getCategoryColor = (category: string) => {
@@ -588,7 +597,7 @@ const ExpensesView: React.FC<ExpensesViewProps> = ({
 
               <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
                 <p className="text-xs font-semibold text-gray-600 uppercase mb-2">Location</p>
-                <p className="text-xs font-mono font-bold text-gray-900 break-all">{selectedExpense.location_id}</p>
+                <p className="text-sm font-bold text-gray-900 break-words">{getLocationName(selectedExpense.location_id)}</p>
               </div>
             </div>
 

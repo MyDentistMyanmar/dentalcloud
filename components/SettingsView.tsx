@@ -29,6 +29,8 @@ interface SettingsViewProps {
   clinicalFeeNewPatientAmount: number;
   clinicalFeeReturningPatientAmount: number;
   onSaveClinicalFeeSettings: (enabled: boolean, newPatientAmount: number, returningPatientAmount: number) => Promise<void>;
+  autoOnpPatientTypeEnabled: boolean;
+  onAutoOnpPatientTypeChange: (enabled: boolean) => Promise<void>;
   patientTypes: PatientType[];
   appointmentTypes: AppointmentType[];
   onCreatePatientType: (data: Partial<PatientType>) => Promise<void>;
@@ -93,6 +95,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   clinicalFeeNewPatientAmount,
   clinicalFeeReturningPatientAmount,
   onSaveClinicalFeeSettings,
+  autoOnpPatientTypeEnabled,
+  onAutoOnpPatientTypeChange,
   patientTypes,
   appointmentTypes,
   onCreatePatientType,
@@ -284,6 +288,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({
     returningPatientAmount: clinicalFeeReturningPatientAmount
   });
   const [clinicalFeeMessage, setClinicalFeeMessage] = useState<string>('');
+  const [autoOnpMessage, setAutoOnpMessage] = useState<string>('');
+  const [isSavingAutoOnp, setIsSavingAutoOnp] = useState(false);
   const [patientTypeForm, setPatientTypeForm] = useState<{ name: string; sort_order: string; is_active: boolean }>({
     name: '',
     sort_order: String(patientTypes.length),
@@ -395,6 +401,23 @@ const SettingsView: React.FC<SettingsViewProps> = ({
     } catch (error: any) {
       console.error('Failed to save clinical fee settings:', error);
       setClinicalFeeMessage(error?.message || 'Failed to save clinical fee settings.');
+    }
+  };
+
+  const handleAutoOnpToggle = async (enabled: boolean) => {
+    try {
+      setAutoOnpMessage('');
+      setIsSavingAutoOnp(true);
+      await onAutoOnpPatientTypeChange(enabled);
+      setAutoOnpMessage(enabled
+        ? 'Auto ONP conversion enabled. Eligible patients are updated during patient refresh.'
+        : 'Auto ONP conversion disabled.'
+      );
+    } catch (error: any) {
+      console.error('Failed to save auto ONP setting:', error);
+      setAutoOnpMessage(error?.message || 'Failed to save auto ONP setting.');
+    } finally {
+      setIsSavingAutoOnp(false);
     }
   };
 
@@ -954,6 +977,38 @@ const SettingsView: React.FC<SettingsViewProps> = ({
           )}
         </div>
       </div>
+
+      {isAdmin && (
+        <div className="border border-gray-200 rounded-xl p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <Clock className="w-5 h-5 text-emerald-600" />
+            <h3 className="text-lg font-semibold text-gray-800">Auto ONP Patient Type</h3>
+          </div>
+          <p className="text-sm text-gray-600 mb-4">
+            Automatically change any patient type to ONP when the patient registration date reaches one month.
+          </p>
+
+          <label className={`flex items-center justify-between gap-4 rounded-xl border p-4 transition ${autoOnpPatientTypeEnabled ? 'border-emerald-200 bg-emerald-50' : 'border-gray-200 bg-white'}`}>
+            <div>
+              <div className="text-sm font-semibold text-gray-900">Enable one-month ONP conversion</div>
+              <div className="text-xs text-gray-500">Patients already marked ONP are skipped.</div>
+            </div>
+            <input
+              type="checkbox"
+              checked={autoOnpPatientTypeEnabled}
+              onChange={(event) => void handleAutoOnpToggle(event.target.checked)}
+              disabled={isSavingAutoOnp}
+              className="h-5 w-5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+            />
+          </label>
+
+          {autoOnpMessage && (
+            <p className={`mt-3 text-xs ${autoOnpMessage.toLowerCase().includes('failed') || autoOnpMessage.toLowerCase().includes('not installed') ? 'text-red-600' : 'text-emerald-700'}`}>
+              {autoOnpMessage}
+            </p>
+          )}
+        </div>
+      )}
 
       {isAdmin && (
         <div className="border border-gray-200 rounded-xl p-6">

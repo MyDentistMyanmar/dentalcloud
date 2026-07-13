@@ -502,6 +502,7 @@ const App: React.FC = () => {
   });
   const [receiptHeaderTitle, setReceiptHeaderTitle] = useState<string>('');
   const [receiptSize, setReceiptSize] = useState<ReceiptSize>('A4');
+  const [autoOnpPatientTypeEnabled, setAutoOnpPatientTypeEnabled] = useState(false);
 
   // Sync browser tab title with app name in real-time
   useEffect(() => {
@@ -661,6 +662,20 @@ const App: React.FC = () => {
       await api.appSettings.saveReceiptPreferences({ receiptSize: size });
     } catch (error) {
       setReceiptSize(previousSize);
+      throw error;
+    }
+  };
+
+  const handleAutoOnpPatientTypeChange = async (enabled: boolean) => {
+    const previousValue = autoOnpPatientTypeEnabled;
+    setAutoOnpPatientTypeEnabled(enabled);
+    try {
+      await api.appSettings.saveAutoOnpPatientTypeEnabled(enabled);
+      if (enabled) {
+        await fetchInitialData(currentLocationId || undefined);
+      }
+    } catch (error) {
+      setAutoOnpPatientTypeEnabled(previousValue);
       throw error;
     }
   };
@@ -1142,6 +1157,15 @@ const App: React.FC = () => {
         console.warn('Failed to load app logo:', err);
       });
 
+    api.appSettings.getAutoOnpPatientTypeEnabled()
+      .then((enabled) => {
+        if (!mounted) return;
+        setAutoOnpPatientTypeEnabled(enabled);
+      })
+      .catch((err) => {
+        console.warn('Failed to load auto ONP patient type setting:', err);
+      });
+
     return () => {
       mounted = false;
     };
@@ -1154,10 +1178,11 @@ const App: React.FC = () => {
 
     const refreshSharedAppSettings = async () => {
       try {
-        const [theme, preferences, clinicalFeeSettings] = await Promise.all([
+        const [theme, preferences, clinicalFeeSettings, autoOnpEnabled] = await Promise.all([
           api.appSettings.getHoverTheme(),
           api.appSettings.getReceiptPreferences(),
-          api.appSettings.getClinicalFeeSettings()
+          api.appSettings.getClinicalFeeSettings(),
+          api.appSettings.getAutoOnpPatientTypeEnabled()
         ]);
         if (mounted && theme) setHoverTheme(theme);
         if (mounted && preferences) {
@@ -1169,6 +1194,7 @@ const App: React.FC = () => {
           setClinicalFeeEnabled(clinicalFeeSettings.enabled);
           setClinicalFeeNewPatientAmount(clinicalFeeSettings.newPatientAmount);
           setClinicalFeeReturningPatientAmount(clinicalFeeSettings.returningPatientAmount);
+          setAutoOnpPatientTypeEnabled(autoOnpEnabled);
         }
       } catch (error) {
         console.warn('Failed to refresh shared app settings:', error);
@@ -1192,6 +1218,7 @@ const App: React.FC = () => {
             clinical_fee_amount?: unknown;
             clinical_fee_new_patient_amount?: unknown;
             clinical_fee_returning_patient_amount?: unknown;
+            auto_onp_patient_type_enabled?: unknown;
           } | null;
           const nextTheme = row?.hover_theme;
           if (isHoverTheme(nextTheme)) {
@@ -1220,6 +1247,9 @@ const App: React.FC = () => {
           );
           if (Number.isFinite(nextReturningPatientAmount)) {
             setClinicalFeeReturningPatientAmount(Math.max(0, nextReturningPatientAmount));
+          }
+          if (typeof row?.auto_onp_patient_type_enabled === 'boolean') {
+            setAutoOnpPatientTypeEnabled(row.auto_onp_patient_type_enabled);
           }
         }
       )
@@ -3822,6 +3852,8 @@ const App: React.FC = () => {
                 expenses={expenses}
                 treatmentRecords={globalRecords}
                 medicineSales={medicineSales}
+                locations={locations}
+                currentLocationId={currentLocationId}
                 loading={loading}
                 currency={currency}
                 onRefresh={async () => { await fetchExpenses(); }}
@@ -3863,6 +3895,8 @@ const App: React.FC = () => {
                     clinicalFeeNewPatientAmount={clinicalFeeNewPatientAmount}
                     clinicalFeeReturningPatientAmount={clinicalFeeReturningPatientAmount}
                     onSaveClinicalFeeSettings={handleSaveClinicalFeeSettings}
+                    autoOnpPatientTypeEnabled={autoOnpPatientTypeEnabled}
+                    onAutoOnpPatientTypeChange={handleAutoOnpPatientTypeChange}
                     patientTypes={patientTypes}
                     appointmentTypes={appointmentTypes}
                     onCreatePatientType={async (data) => {

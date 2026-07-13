@@ -18,6 +18,7 @@ export const TREATMENT_CATEGORIES = [
 ] as const;
 
 export const DEFAULT_PATIENT_TYPE_NAME = 'Walk-in';
+export const AUTO_ONP_PATIENT_TYPE_NAME = 'ONP';
 
 export const DEFAULT_PATIENT_TYPE_OPTIONS = [
   'Walk-in',

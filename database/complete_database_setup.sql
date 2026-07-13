@@ -45,6 +45,8 @@ DROP TABLE IF EXISTS patients CASCADE;
 DROP TABLE IF EXISTS treatment_types CASCADE;
 DROP TABLE IF EXISTS loyalty_transactions CASCADE;
 DROP TABLE IF EXISTS loyalty_rules CASCADE;
+DROP TABLE IF EXISTS patient_material_costs CASCADE;
+DROP TABLE IF EXISTS audit_logs CASCADE;
 DROP TABLE IF EXISTS expenses CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 DROP TABLE IF EXISTS locations CASCADE;
@@ -102,6 +104,7 @@ CREATE TABLE app_settings (
   email_message_notifications_enabled BOOLEAN DEFAULT TRUE,
   email_settings_updated_at TIMESTAMP WITH TIME ZONE,
   hover_theme TEXT NOT NULL DEFAULT 'blue' CHECK (hover_theme IN ('blue', 'green', 'yellow', 'brown', 'dark')),
+  auto_onp_patient_type_enabled BOOLEAN NOT NULL DEFAULT FALSE,
   
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -439,6 +442,45 @@ CREATE TABLE expenses (
   amount DECIMAL(12,2) NOT NULL,
   category VARCHAR(100),
   date DATE DEFAULT CURRENT_DATE,
+  source_type VARCHAR(40),
+  source_id UUID,
+  is_system_generated BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Audit Logs
+CREATE TABLE audit_logs (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  source_type VARCHAR(40) NOT NULL CHECK (source_type IN ('treatment', 'payment', 'appointment', 'reschedule')),
+  source_id UUID NOT NULL,
+  location_id UUID REFERENCES locations(id) ON DELETE SET NULL,
+  patient_id UUID REFERENCES patients(id) ON DELETE SET NULL,
+  doctor_id UUID REFERENCES doctors(id) ON DELETE SET NULL,
+  treatment_id UUID REFERENCES treatments(id) ON DELETE CASCADE,
+  payment_id UUID REFERENCES payments(id) ON DELETE CASCADE,
+  appointment_id UUID REFERENCES appointments(id) ON DELETE CASCADE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  CONSTRAINT audit_logs_source_unique UNIQUE (source_type, source_id),
+  CONSTRAINT audit_logs_source_link_check CHECK (
+    (source_type = 'treatment' AND treatment_id = source_id)
+    OR (source_type = 'payment' AND payment_id = source_id)
+    OR (source_type = 'appointment' AND appointment_id = source_id)
+    OR source_type = 'reschedule'
+  )
+);
+
+-- Patient Material Costs
+CREATE TABLE patient_material_costs (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  audit_log_id UUID NOT NULL REFERENCES audit_logs(id) ON DELETE CASCADE,
+  material_name VARCHAR(255) NOT NULL,
+  cost_amount DECIMAL(12,2) NOT NULL CHECK (cost_amount >= 0),
+  quantity DECIMAL(12,2) NOT NULL DEFAULT 1 CHECK (quantity > 0),
+  total_amount DECIMAL(12,2) GENERATED ALWAYS AS (cost_amount * quantity) STORED,
+  created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_by_name VARCHAR(255),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -797,6 +839,7 @@ ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS email_settings_updated_at TIME
 ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS app_logo_url TEXT;
 ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS app_logo_path TEXT;
 ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS hover_theme TEXT NOT NULL DEFAULT 'blue';
+ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS auto_onp_patient_type_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS clinical_fee_status VARCHAR(20) DEFAULT 'PENDING';
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS clinical_fee_amount DECIMAL(12,2) DEFAULT 0;
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS clinical_fee_patient_category VARCHAR(20);
@@ -982,6 +1025,15 @@ CREATE INDEX idx_loyalty_transactions_location ON loyalty_transactions(location_
 CREATE INDEX idx_expenses_location ON expenses(location_id);
 CREATE INDEX idx_expenses_date ON expenses(date);
 CREATE INDEX idx_expenses_category ON expenses(category);
+CREATE INDEX idx_expenses_source ON expenses(source_type, source_id);
+CREATE UNIQUE INDEX idx_expenses_source_unique
+ON expenses(source_type, source_id)
+WHERE source_type IS NOT NULL AND source_id IS NOT NULL;
+CREATE INDEX idx_audit_logs_source ON audit_logs(source_type, source_id);
+CREATE INDEX idx_audit_logs_patient ON audit_logs(patient_id);
+CREATE INDEX idx_audit_logs_doctor ON audit_logs(doctor_id);
+CREATE INDEX idx_patient_material_costs_audit_log ON patient_material_costs(audit_log_id);
+CREATE INDEX idx_patient_material_costs_created_by ON patient_material_costs(created_by);
 CREATE INDEX idx_conversations_patient_id ON conversations(patient_id);
 CREATE INDEX idx_conversations_doctor_user_id ON conversations(doctor_user_id);
 CREATE INDEX idx_conversations_admin_id ON conversations(admin_id);
@@ -1312,6 +1364,16 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+CREATE OR REPLACE FUNCTION delete_audit_log_material_expense()
+RETURNS TRIGGER AS $$
+BEGIN
+  DELETE FROM expenses
+  WHERE source_type = 'material_cost'
+    AND source_id = OLD.id;
+  RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
 CREATE OR REPLACE FUNCTION set_doctor_treatment_commissions_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -1363,6 +1425,21 @@ CREATE TRIGGER update_medicines_updated_at
 -- Trigger: Update expenses.updated_at
 CREATE TRIGGER update_expenses_updated_at 
     BEFORE UPDATE ON expenses
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Trigger: Remove linked material-cost expense when audit log is deleted
+CREATE TRIGGER delete_audit_log_material_expense
+    BEFORE DELETE ON audit_logs
+    FOR EACH ROW EXECUTE FUNCTION delete_audit_log_material_expense();
+
+-- Trigger: Update audit_logs.updated_at
+CREATE TRIGGER update_audit_logs_updated_at
+    BEFORE UPDATE ON audit_logs
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Trigger: Update patient_material_costs.updated_at
+CREATE TRIGGER update_patient_material_costs_updated_at
+    BEFORE UPDATE ON patient_material_costs
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Trigger: Update doctor_treatment_commissions.updated_at
@@ -1467,7 +1544,8 @@ SET
     receipt_size = CASE WHEN receipt_size IN ('A4', 'THERMAL_55MM', 'THERMAL_80MM') THEN receipt_size ELSE 'A4' END,
     clinical_fee_default_apply_on_registration = COALESCE(clinical_fee_default_apply_on_registration, clinical_fee_enabled, FALSE),
     clinical_fee_new_patient_amount = COALESCE(clinical_fee_new_patient_amount, clinical_fee_amount, 0),
-    clinical_fee_returning_patient_amount = COALESCE(clinical_fee_returning_patient_amount, clinical_fee_amount, 0)
+    clinical_fee_returning_patient_amount = COALESCE(clinical_fee_returning_patient_amount, clinical_fee_amount, 0),
+    auto_onp_patient_type_enabled = COALESCE(auto_onp_patient_type_enabled, FALSE)
 WHERE id = 1;
 
 -- Public PNG-only clinic logo bucket
@@ -1609,6 +1687,8 @@ DECLARE
     'loyalty_rules',
     'loyalty_transactions',
     'expenses',
+    'audit_logs',
+    'patient_material_costs',
     'conversations',
     'messages',
     'assistant_memory',
@@ -1893,6 +1973,12 @@ UNION ALL
 SELECT 'Medicines', COUNT(*) FROM medicines
 UNION ALL
 SELECT 'Loyalty Rules', COUNT(*) FROM loyalty_rules
+UNION ALL
+SELECT 'Expenses', COUNT(*) FROM expenses
+UNION ALL
+SELECT 'Audit Logs', COUNT(*) FROM audit_logs
+UNION ALL
+SELECT 'Patient Material Costs', COUNT(*) FROM patient_material_costs
 UNION ALL
 SELECT 'Conversations', COUNT(*) FROM conversations
 UNION ALL

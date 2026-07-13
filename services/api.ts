@@ -1,7 +1,7 @@
 import { supabase, supabaseUrl, supabaseAnonKey } from './supabase';
 import * as tus from 'tus-js-client';
 import { Patient, Appointment, AppointmentRescheduleLog, ClinicalRecord, TreatmentType, PatientFile, Doctor, DoctorSchedule, DoctorScheduleInput, User, Medicine, MedicineSale, Location, LoyaltyRule, LoyaltyTransaction, Expense, Message, Conversation, ScheduledTask, S3Settings, PatientType, AppointmentType, DoctorTreatmentCommission, PaymentMethod, PaymentRecord, PaymentReceiptSnapshot, ReceiptPreferences, ClinicalFeeSettings, ClinicalFeeCompletionResult, ActiveStaffMonitorEntry, PaymentCorrection, AuditLogSourceType, PatientMaterialCost, PatientMaterialCostInput } from '../types';
-import { DEFAULT_PATIENT_TYPE_NAME, DEFAULT_PATIENT_TYPE_OPTIONS, DOCTOR_DASHBOARD_TABS, FULL_ACCESS_TAB_PERMISSIONS } from '../constants';
+import { AUTO_ONP_PATIENT_TYPE_NAME, DEFAULT_PATIENT_TYPE_NAME, DEFAULT_PATIENT_TYPE_OPTIONS, DOCTOR_DASHBOARD_TABS, FULL_ACCESS_TAB_PERMISSIONS } from '../constants';
 import { resolveAllowedTabs } from '../utils/permissions';
 import { EmailSettings, loadEmailSettingsAsync, saveEmailSettingsAsync } from '../utils/emailSettings';
 import { buildS3FileUrl, buildSupabaseS3Url, buildSupabaseS3PublicUrl, deleteS3Object, isSupabaseS3Endpoint, isS3SettingsReady, listS3Objects, normalizeS3BaseUrl, uploadS3Object } from '../utils/s3Storage';
@@ -59,6 +59,22 @@ const buildExpensePayload = (data: Partial<Expense>, existing?: Partial<Expense>
   }
 
   return payload;
+};
+
+const buildMaterialCostExpenseDescription = (
+  treatment: Partial<ClinicalRecord>,
+  materialNames: string
+): string => {
+  const patientName = (treatment.patient_name || 'Unknown patient').trim();
+  const treatmentLabel = (treatment.description || 'Treatment').trim();
+  const materialsLabel = materialNames.trim();
+  return `Material cost - ${patientName} - ${treatmentLabel}${materialsLabel ? ` (${materialsLabel})` : ''}`;
+};
+
+const buildMaterialCostExpensePrefix = (treatment: Partial<ClinicalRecord>): string => {
+  const patientName = (treatment.patient_name || 'Unknown patient').trim();
+  const treatmentLabel = (treatment.description || 'Treatment').trim();
+  return `Material cost - ${patientName} - ${treatmentLabel}`;
 };
 
 const buildMedicinePayload = (data: Partial<Medicine>, existing?: Partial<Medicine>): Partial<Medicine> => {
@@ -212,6 +228,147 @@ const mapPatientMaterialCostRow = (row: any): PatientMaterialCost => {
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
+};
+
+const fetchSyntheticMaterialCostExpenses = async (
+  locationId: string | undefined,
+  existingExpenses: Expense[]
+): Promise<Expense[]> => {
+  const { data: materialRows, error: materialError } = await supabase
+    .from('patient_material_costs')
+    .select('audit_log_id, material_name, total_amount, created_at, updated_at');
+
+  if (materialError) {
+    if (isMissingRelationError(materialError, 'patient_material_costs')) return [];
+    throw materialError;
+  }
+
+  if (!materialRows || materialRows.length === 0) return [];
+
+  const chunk = <T,>(items: T[], size: number): T[][] => {
+    const chunks: T[][] = [];
+    for (let index = 0; index < items.length; index += size) {
+      chunks.push(items.slice(index, index + size));
+    }
+    return chunks;
+  };
+
+  const materialSummaryByAuditId = new Map<string, {
+    totalAmount: number;
+    materialNames: Set<string>;
+    createdAt?: string | null;
+    updatedAt?: string | null;
+  }>();
+
+  (materialRows || []).forEach((row: any) => {
+    const auditLogId = row.audit_log_id;
+    if (!auditLogId) return;
+
+    const current = materialSummaryByAuditId.get(auditLogId) || {
+      totalAmount: 0,
+      materialNames: new Set<string>(),
+      createdAt: row.created_at || null,
+      updatedAt: row.updated_at || null
+    };
+
+    current.totalAmount += Number(row.total_amount || 0);
+    if (row.material_name) current.materialNames.add(row.material_name);
+    current.createdAt = current.createdAt || row.created_at || null;
+    current.updatedAt = row.updated_at || current.updatedAt || null;
+    materialSummaryByAuditId.set(auditLogId, current);
+  });
+
+  const auditIds = Array.from(materialSummaryByAuditId.keys());
+  if (auditIds.length === 0) return [];
+
+  const auditBatches = await Promise.all(chunk(auditIds, 100).map(async (auditIdBatch) => {
+    const { data, error } = await supabase
+      .from('audit_logs')
+      .select('id, source_id, location_id')
+      .eq('source_type', 'treatment')
+      .in('id', auditIdBatch);
+
+    if (error) {
+      if (isMissingRelationError(error, 'audit_logs')) return [];
+      throw error;
+    }
+
+    return data || [];
+  }));
+
+  const auditRows: any[] = auditBatches.flat();
+  if (auditRows.length === 0) return [];
+
+  const treatmentIds = Array.from(new Set(auditRows.map((row) => row.source_id).filter(Boolean)));
+  const treatmentBatches = await Promise.all(chunk(treatmentIds, 100).map(async (treatmentIdBatch) => {
+    const { data, error } = await supabase
+      .from('treatments')
+      .select('id, location_id, patient_id, date, description, patients(name)')
+      .in('id', treatmentIdBatch);
+
+    if (error) {
+      if (isOptionalRelationAccessError(error, ['patients'])) {
+        const fallback = await supabase
+          .from('treatments')
+          .select('id, location_id, patient_id, date, description')
+          .in('id', treatmentIdBatch);
+        if (fallback.error) throw fallback.error;
+        return fallback.data || [];
+      }
+      throw error;
+    }
+
+    return data || [];
+  }));
+
+  const treatmentById = new Map(treatmentBatches.flat().map((row: any) => [row.id, row]));
+  const linkedExpenseAuditIds = new Set(
+    existingExpenses
+      .filter((expense) => expense.source_type === 'material_cost' && expense.source_id)
+      .map((expense) => expense.source_id as string)
+  );
+
+  return auditRows.flatMap((auditRow: any): Expense[] => {
+    const summary = materialSummaryByAuditId.get(auditRow.id);
+    const treatment = treatmentById.get(auditRow.source_id);
+    if (!summary || !treatment || summary.totalAmount <= 0) return [];
+
+    const resolvedLocationId = auditRow.location_id || treatment.location_id || null;
+    if (locationId && resolvedLocationId !== locationId) return [];
+    if (linkedExpenseAuditIds.has(auditRow.id)) return [];
+
+    const materialNames = Array.from(summary.materialNames).join(', ');
+    const description = buildMaterialCostExpenseDescription({
+      patient_name: treatment.patients?.name || 'Unknown patient',
+      description: treatment.description || 'Treatment'
+    }, materialNames);
+    const prefix = buildMaterialCostExpensePrefix({
+      patient_name: treatment.patients?.name || 'Unknown patient',
+      description: treatment.description || 'Treatment'
+    });
+
+    const hasLegacyExpense = existingExpenses.some((expense) => (
+      expense.category === 'Material Cost' &&
+      expense.location_id === resolvedLocationId &&
+      expense.date === treatment.date &&
+      expense.description.startsWith(prefix)
+    ));
+    if (hasLegacyExpense) return [];
+
+    return [{
+      id: `material-cost-${auditRow.id}`,
+      location_id: resolvedLocationId,
+      description,
+      amount: summary.totalAmount,
+      category: 'Material Cost',
+      date: treatment.date || summary.createdAt?.slice(0, 10) || '',
+      source_type: 'material_cost',
+      source_id: auditRow.id,
+      is_system_generated: true,
+      created_at: summary.createdAt || undefined,
+      updated_at: summary.updatedAt || undefined
+    }];
+  });
 };
 
 const detectUsersAllowedTabsSupport = async (): Promise<boolean> => {
@@ -373,6 +530,73 @@ const getJoinedOne = <T = any>(value: T | T[] | null | undefined): T | null => (
 const getLocalISODate = (date = new Date()): string => {
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
   return local.toISOString().slice(0, 10);
+};
+
+const getOneMonthAgoISO = (date = new Date()): string => {
+  const cutoff = new Date(date);
+  cutoff.setMonth(cutoff.getMonth() - 1);
+  return cutoff.toISOString();
+};
+
+const getAutoOnpPatientTypeEnabled = async (): Promise<boolean> => {
+  try {
+    const { data, error } = await supabase
+      .from('app_settings')
+      .select('auto_onp_patient_type_enabled')
+      .eq('id', APP_SETTINGS_SINGLETON_ID)
+      .maybeSingle();
+
+    if (error || !data) {
+      if (error && !isMissingColumnError(error, 'auto_onp_patient_type_enabled')) {
+        console.warn('Failed to load auto ONP patient type setting:', error.message);
+      }
+      return false;
+    }
+
+    return Boolean(data.auto_onp_patient_type_enabled);
+  } catch (error: any) {
+    console.warn('Failed to load auto ONP patient type setting:', error?.message || error);
+    return false;
+  }
+};
+
+const applyAutoOnpPatientTypeIfEnabled = async (locationId?: string): Promise<void> => {
+  const enabled = await getAutoOnpPatientTypeEnabled();
+  if (!enabled) return;
+
+  const cutoffIso = getOneMonthAgoISO();
+
+  let selectQuery = supabase
+    .from('patients')
+    .select('id, patient_type')
+    .lte('created_at', cutoffIso)
+    .or(`patient_type.is.null,patient_type.neq.${AUTO_ONP_PATIENT_TYPE_NAME}`);
+
+  if (locationId) {
+    selectQuery = selectQuery.eq('location_id', locationId);
+  }
+
+  const { data: eligiblePatients, error: selectError } = await selectQuery;
+  if (selectError) {
+    console.warn('Failed to find patients eligible for auto ONP conversion:', selectError.message);
+    return;
+  }
+
+  const eligibleIds = (eligiblePatients || [])
+    .filter((patient: any) => String(patient.patient_type || '').trim() !== AUTO_ONP_PATIENT_TYPE_NAME)
+    .map((patient: any) => patient.id)
+    .filter(Boolean);
+
+  if (eligibleIds.length === 0) return;
+
+  const { error: updateError } = await supabase
+    .from('patients')
+    .update({ patient_type: AUTO_ONP_PATIENT_TYPE_NAME })
+    .in('id', eligibleIds);
+
+  if (updateError) {
+    console.warn('Failed to auto-convert patients to ONP:', updateError.message);
+  }
 };
 
 const completeAppointmentWithClinicalFee = async (
@@ -980,6 +1204,8 @@ export const api = {
     },
     getAll: async (locationId?: string): Promise<Patient[]> => {
       try {
+        await applyAutoOnpPatientTypeIfEnabled(locationId);
+
         const basePatientColumns = 'id, patient_unique_id, location_id, name, email, phone, age, address, city, patient_type, balance, loyalty_points, medical_history, created_at';
         const baseColumns = `${basePatientColumns}, patient_auth(id, username)`;
         const buildQuery = (regionColumn: 'township' | 'state_region') => {
@@ -2072,7 +2298,7 @@ export const api = {
     ): Promise<Appointment> => {
       const { data: existingAppointment, error: existingAppointmentError } = await supabase
         .from('appointments')
-        .select('status, clinical_fee_status, patient_id, location_id, date, time, guest_name, doctor_id, patients(name)')
+        .select('status, clinical_fee_status, patient_id, location_id, date, time, guest_name, doctor_id, patients!appointments_patient_id_fkey(name)')
         .eq('id', id)
         .single();
 
@@ -2492,19 +2718,36 @@ export const api = {
 
       if (deleteError) throw new Error(deleteError.message);
 
-      if (normalizedItems.length === 0) {
-        const { error: expenseDeleteError } = await supabase
-          .from('expenses')
-          .delete()
-          .eq('source_type', 'material_cost')
-          .eq('source_id', auditLogId);
+        const materialNames = normalizedItems.map((item) => item.material_name).join(', ');
+        const expenseDescription = buildMaterialCostExpenseDescription(treatment, materialNames);
+        const expensePrefix = buildMaterialCostExpensePrefix(treatment);
 
-        if (expenseDeleteError && !isMissingColumnError(expenseDeleteError, 'source_type')) {
-          throw new Error(expenseDeleteError.message);
+        if (normalizedItems.length === 0) {
+          const { error: expenseDeleteError } = await supabase
+            .from('expenses')
+            .delete()
+            .eq('source_type', 'material_cost')
+            .eq('source_id', auditLogId);
+
+          if (expenseDeleteError) {
+            if (isMissingColumnError(expenseDeleteError, 'source_type')) {
+              const legacyDeleteQuery = supabase
+                .from('expenses')
+                .delete()
+                .eq('location_id', treatment.location_id)
+                .eq('category', 'Material Cost')
+                .eq('date', treatment.date)
+                .like('description', `${expensePrefix}%`);
+
+              const { error: legacyDeleteError } = await legacyDeleteQuery;
+              if (legacyDeleteError) throw new Error(legacyDeleteError.message);
+            } else {
+              throw new Error(expenseDeleteError.message);
+            }
+          }
+
+          return { auditLogId, items: [] };
         }
-
-        return { auditLogId, items: [] };
-      }
 
       const { data, error } = await supabase
         .from('patient_material_costs')
@@ -2519,15 +2762,14 @@ export const api = {
 
       if (error) throw new Error(error.message);
 
-      const totalAmount = (data || []).reduce((sum: number, row: any) => sum + Number(row.total_amount || 0), 0);
-      const materialNames = normalizedItems.map((item) => item.material_name).join(', ');
-      const expensePayload = {
-        location_id: treatment.location_id,
-        description: `Material cost - ${treatment.patient_name || 'Unknown patient'} - ${treatment.description || 'Treatment'}${materialNames ? ` (${materialNames})` : ''}`,
-        amount: totalAmount,
-        category: 'Material Cost',
-        date: treatment.date,
-        source_type: 'material_cost',
+        const totalAmount = (data || []).reduce((sum: number, row: any) => sum + Number(row.total_amount || 0), 0);
+        const expensePayload = {
+          location_id: treatment.location_id,
+          description: expenseDescription,
+          amount: totalAmount,
+          category: 'Material Cost',
+          date: treatment.date,
+          source_type: 'material_cost',
         source_id: auditLogId,
         is_system_generated: true
       };
@@ -2536,18 +2778,41 @@ export const api = {
         .from('expenses')
         .upsert(expensePayload, { onConflict: 'source_type,source_id' });
 
-      if (expenseError) {
-        const missingExpenseLinkColumns =
-          isMissingColumnError(expenseError, 'source_type') ||
-          isMissingColumnError(expenseError, 'source_id') ||
-          isMissingColumnError(expenseError, 'is_system_generated');
+        if (expenseError) {
+          const missingExpenseLinkColumns =
+            isMissingColumnError(expenseError, 'source_type') ||
+            isMissingColumnError(expenseError, 'source_id') ||
+            isMissingColumnError(expenseError, 'is_system_generated');
 
-        if (missingExpenseLinkColumns) {
-          console.warn('Material cost saved, but expense sync is waiting for the expenses source columns migration.', expenseError.message);
-        } else {
-          throw new Error(expenseError.message);
+          if (missingExpenseLinkColumns) {
+            const legacyDeleteQuery = supabase
+              .from('expenses')
+              .delete()
+              .eq('location_id', treatment.location_id)
+              .eq('category', 'Material Cost')
+              .eq('date', treatment.date)
+              .like('description', `${expensePrefix}%`);
+
+            const { error: legacyDeleteError } = await legacyDeleteQuery;
+            if (legacyDeleteError) throw new Error(legacyDeleteError.message);
+
+            const legacyExpensePayload = {
+              location_id: treatment.location_id,
+              description: expenseDescription,
+              amount: totalAmount,
+              category: 'Material Cost',
+              date: treatment.date
+            };
+
+            const { error: legacyInsertError } = await supabase
+              .from('expenses')
+              .insert(legacyExpensePayload);
+
+            if (legacyInsertError) throw new Error(legacyInsertError.message);
+          } else {
+            throw new Error(expenseError.message);
+          }
         }
-      }
 
       return {
         auditLogId,
@@ -3904,6 +4169,25 @@ export const api = {
     saveEmailSettings: async (settings: EmailSettings): Promise<EmailSettings> => {
       return saveEmailSettingsAsync(settings);
     },
+    getAutoOnpPatientTypeEnabled: async (): Promise<boolean> => {
+      return getAutoOnpPatientTypeEnabled();
+    },
+    saveAutoOnpPatientTypeEnabled: async (enabled: boolean): Promise<void> => {
+      const { error } = await supabase
+        .from('app_settings')
+        .upsert({
+          id: APP_SETTINGS_SINGLETON_ID,
+          auto_onp_patient_type_enabled: enabled,
+          updated_at: new Date().toISOString()
+        });
+
+      if (error) {
+        if (isMissingColumnError(error, 'auto_onp_patient_type_enabled')) {
+          throw new Error('Auto ONP patient type setting is not installed. Run database/auto_onp_patient_type_migration.sql in Supabase.');
+        }
+        throw new Error(error.message);
+      }
+    },
     getClinicalFeeSettings: async (): Promise<ClinicalFeeSettings> => {
       try {
         let { data, error }: { data: any; error: any } = await supabase
@@ -4744,14 +5028,17 @@ export const api = {
           query = query.eq('location_id', locationId);
         }
 
-        const { data, error } = await query;
-        if (error) throw error;
-        return data || [];
-      } catch (err) {
-        console.warn("Error fetching expenses:", err);
-        return [];
-      }
-    },
+          const { data, error } = await query;
+          if (error) throw error;
+          const storedExpenses = (data || []) as Expense[];
+          const syntheticMaterialExpenses = await fetchSyntheticMaterialCostExpenses(locationId, storedExpenses);
+          return [...storedExpenses, ...syntheticMaterialExpenses]
+            .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+        } catch (err) {
+          console.warn("Error fetching expenses:", err);
+          return [];
+        }
+      },
     create: async (data: Partial<Expense>): Promise<Expense> => {
       const payload = buildExpensePayload(data);
       const { data: result, error } = await supabase
@@ -4822,7 +5109,7 @@ export const api = {
         console.log('Attempting to authenticate user:', trimmedUsername);
         const supportsAllowedTabs = await detectUsersAllowedTabsSupport();
         const supportsDoctorId = await detectUsersDoctorIdSupport();
-
+  
         const { data, error } = await supabase
           .from('users')
           .select(supportsAllowedTabs
