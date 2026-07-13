@@ -176,6 +176,7 @@ const ExpensesView: React.FC<ExpensesViewProps> = ({
       'Utilities': 'bg-purple-100 text-purple-700 border-purple-200',
       'Rent': 'bg-red-100 text-red-700 border-red-200',
       'Salary': 'bg-indigo-100 text-indigo-700 border-indigo-200',
+      'Material Cost': 'bg-cyan-100 text-cyan-700 border-cyan-200',
     };
     return colors[category] || 'bg-gray-100 text-gray-700 border-gray-200';
   };
@@ -497,24 +498,35 @@ const ExpensesView: React.FC<ExpensesViewProps> = ({
                             >
                               <Eye className="w-4 h-4" />
                             </button>
-                            <button
-                              onClick={() => onEdit(expense)}
-                              className="p-2 text-gray-600 hover:bg-emerald-50 hover:text-emerald-600 rounded-lg transition-all duration-150"
-                              title="Edit expense"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => {
-                                if (confirm('Are you sure you want to delete this expense?')) {
-                                  onDelete(expense.id);
-                                }
-                              }}
-                              className="p-2 text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-all duration-150"
-                              title="Delete expense"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            {expense.is_system_generated ? (
+                              <span
+                                className="rounded-lg border border-cyan-100 bg-cyan-50 px-2.5 py-1.5 text-xs font-bold text-cyan-700"
+                                title="Managed from the Audit Log material-cost modal"
+                              >
+                                Audit linked
+                              </span>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => onEdit(expense)}
+                                  className="p-2 text-gray-600 hover:bg-emerald-50 hover:text-emerald-600 rounded-lg transition-all duration-150"
+                                  title="Edit expense"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    if (confirm('Are you sure you want to delete this expense?')) {
+                                      onDelete(expense.id);
+                                    }
+                                  }}
+                                  className="p-2 text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-all duration-150"
+                                  title="Delete expense"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </>
+                            )}
                           </div>
                         </td>
                       </tr>

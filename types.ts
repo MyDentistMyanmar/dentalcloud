@@ -72,6 +72,9 @@ export interface ClinicalRecord {
   serviceCharges?: number; // Audit-only calculated patient service charge total for this treatment visit
   doctor_id?: string;
   doctor_name?: string; // Joined field for clinical ownership
+  doctor_specialization?: string | null;
+  doctor_commission_percentage?: number | null;
+  doctor_commission_per_visit?: number | null;
   teeth: number[];
   description: string;
   cost: number;
@@ -80,6 +83,38 @@ export interface ClinicalRecord {
   pricingNote?: 'FOC' | 'DISCOUNT' | null;
   doctorEarnings?: number; // Calculated commission for this treatment
   date: string;
+}
+
+export type AuditLogSourceType = 'treatment' | 'payment' | 'appointment' | 'reschedule';
+
+export interface AuditLogEntry {
+  id: string;
+  sourceType: AuditLogSourceType;
+  sourceId: string;
+  location_id?: string | null;
+  patient_id?: string | null;
+  doctor_id?: string | null;
+  treatment_id?: string | null;
+  created_at?: string;
+}
+
+export interface PatientMaterialCost {
+  id: string;
+  auditLogId: string;
+  materialName: string;
+  costAmount: number;
+  quantity: number;
+  totalAmount: number;
+  createdBy?: string | null;
+  createdByName?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface PatientMaterialCostInput {
+  materialName: string;
+  costAmount: number;
+  quantity: number;
 }
 
 export interface PaymentRecord {
@@ -422,6 +457,9 @@ export interface Expense {
   amount: number;
   category: string;
   date: string;
+  source_type?: string | null;
+  source_id?: string | null;
+  is_system_generated?: boolean;
   created_at?: string;
   updated_at?: string;
 }

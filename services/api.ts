@@ -1,6 +1,6 @@
 import { supabase, supabaseUrl, supabaseAnonKey } from './supabase';
 import * as tus from 'tus-js-client';
-import { Patient, Appointment, AppointmentRescheduleLog, ClinicalRecord, TreatmentType, PatientFile, Doctor, DoctorSchedule, DoctorScheduleInput, User, Medicine, MedicineSale, Location, LoyaltyRule, LoyaltyTransaction, Expense, Message, Conversation, ScheduledTask, S3Settings, PatientType, AppointmentType, DoctorTreatmentCommission, PaymentMethod, PaymentRecord, PaymentReceiptSnapshot, ReceiptPreferences, ClinicalFeeSettings, ClinicalFeeCompletionResult, ActiveStaffMonitorEntry, PaymentCorrection } from '../types';
+import { Patient, Appointment, AppointmentRescheduleLog, ClinicalRecord, TreatmentType, PatientFile, Doctor, DoctorSchedule, DoctorScheduleInput, User, Medicine, MedicineSale, Location, LoyaltyRule, LoyaltyTransaction, Expense, Message, Conversation, ScheduledTask, S3Settings, PatientType, AppointmentType, DoctorTreatmentCommission, PaymentMethod, PaymentRecord, PaymentReceiptSnapshot, ReceiptPreferences, ClinicalFeeSettings, ClinicalFeeCompletionResult, ActiveStaffMonitorEntry, PaymentCorrection, AuditLogSourceType, PatientMaterialCost, PatientMaterialCostInput } from '../types';
 import { DEFAULT_PATIENT_TYPE_NAME, DEFAULT_PATIENT_TYPE_OPTIONS, DOCTOR_DASHBOARD_TABS, FULL_ACCESS_TAB_PERMISSIONS } from '../constants';
 import { resolveAllowedTabs } from '../utils/permissions';
 import { EmailSettings, loadEmailSettingsAsync, saveEmailSettingsAsync } from '../utils/emailSettings';
@@ -196,6 +196,23 @@ const mapPaymentRow = (row: any): PaymentRecord => ({
     ? row.payment_corrections.map(mapPaymentCorrectionRow)
     : []
 });
+
+const mapPatientMaterialCostRow = (row: any): PatientMaterialCost => {
+  const costAmount = Number(row.cost_amount || 0);
+  const quantity = Number(row.quantity || 0);
+  return {
+    id: row.id,
+    auditLogId: row.audit_log_id,
+    materialName: row.material_name,
+    costAmount,
+    quantity,
+    totalAmount: Number(row.total_amount ?? costAmount * quantity),
+    createdBy: row.created_by || null,
+    createdByName: row.users?.username || row.created_by_name || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+};
 
 const detectUsersAllowedTabsSupport = async (): Promise<boolean> => {
   if (usersAllowedTabsSupport !== null) {
@@ -2328,6 +2345,217 @@ export const api = {
     }
   },
 
+  materialCosts: {
+    getTotalsByTreatmentIds: async (
+      treatmentIds: string[]
+    ): Promise<Record<string, { auditLogId: string; totalAmount: number; itemCount: number }>> => {
+      const uniqueIds = Array.from(new Set(treatmentIds.filter(Boolean)));
+      if (uniqueIds.length === 0) return {};
+
+      try {
+        const chunk = <T,>(items: T[], size: number): T[][] => {
+          const chunks: T[][] = [];
+          for (let index = 0; index < items.length; index += size) {
+            chunks.push(items.slice(index, index + size));
+          }
+          return chunks;
+        };
+
+        const auditBatches = await Promise.all(chunk(uniqueIds, 100).map(async (idBatch) => {
+          const { data, error: auditLogError } = await supabase
+            .from('audit_logs')
+            .select('id, source_id')
+            .eq('source_type', 'treatment')
+            .in('source_id', idBatch);
+
+          if (auditLogError) {
+            if (isMissingRelationError(auditLogError, 'audit_logs')) return [];
+            throw auditLogError;
+          }
+
+          return data || [];
+        }));
+        const auditRows: any[] = auditBatches.flat();
+
+        const auditIds = auditRows.map((row: any) => row.id).filter(Boolean);
+        if (auditIds.length === 0) return {};
+
+        const materialBatches = await Promise.all(chunk(auditIds, 100).map(async (auditIdBatch) => {
+          const { data, error: materialError } = await supabase
+            .from('patient_material_costs')
+            .select('audit_log_id, total_amount')
+            .in('audit_log_id', auditIdBatch);
+
+          if (materialError) {
+            if (isMissingRelationError(materialError, 'patient_material_costs')) return [];
+            throw materialError;
+          }
+
+          return data || [];
+        }));
+        const materialRows: any[] = materialBatches.flat();
+
+        const sourceByAuditId = new Map(auditRows.map((row: any) => [row.id, row.source_id]));
+        return materialRows.reduce((summary, row: any) => {
+          const treatmentId = sourceByAuditId.get(row.audit_log_id);
+          if (!treatmentId) return summary;
+
+          const existing = summary[treatmentId] || {
+            auditLogId: row.audit_log_id,
+            totalAmount: 0,
+            itemCount: 0
+          };
+          existing.totalAmount += Number(row.total_amount || 0);
+          existing.itemCount += 1;
+          summary[treatmentId] = existing;
+          return summary;
+        }, {} as Record<string, { auditLogId: string; totalAmount: number; itemCount: number }>);
+      } catch (err) {
+        console.warn('Error fetching material cost totals:', err);
+        throw err;
+      }
+    },
+
+    getByTreatmentId: async (treatmentId: string): Promise<{ auditLogId: string | null; items: PatientMaterialCost[] }> => {
+      const { data: auditLog, error: auditLogError } = await supabase
+        .from('audit_logs')
+        .select('id')
+        .eq('source_type', 'treatment')
+        .eq('source_id', treatmentId)
+        .maybeSingle();
+
+      if (auditLogError) {
+        if (isMissingRelationError(auditLogError, 'audit_logs')) {
+          throw new Error('Material cost tables are not installed yet. Run database/patient_material_costs_migration.sql first.');
+        }
+        throw new Error(auditLogError.message);
+      }
+
+      if (!auditLog?.id) {
+        return { auditLogId: null, items: [] };
+      }
+
+      const { data, error } = await supabase
+        .from('patient_material_costs')
+        .select('*, users(username)')
+        .eq('audit_log_id', auditLog.id)
+        .order('created_at', { ascending: true });
+
+      if (error) throw new Error(error.message);
+      return {
+        auditLogId: auditLog.id,
+        items: (data || []).map(mapPatientMaterialCostRow)
+      };
+    },
+
+    upsertForTreatment: async (
+      treatment: ClinicalRecord,
+      items: PatientMaterialCostInput[],
+      createdBy?: { userId?: string | null; username?: string | null }
+    ): Promise<{ auditLogId: string; items: PatientMaterialCost[] }> => {
+      const treatmentId = trimRequired(treatment.id, 'Treatment audit row');
+      const normalizedItems = items
+        .map((item) => ({
+          material_name: trimRequired(item.materialName, 'Material name', { maxLength: 255 }),
+          cost_amount: finiteNumber(item.costAmount, 'Material cost', { min: 0.01 }),
+          quantity: finiteNumber(item.quantity, 'Material quantity', { min: 0.01 })
+        }))
+        .filter((item) => item.material_name);
+
+      const auditPayload = {
+        source_type: 'treatment' as AuditLogSourceType,
+        source_id: treatmentId,
+        location_id: treatment.location_id || null,
+        patient_id: treatment.patient_id || null,
+        doctor_id: treatment.doctor_id || null,
+        treatment_id: treatmentId
+      };
+
+      const { data: auditLog, error: auditLogError } = await supabase
+        .from('audit_logs')
+        .upsert(auditPayload, { onConflict: 'source_type,source_id' })
+        .select('id')
+        .single();
+
+      if (auditLogError) {
+        if (isMissingRelationError(auditLogError, 'audit_logs')) {
+          throw new Error('Material cost tables are not installed yet. Run database/patient_material_costs_migration.sql first.');
+        }
+        throw new Error(auditLogError.message);
+      }
+
+      const auditLogId = auditLog.id;
+      const { error: deleteError } = await supabase
+        .from('patient_material_costs')
+        .delete()
+        .eq('audit_log_id', auditLogId);
+
+      if (deleteError) throw new Error(deleteError.message);
+
+      if (normalizedItems.length === 0) {
+        const { error: expenseDeleteError } = await supabase
+          .from('expenses')
+          .delete()
+          .eq('source_type', 'material_cost')
+          .eq('source_id', auditLogId);
+
+        if (expenseDeleteError && !isMissingColumnError(expenseDeleteError, 'source_type')) {
+          throw new Error(expenseDeleteError.message);
+        }
+
+        return { auditLogId, items: [] };
+      }
+
+      const { data, error } = await supabase
+        .from('patient_material_costs')
+        .insert(normalizedItems.map((item) => ({
+          audit_log_id: auditLogId,
+          ...item,
+          created_by: createdBy?.userId || null,
+          created_by_name: createdBy?.username || null
+        })))
+        .select('*, users(username)')
+        .order('created_at', { ascending: true });
+
+      if (error) throw new Error(error.message);
+
+      const totalAmount = (data || []).reduce((sum: number, row: any) => sum + Number(row.total_amount || 0), 0);
+      const materialNames = normalizedItems.map((item) => item.material_name).join(', ');
+      const expensePayload = {
+        location_id: treatment.location_id,
+        description: `Material cost - ${treatment.patient_name || 'Unknown patient'} - ${treatment.description || 'Treatment'}${materialNames ? ` (${materialNames})` : ''}`,
+        amount: totalAmount,
+        category: 'Material Cost',
+        date: treatment.date,
+        source_type: 'material_cost',
+        source_id: auditLogId,
+        is_system_generated: true
+      };
+
+      const { error: expenseError } = await supabase
+        .from('expenses')
+        .upsert(expensePayload, { onConflict: 'source_type,source_id' });
+
+      if (expenseError) {
+        const missingExpenseLinkColumns =
+          isMissingColumnError(expenseError, 'source_type') ||
+          isMissingColumnError(expenseError, 'source_id') ||
+          isMissingColumnError(expenseError, 'is_system_generated');
+
+        if (missingExpenseLinkColumns) {
+          console.warn('Material cost saved, but expense sync is waiting for the expenses source columns migration.', expenseError.message);
+        } else {
+          throw new Error(expenseError.message);
+        }
+      }
+
+      return {
+        auditLogId,
+        items: (data || []).map(mapPatientMaterialCostRow)
+      };
+    }
+  },
+
   treatments: {
     // Configuration
     getTypes: async (locationId?: string): Promise<TreatmentType[]> => {
@@ -2384,7 +2612,7 @@ export const api = {
     getHistory: async (patientId: string): Promise<ClinicalRecord[]> => {
       let { data, error } = await supabase
         .from('treatments')
-        .select('*, doctors(name)')
+        .select('*, doctors(name, specialization, commission_percentage, commission_per_visit)')
         .eq('patient_id', patientId)
         .order('date', { ascending: false });
 
@@ -2405,14 +2633,17 @@ export const api = {
         discountAmount: Number(rec.discount_amount || 0),
         pricingNote: rec.pricing_note || null,
         doctorEarnings: Number(rec.doctor_earnings || 0),
-        doctor_name: rec.doctors?.name || undefined
+        doctor_name: rec.doctors?.name || undefined,
+        doctor_specialization: rec.doctors?.specialization || null,
+        doctor_commission_percentage: rec.doctors?.commission_percentage !== undefined ? Number(rec.doctors.commission_percentage || 0) : null,
+        doctor_commission_per_visit: rec.doctors?.commission_per_visit !== undefined ? Number(rec.doctors.commission_per_visit || 0) : null
       }));
     },
     getAllRecords: async (locationId?: string, options?: { limit?: number | null }): Promise<ClinicalRecord[]> => {
       try {
         let query = supabase
           .from('treatments')
-          .select('*, patients(name, balance, patient_type), doctors(name)')
+          .select('*, patients(name, balance, patient_type), doctors(name, specialization, commission_percentage, commission_per_visit)')
           .order('date', { ascending: false });
 
         const limit = options?.limit === undefined ? 50 : options.limit;
@@ -2458,7 +2689,10 @@ export const api = {
           patient_name: rec.patients?.name || 'Unknown',
           patient_type: rec.patients?.patient_type || null,
           patient_balance: Number(rec.patients?.balance || 0),
-          doctor_name: rec.doctors?.name || undefined
+          doctor_name: rec.doctors?.name || undefined,
+          doctor_specialization: rec.doctors?.specialization || null,
+          doctor_commission_percentage: rec.doctors?.commission_percentage !== undefined ? Number(rec.doctors.commission_percentage || 0) : null,
+          doctor_commission_per_visit: rec.doctors?.commission_per_visit !== undefined ? Number(rec.doctors.commission_per_visit || 0) : null
         }));
       } catch (err) {
         console.warn("Error fetching records:", err);

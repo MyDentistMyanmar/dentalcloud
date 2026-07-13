@@ -1,0 +1,59 @@
+import { describe, expect, it } from 'vitest';
+
+import type { ClinicalRecord } from '../types';
+import {
+  calculateMaterialAdjustedDoctorEarnings,
+  calculateMaterialNetProfit
+} from './materialCostCalculations';
+
+const treatment = (overrides: Partial<ClinicalRecord> = {}): ClinicalRecord => ({
+  id: 'treatment-1',
+  patient_id: 'patient-1',
+  teeth: [],
+  description: 'Scaling',
+  cost: 100_000,
+  date: '2026-07-13',
+  doctorEarnings: 40_000,
+  ...overrides
+});
+
+describe('material cost calculations', () => {
+  it('reduces percentage commission and net profit using the material-adjusted amount', () => {
+    const record = treatment({
+      doctor_specialization: 'General',
+      doctor_commission_percentage: 40
+    });
+    const materialCost = () => 10_000;
+
+    expect(calculateMaterialAdjustedDoctorEarnings([record], materialCost)).toBe(36_000);
+    expect(calculateMaterialNetProfit([record], materialCost)).toBe(54_000);
+  });
+
+  it('keeps flat per-visit commission unchanged', () => {
+    const record = treatment({
+      doctor_specialization: 'Ortho',
+      doctor_commission_percentage: 40,
+      doctor_commission_per_visit: 15_000
+    });
+
+    expect(calculateMaterialAdjustedDoctorEarnings([record], () => 10_000)).toBe(15_000);
+    expect(calculateMaterialNetProfit([record], () => 10_000)).toBe(75_000);
+  });
+
+  it('uses the stored earning proportion when commission settings are unavailable', () => {
+    const record = treatment({ doctor_commission_percentage: null });
+
+    expect(calculateMaterialAdjustedDoctorEarnings([record], () => 25_000)).toBe(30_000);
+    expect(calculateMaterialNetProfit([record], () => 25_000)).toBe(45_000);
+  });
+
+  it('never calculates commission from a negative treatment balance', () => {
+    const record = treatment({
+      doctor_specialization: 'General',
+      doctor_commission_percentage: 40
+    });
+
+    expect(calculateMaterialAdjustedDoctorEarnings([record], () => 120_000)).toBe(0);
+    expect(calculateMaterialNetProfit([record], () => 120_000)).toBe(-20_000);
+  });
+});

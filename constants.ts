@@ -67,6 +67,11 @@ export const FLEXIBLE_STAFF_TABS = [
     description: 'Treatment types and service configuration.'
   },
   {
+    key: 'material-cost',
+    label: 'Material Cost',
+    description: 'Track treatment material costs and linked expense impact.'
+  },
+  {
     key: 'records',
     label: 'Audit Log',
     description: 'Clinical records and audit trail review.'
