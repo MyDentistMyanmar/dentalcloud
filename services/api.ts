@@ -343,17 +343,27 @@ const getDoctorEarningEntriesByTreatmentIds = async (treatmentIds: string[]) => 
   const entriesByTreatment = new Map<string, any[]>();
   if (uniqueIds.length === 0) return entriesByTreatment;
   const rows: any[] = [];
+  // This lookup only enriches treatment rows with commission-ledger breakdown details.
+  // It must never block or blank out the primary treatments list (e.g. the Audit Log's
+  // Treatments filter), so any failure here is logged and treated as "no entries" rather
+  // than propagated to the caller's outer try/catch.
   for (let index = 0; index < uniqueIds.length; index += 200) {
-    const { data, error } = await supabase
-      .from('doctor_commission_entries')
-      .select('id, payment_id, treatment_id, doctor_id, payment_date, treatment_date, calculation_mode, allocated_payment, commission_rate, earnings')
-      .in('treatment_id', uniqueIds.slice(index, index + 200));
+    try {
+      const { data, error } = await supabase
+        .from('doctor_commission_entries')
+        .select('id, payment_id, treatment_id, doctor_id, payment_date, treatment_date, calculation_mode, allocated_payment, commission_rate, earnings')
+        .in('treatment_id', uniqueIds.slice(index, index + 200));
 
-    if (error) {
-      if (isOptionalRelationAccessError(error, ['doctor_commission_entries'])) return entriesByTreatment;
-      throw new Error(error.message);
+      if (error) {
+        if (isOptionalRelationAccessError(error, ['doctor_commission_entries'])) return entriesByTreatment;
+        console.warn('Unable to load doctor commission entries; continuing without them:', error.message);
+        return entriesByTreatment;
+      }
+      rows.push(...(data || []));
+    } catch (err) {
+      console.warn('Unexpected error loading doctor commission entries; continuing without them:', err);
+      return entriesByTreatment;
     }
-    rows.push(...(data || []));
   }
 
   rows.forEach((row: any) => {
