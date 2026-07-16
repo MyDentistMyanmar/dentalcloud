@@ -9,6 +9,7 @@ import { Modal, Input, TimeInput } from './Shared';
 import { SearchableSelect } from './SearchableSelect';
 import PatientQRScanButton from './PatientQRScanButton';
 import { calculateAppointmentShortcutDate, type AppointmentDateShortcut } from '../utils/appointmentDateShortcuts';
+import { getNextTreatmentOptionIndex } from '../utils/treatmentSelectorKeyboard';
 
 export interface UploadProgress {
   fileName: string;
@@ -140,6 +141,7 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
   const [fileToDelete, setFileToDelete] = React.useState<{name: string, path: string} | null>(null);
   const [treatmentSearchTerm, setTreatmentSearchTerm] = React.useState('');
   const [showTreatmentDropdown, setShowTreatmentDropdown] = React.useState(false);
+  const [activeTreatmentIndex, setActiveTreatmentIndex] = React.useState(-1);
   const [currentPage, setCurrentPage] = useState(1);
   const [showNextAppointmentModal, setShowNextAppointmentModal] = React.useState(false);
   const [selectedTreatmentForCharge, setSelectedTreatmentForCharge] = React.useState<TreatmentType | null>(null);
@@ -199,10 +201,6 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
     (half) => selectedTeeth.length === halfTeeth[half].length && halfTeeth[half].every((tooth) => selectedTeeth.includes(tooth))
   ) || '';
   const canApplyTreatment = useFlatRate || selectedTeeth.length > 0;
-  const firstApplicableTreatment = React.useMemo(
-    () => filteredTreatmentTypes.find(() => canApplyTreatment),
-    [filteredTreatmentTypes, canApplyTreatment]
-  );
   const treatmentSelectorMessage = React.useMemo(() => {
     if (treatmentTypes.length === 0) {
       return 'No treatments are configured yet. Add services in Treatment Config first.';
@@ -217,6 +215,7 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
   }, [canApplyTreatment, filteredTreatmentTypes.length, treatmentSearchTerm, treatmentTypes.length]);
   const menuRef = useRef<HTMLDivElement>(null);
   const treatmentSelectorRef = useRef<HTMLDivElement>(null);
+  const treatmentOptionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const buttonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   const FILES_PER_PAGE = 3;
@@ -277,6 +276,16 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
       };
     }
   }, [showTreatmentDropdown]);
+
+  useEffect(() => {
+    setActiveTreatmentIndex(-1);
+    treatmentOptionRefs.current = [];
+  }, [treatmentSearchTerm]);
+
+  useEffect(() => {
+    if (activeTreatmentIndex < 0) return;
+    treatmentOptionRefs.current[activeTreatmentIndex]?.scrollIntoView({ block: 'nearest' });
+  }, [activeTreatmentIndex]);
 
   // Toggle menu for a specific file
   const toggleMenu = useCallback((fileId: string, event?: React.MouseEvent) => {
@@ -365,6 +374,31 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
     setTreatmentChargeInputs(chargeLines.map((line) => String(line.cost)));
     setTreatmentSearchTerm('');
     setShowTreatmentDropdown(false);
+  };
+
+  const handleTreatmentSelectorKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Escape') {
+      setShowTreatmentDropdown(false);
+      setActiveTreatmentIndex(-1);
+      return;
+    }
+
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      setShowTreatmentDropdown(true);
+      setActiveTreatmentIndex((currentIndex) => getNextTreatmentOptionIndex(
+        currentIndex,
+        filteredTreatmentTypes.length,
+        event.key === 'ArrowDown' ? 'down' : 'up'
+      ));
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const treatment = filteredTreatmentTypes[activeTreatmentIndex];
+      if (treatment) handleTreatmentSelect(treatment);
+    }
   };
 
   const handleChargeModalClose = () => {
@@ -640,20 +674,16 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
                   onFocus={() => {
                     if (treatmentTypes.length > 0) setShowTreatmentDropdown(true);
                   }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape') {
-                      setShowTreatmentDropdown(false);
-                      return;
-                    }
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      if (firstApplicableTreatment) handleTreatmentSelect(firstApplicableTreatment);
-                    }
-                  }}
+                  onKeyDown={handleTreatmentSelectorKeyDown}
                   placeholder="Search by treatment name or category..."
                   className="w-full rounded-xl border border-indigo-200 bg-white py-2.5 pl-10 pr-24 text-sm text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
                   aria-label="Search treatments"
                   aria-describedby="treatment-selector-message"
+                  aria-autocomplete="list"
+                  aria-controls="treatment-options"
+                  aria-expanded={showTreatmentDropdown}
+                  aria-activedescendant={activeTreatmentIndex >= 0 ? `treatment-option-${filteredTreatmentTypes[activeTreatmentIndex]?.id}` : undefined}
+                  role="combobox"
                 />
                 <button
                   type="button"
@@ -699,13 +729,13 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
                       {filteredTreatmentTypes.length} of {treatmentTypes.length}
                     </span>
                   </div>
-                  <div className="max-h-80 overflow-y-auto p-2 custom-scrollbar">
+                  <div id="treatment-options" role="listbox" className="max-h-80 overflow-y-auto p-2 custom-scrollbar">
                     {filteredTreatmentTypes.length === 0 ? (
                       <div className="rounded-lg border border-dashed border-indigo-100 bg-indigo-50 px-3 py-4 text-center text-sm font-semibold text-indigo-700">
                         No treatments match your search.
                       </div>
                     ) : (
-                      filteredTreatmentTypes.map(t => {
+                      filteredTreatmentTypes.map((t, index) => {
                         const displayCost = useFlatRate
                           ? t.cost
                           : (t.cost * (selectedTeeth.length || 1));
@@ -717,10 +747,15 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
                         return (
                           <button
                             key={t.id}
+                            id={`treatment-option-${t.id}`}
+                            ref={(element) => { treatmentOptionRefs.current[index] = element; }}
                             type="button"
+                            role="option"
+                            aria-selected={index === activeTreatmentIndex}
                             disabled={isDisabled}
                             onClick={() => handleTreatmentSelect(t)}
-                            className="flex w-full flex-col gap-1 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
+                            onMouseEnter={() => setActiveTreatmentIndex(index)}
+                            className={`flex w-full flex-col gap-1 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-row sm:items-center sm:justify-between sm:gap-3 ${index === activeTreatmentIndex ? 'bg-indigo-50 ring-1 ring-inset ring-indigo-200' : ''}`}
                           >
                             <span className="min-w-0">
                               <span className="block break-words text-sm font-bold text-gray-900">{t.name}</span>
