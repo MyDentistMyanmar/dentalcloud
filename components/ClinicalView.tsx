@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { User, X, Upload, Trash2, FileText, Receipt as ReceiptIcon, Package, RotateCcw, Award, Zap, Key, Edit, Download, Eye, MoreVertical, Calendar, CheckCircle2, AlertCircle, ArrowLeft, Search, Loader2 } from 'lucide-react';
+import { User, X, Upload, Trash2, FileText, Receipt as ReceiptIcon, Package, RotateCcw, Award, Zap, Key, Edit, Download, Eye, MoreVertical, Calendar, CheckCircle2, AlertCircle, ArrowLeft, Search, Loader2, FileHeart } from 'lucide-react';
 import { ToothSelector } from './ToothSelector';
-import { Patient, TreatmentType, ClinicalRecord, PatientFile, LoyaltyTransaction, LoyaltyRule, Doctor, Appointment, TreatmentChargeLine, AppointmentType, Location, MedicineSale } from '../types';
+import { Patient, TreatmentType, ClinicalRecord, PatientFile, LoyaltyTransaction, LoyaltyRule, Doctor, Appointment, TreatmentChargeLine, AppointmentType, Location, MedicineSale, PaymentRecord } from '../types';
 import { formatCurrency, getCurrencySymbol, Currency } from '../utils/currency';
 import { formatDoctorName as formatDisplayDoctorName } from '../utils/doctorName';
 import { formatTeethArray, formatTeethWithPosition, getTeethInQuadrant } from '../utils/toothNumbering';
@@ -11,6 +11,8 @@ import PatientQRScanButton from './PatientQRScanButton';
 import { calculateAppointmentShortcutDate, type AppointmentDateShortcut } from '../utils/appointmentDateShortcuts';
 import { getNextTreatmentOptionIndex } from '../utils/treatmentSelectorKeyboard';
 import { formatMedicineQuantity, getPatientMedicineHistory } from '../utils/medicineHistory';
+
+const AboutPatientReport = React.lazy(() => import('./AboutPatientReport'));
 
 export interface UploadProgress {
   fileName: string;
@@ -31,6 +33,8 @@ interface ClinicalViewProps {
   medicineSales: MedicineSale[];
   medicineHistoryLoading?: boolean;
   medicineHistoryError?: string | null;
+  paymentRecords: PaymentRecord[];
+  paymentsAvailable?: boolean;
   patientFiles: PatientFile[];
   uploadingFiles: boolean;
   useFlatRate: boolean;
@@ -77,6 +81,8 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
   medicineSales,
   medicineHistoryLoading = false,
   medicineHistoryError = null,
+  paymentRecords,
+  paymentsAvailable = true,
   patientFiles,
   uploadingFiles,
   useFlatRate,
@@ -159,6 +165,7 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
   const [treatmentChargeInputs, setTreatmentChargeInputs] = React.useState<string[]>([]);
   const [isRecordingTreatment, setIsRecordingTreatment] = React.useState(false);
   const [isSavingNextAppointment, setIsSavingNextAppointment] = React.useState(false);
+  const [showPatientReport, setShowPatientReport] = React.useState(false);
   const [nextAppointmentFeedback, setNextAppointmentFeedback] = React.useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [nextAppointmentForm, setNextAppointmentForm] = React.useState<Partial<Appointment>>({
     date: getDefaultNextAppointmentDate(),
@@ -168,6 +175,9 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
     doctor_id: '',
     notes: ''
   });
+  React.useEffect(() => {
+    setShowPatientReport(false);
+  }, [selectedPatient?.id]);
   const appointmentTypeOptionsForAppointment = React.useMemo(() => {
     const currentType = (nextAppointmentForm.type || '').trim();
     if (!currentType || appointmentTypeOptions.includes(currentType)) {
@@ -940,6 +950,17 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
         </div>
         {selectedPatient ? (
           <div className="space-y-6">
+             <button
+               type="button"
+               onClick={() => setShowPatientReport(true)}
+               className="flex w-full items-center justify-between gap-3 rounded-xl bg-slate-950 px-4 py-3 text-left text-white shadow-sm transition-colors hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-offset-2"
+             >
+               <span className="flex items-center gap-3">
+                 <span className="rounded-lg bg-cyan-300 p-2 text-slate-950"><FileHeart size={18} /></span>
+                 <span><span className="block text-sm font-black">About this patient</span><span className="block text-[11px] text-slate-300">Open visits, care, medicine and payment report</span></span>
+               </span>
+               <Eye size={18} className="shrink-0 text-cyan-300" />
+             </button>
              <div className="flex items-center gap-4">
                 <div className="w-14 h-14 rounded-full bg-indigo-100 flex items-center justify-center text-xl font-bold text-indigo-700">
                   {selectedPatient.name.charAt(0)}
@@ -1729,6 +1750,26 @@ const ClinicalView: React.FC<ClinicalViewProps> = ({
             )}
           </div>
         </div>
+      )}
+
+      {showPatientReport && selectedPatient && (
+        <React.Suspense fallback={
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-gray-900/60 backdrop-blur-md">
+            <div className="rounded-2xl bg-white px-6 py-5 text-center shadow-2xl"><Loader2 className="mx-auto animate-spin text-indigo-600" /><p className="mt-2 text-sm font-bold text-gray-700">Preparing patient report…</p></div>
+          </div>
+        }>
+          <AboutPatientReport
+            patient={selectedPatient}
+            appointments={appointments}
+            treatments={treatmentHistory}
+            medicineSales={medicineSales}
+            payments={paymentRecords}
+            paymentsAvailable={paymentsAvailable}
+            doctors={doctors}
+            currency={currency}
+            onClose={() => setShowPatientReport(false)}
+          />
+        </React.Suspense>
       )}
 
       {showNextAppointmentModal && selectedPatient && onCreateAppointment && (

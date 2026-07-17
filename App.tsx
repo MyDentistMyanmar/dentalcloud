@@ -4158,6 +4158,8 @@ const App: React.FC = () => {
                 medicineSales={patientMedicineSales}
                 medicineHistoryLoading={patientMedicineHistoryLoading}
                 medicineHistoryError={patientMedicineHistoryError}
+                paymentRecords={paymentRecords}
+                paymentsAvailable={auth.getSession()?.role !== 'doctor'}
                 patientFiles={patientFiles}
                 uploadingFiles={uploading}
                 useFlatRate={useFlatRate}
