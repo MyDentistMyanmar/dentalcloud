@@ -31,12 +31,11 @@ const MaterialCostModal: React.FC<MaterialCostModalProps> = ({ isOpen, record, c
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [loadFailed, setLoadFailed] = React.useState(false);
-  const [adminPassword, setAdminPassword] = React.useState('');
 
   React.useEffect(() => {
     if (!isOpen || !record) return;
     let cancelled = false;
-    setLoading(true); setSaving(false); setError(null); setLoadFailed(false); setAdminPassword('');
+    setLoading(true); setSaving(false); setError(null); setLoadFailed(false);
     api.materialCosts.getByTreatmentId(record.id).then(({ items: saved }) => {
       if (cancelled) return;
       const drafts: CostDraft[] = saved.map((item) => ({ localId: item.id, materialName: item.materialName, costType: item.costType, costAmount: item.costAmount, quantity: item.quantity }));
@@ -64,10 +63,10 @@ const MaterialCostModal: React.FC<MaterialCostModalProps> = ({ isOpen, record, c
     try {
       const session = auth.getSession();
       if (!session?.userId || session.role !== 'admin') throw new Error('You do not have permission to update material and lab costs.');
-      if (!adminPassword) throw new Error('Enter your administrator password to authorize this financial update.');
+      if (!session.staffAuthToken) throw new Error('Your administrator session needs a one-time refresh. Sign out and sign back in, then save again.');
       const incomplete = visibleItems.find((item) => !item.materialName.trim() || Number(item.costAmount) <= 0 || Number(item.quantity) <= 0);
       if (incomplete) throw new Error(`Each ${incomplete.costType === 'lab' ? 'lab cost' : 'material'} needs a name, a cost greater than zero, and a quantity greater than zero.`);
-      const result = await api.materialCosts.upsertForTreatment(record, visibleItems.map((item) => ({ materialName: item.materialName.trim(), costType: item.costType, costAmount: Number(item.costAmount), quantity: Number(item.quantity) })), { userId: session.userId, username: session.username, password: adminPassword });
+      const result = await api.materialCosts.upsertForTreatment(record, visibleItems.map((item) => ({ materialName: item.materialName.trim(), costType: item.costType, costAmount: Number(item.costAmount), quantity: Number(item.quantity) })), { userId: session.userId, username: session.username, authToken: session.staffAuthToken });
       const materialRows = result.items.filter((item) => item.costType === 'material');
       const labRows = result.items.filter((item) => item.costType === 'lab');
       const savedMaterialTotal = materialRows.reduce((sum, item) => sum + item.totalAmount, 0);
@@ -75,7 +74,6 @@ const MaterialCostModal: React.FC<MaterialCostModalProps> = ({ isOpen, record, c
       const summary = { treatmentId: record.id, auditLogId: result.auditLogId, materialTotal: savedMaterialTotal, materialItemCount: materialRows.length, labTotal: savedLabTotal, labItemCount: labRows.length, totalAmount: savedMaterialTotal + savedLabTotal, itemCount: result.items.length };
       if (result.commissionRefreshPending) {
         setError('Material and lab costs were saved, but doctor commission refresh is still pending. Keep this window open and select Save Material & Lab again to retry.');
-        setAdminPassword('');
         return;
       }
       try {
@@ -83,7 +81,6 @@ const MaterialCostModal: React.FC<MaterialCostModalProps> = ({ isOpen, record, c
       } catch (refreshError) {
         console.warn('Costs were saved, but the table refresh needs retry.', refreshError);
         setError('Material and lab costs were saved, but some screens could not refresh. Close this window and reopen Material & Lab to refresh the latest totals.');
-        setAdminPassword('');
         return;
       }
       onClose();
@@ -111,7 +108,6 @@ const MaterialCostModal: React.FC<MaterialCostModalProps> = ({ isOpen, record, c
     <div className="grid gap-3 rounded-2xl border border-[var(--hover-100)] bg-[var(--hover-50)]/70 p-4 sm:grid-cols-3"><div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-[var(--hover-700)]">Patient</p><p className="mt-1 text-sm font-bold text-slate-900">{record.patient_name || 'Unknown'}</p></div><div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-[var(--hover-700)]">Clinician</p><p className="mt-1 text-sm font-bold text-slate-900">{formatDoctorName(record.doctor_name)}</p></div><div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-[var(--hover-700)]">Clinical Activity</p><p className="mt-1 text-sm font-bold text-slate-900">{getRecordActivity(record)}</p></div></div>
     {loading ? <div className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-8 text-sm font-semibold text-slate-500"><Loader2 size={18} className="animate-spin" />Loading material and lab costs...</div> : <div className="space-y-4">{renderSection('material')}{renderSection('lab')}</div>}
     <div className="grid gap-3 rounded-2xl bg-slate-50 p-4 sm:grid-cols-3"><div className="flex items-center justify-between gap-2 text-sm font-bold text-cyan-700"><span className="inline-flex items-center gap-2"><Package size={17} />Material</span><span>{formatCurrency(materialTotal, currency)}</span></div><div className="flex items-center justify-between gap-2 text-sm font-bold text-violet-700"><span className="inline-flex items-center gap-2"><Beaker size={17} />Lab</span><span>{formatCurrency(labTotal, currency)}</span></div><div className="flex items-center justify-between gap-2 text-base font-black text-slate-900"><span>Combined total</span><span>{formatCurrency(materialTotal + labTotal, currency)}</span></div></div>
-    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4"><label htmlFor="material-lab-admin-password" className="block text-xs font-black uppercase tracking-wider text-amber-800">Administrator password</label><p className="mt-1 text-xs text-amber-700">Required to authorize changes to financial costs and linked expenses.</p><input id="material-lab-admin-password" type="password" autoComplete="current-password" value={adminPassword} onChange={(event) => setAdminPassword(event.target.value)} className="mt-3 w-full rounded-xl border border-amber-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-amber-500 focus:ring-4 focus:ring-amber-100" /></div>
     {error && <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700" role="alert">{error}{loadFailed ? ' Close this window and reopen the treatment to retry loading.' : ''}</div>}
     <div className="flex justify-end gap-3 border-t border-slate-200 pt-5"><button type="button" onClick={onClose} disabled={saving} className="min-h-11 rounded-xl border border-slate-300 px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60">Cancel</button><button type="submit" disabled={loading || saving || loadFailed} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--hover-600)] px-5 py-3 text-sm font-black text-white hover:bg-[var(--hover-700)] disabled:cursor-not-allowed disabled:bg-slate-300">{saving ? <Loader2 size={16} className="animate-spin" /> : <Package size={16} />}{saving ? 'Saving...' : loadFailed ? 'Reload Required' : 'Save Material & Lab'}</button></div>
   </form></Modal>;

@@ -1,129 +1,16 @@
 -- ============================================================================
--- Material & Lab Cost Classification
+-- Remove Material & Lab administrator password re-entry
 -- ============================================================================
--- Additive and backward compatible: all existing rows remain material costs.
+-- Production deployment order:
+--   1. Run this migration.
+--   2. Deploy the matching frontend.
+--
+-- The legacy p_admin_password parameters intentionally remain in both RPC
+-- signatures so old and new frontend deployments can overlap safely. New
+-- clients pass a server-issued session token through that parameter; old clients
+-- may continue passing the administrator password during the rollout.
 
 BEGIN;
-
--- Older Material Cost installations may not yet have linked-expense columns.
-ALTER TABLE public.expenses
-  ADD COLUMN IF NOT EXISTS source_type VARCHAR(40),
-  ADD COLUMN IF NOT EXISTS source_id UUID,
-  ADD COLUMN IF NOT EXISTS is_system_generated BOOLEAN NOT NULL DEFAULT false;
-
--- The secured staff-auth RPC supports installations created before these
--- optional user columns were introduced.
-ALTER TABLE public.users
-  ADD COLUMN IF NOT EXISTS allowed_tabs JSONB,
-  ADD COLUMN IF NOT EXISTS doctor_id UUID;
-
-ALTER TABLE public.patient_material_costs
-  ADD COLUMN IF NOT EXISTS cost_type VARCHAR(20) NOT NULL DEFAULT 'material';
-
-UPDATE public.patient_material_costs
-SET cost_type = 'material'
-WHERE cost_type IS NULL OR cost_type NOT IN ('material', 'lab');
-
-ALTER TABLE public.patient_material_costs
-  ALTER COLUMN cost_type SET DEFAULT 'material',
-  ALTER COLUMN cost_type SET NOT NULL;
-
-ALTER TABLE public.patient_material_costs
-  DROP CONSTRAINT IF EXISTS patient_material_costs_cost_type_check;
-
-ALTER TABLE public.patient_material_costs
-  ADD CONSTRAINT patient_material_costs_cost_type_check
-  CHECK (cost_type IN ('material', 'lab'));
-
-CREATE INDEX IF NOT EXISTS idx_patient_material_costs_audit_type
-  ON public.patient_material_costs (audit_log_id, cost_type);
-
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT 1
-    FROM public.expenses
-    WHERE source_type IS NOT NULL AND source_id IS NOT NULL
-    GROUP BY source_type, source_id
-    HAVING COUNT(*) > 1
-  ) THEN
-    RAISE EXCEPTION USING
-      ERRCODE = '23505',
-      MESSAGE = 'Duplicate linked expenses exist for the same source_type/source_id.',
-      HINT = 'Review duplicate linked expense rows before rerunning this migration; no rows were changed because the transaction was rolled back.';
-  END IF;
-END;
-$$;
-
-DROP INDEX IF EXISTS public.idx_expenses_source_unique;
-CREATE UNIQUE INDEX idx_expenses_source_unique
-  ON public.expenses (source_type, source_id);
-
-CREATE TABLE IF NOT EXISTS public.pending_commission_recalculations (
-  patient_id UUID PRIMARY KEY REFERENCES public.patients(id) ON DELETE CASCADE,
-  request_token UUID NOT NULL,
-  requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-ALTER TABLE public.pending_commission_recalculations
-  ADD COLUMN IF NOT EXISTS request_token UUID;
-UPDATE public.pending_commission_recalculations SET request_token = gen_random_uuid() WHERE request_token IS NULL;
-ALTER TABLE public.pending_commission_recalculations ALTER COLUMN request_token SET NOT NULL;
-
-ALTER TABLE public.pending_commission_recalculations ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "anon_full_access_pending_commission_recalculations" ON public.pending_commission_recalculations;
-REVOKE ALL ON public.pending_commission_recalculations FROM anon, authenticated;
-
-DROP POLICY IF EXISTS "anon_full_access_patient_material_costs" ON public.patient_material_costs;
-DROP POLICY IF EXISTS "read_patient_material_costs" ON public.patient_material_costs;
-CREATE POLICY "read_patient_material_costs" ON public.patient_material_costs
-  FOR SELECT TO anon, authenticated USING (true);
-REVOKE INSERT, UPDATE, DELETE ON public.patient_material_costs FROM anon, authenticated;
-
-ALTER TABLE public.expenses ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "anon_full_access_expenses" ON public.expenses;
-DROP POLICY IF EXISTS "read_expenses" ON public.expenses;
-DROP POLICY IF EXISTS "insert_manual_expenses" ON public.expenses;
-DROP POLICY IF EXISTS "update_manual_expenses" ON public.expenses;
-DROP POLICY IF EXISTS "delete_manual_expenses" ON public.expenses;
-CREATE POLICY "read_expenses" ON public.expenses FOR SELECT TO anon, authenticated USING (true);
-CREATE POLICY "insert_manual_expenses" ON public.expenses FOR INSERT TO anon, authenticated
-  WITH CHECK (
-    COALESCE(is_system_generated, false) = false
-    AND source_type IS NULL
-    AND source_id IS NULL
-  );
-CREATE POLICY "update_manual_expenses" ON public.expenses FOR UPDATE TO anon, authenticated
-  USING (COALESCE(is_system_generated, false) = false)
-  WITH CHECK (
-    COALESCE(is_system_generated, false) = false
-    AND source_type IS NULL
-    AND source_id IS NULL
-  );
-CREATE POLICY "delete_manual_expenses" ON public.expenses FOR DELETE TO anon, authenticated
-  USING (COALESCE(is_system_generated, false) = false);
-
-REVOKE SELECT ON public.users FROM anon, authenticated;
-GRANT SELECT (id, location_id, username, role, allowed_tabs, created_at, updated_at, doctor_id)
-  ON public.users TO anon, authenticated;
-
-CREATE OR REPLACE FUNCTION public.authenticate_staff_user(p_username TEXT, p_password TEXT)
-RETURNS TABLE (
-  id UUID, location_id UUID, username TEXT, role TEXT, allowed_tabs JSONB, doctor_id UUID
-)
-LANGUAGE sql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT u.id, u.location_id, u.username::TEXT, u.role::TEXT, u.allowed_tabs, u.doctor_id
-  FROM public.users u
-  WHERE lower(u.username) = lower(btrim(p_username))
-    AND (u.password = p_password OR btrim(u.password) = btrim(p_password))
-  LIMIT 1;
-$$;
-
-REVOKE ALL ON FUNCTION public.authenticate_staff_user(TEXT, TEXT) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.authenticate_staff_user(TEXT, TEXT) TO anon, authenticated;
 
 CREATE TABLE IF NOT EXISTS public.staff_auth_sessions (
   session_token UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -143,21 +30,16 @@ RETURNS TABLE (
   doctor_id UUID, auth_session_token TEXT
 )
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-DECLARE
-  v_user public.users%ROWTYPE;
-  v_token UUID;
+DECLARE v_user public.users%ROWTYPE; v_token UUID;
 BEGIN
   SELECT u.* INTO v_user FROM public.users u
   WHERE lower(u.username) = lower(btrim(p_username))
-    AND (u.password = p_password OR btrim(u.password) = btrim(p_password))
-  LIMIT 1;
+    AND (u.password = p_password OR btrim(u.password) = btrim(p_password)) LIMIT 1;
   IF NOT FOUND THEN RETURN; END IF;
-  DELETE FROM public.staff_auth_sessions
-  WHERE expires_at <= NOW() OR revoked_at IS NOT NULL;
-  INSERT INTO public.staff_auth_sessions(user_id) VALUES (v_user.id)
-  RETURNING session_token INTO v_token;
-  RETURN QUERY SELECT v_user.id, v_user.location_id, v_user.username::TEXT,
-    v_user.role::TEXT, v_user.allowed_tabs, v_user.doctor_id, v_token::TEXT;
+  DELETE FROM public.staff_auth_sessions WHERE expires_at <= NOW() OR revoked_at IS NOT NULL;
+  INSERT INTO public.staff_auth_sessions(user_id) VALUES (v_user.id) RETURNING session_token INTO v_token;
+  RETURN QUERY SELECT v_user.id, v_user.location_id, v_user.username::TEXT, v_user.role::TEXT,
+    v_user.allowed_tabs, v_user.doctor_id, v_token::TEXT;
 END;
 $$;
 
@@ -165,10 +47,8 @@ CREATE OR REPLACE FUNCTION public.revoke_staff_auth_session(p_session_token TEXT
 RETURNS BOOLEAN LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
   UPDATE public.staff_auth_sessions SET revoked_at = NOW()
-  WHERE session_token = NULLIF(btrim(p_session_token), '')::UUID AND revoked_at IS NULL;
+  WHERE session_token::TEXT = btrim(p_session_token) AND revoked_at IS NULL;
   RETURN FOUND;
-EXCEPTION WHEN invalid_text_representation THEN
-  RETURN FALSE;
 END;
 $$;
 
@@ -176,16 +56,6 @@ REVOKE ALL ON FUNCTION public.authenticate_staff_user_session(TEXT, TEXT) FROM P
 GRANT EXECUTE ON FUNCTION public.authenticate_staff_user_session(TEXT, TEXT) TO anon, authenticated;
 REVOKE ALL ON FUNCTION public.revoke_staff_auth_session(TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.revoke_staff_auth_session(TEXT) TO anon, authenticated;
-
-CREATE OR REPLACE FUNCTION public.delete_audit_log_material_expense()
-RETURNS TRIGGER AS $$
-BEGIN
-  DELETE FROM public.expenses
-  WHERE source_type IN ('material_cost', 'lab_cost')
-    AND source_id = OLD.id;
-  RETURN OLD;
-END;
-$$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION public.replace_treatment_costs(
   p_audit_log_id UUID,
@@ -219,8 +89,7 @@ BEGIN
       u.password = p_admin_password OR btrim(u.password) = btrim(p_admin_password)
       OR EXISTS (
         SELECT 1 FROM public.staff_auth_sessions s
-        WHERE s.user_id = u.id
-          AND s.session_token::TEXT = btrim(p_admin_password)
+        WHERE s.user_id = u.id AND s.session_token::TEXT = btrim(p_admin_password)
           AND s.revoked_at IS NULL AND s.expires_at > NOW()
       )
     );
@@ -338,14 +207,14 @@ BEGIN
         u.password = p_admin_password OR btrim(u.password) = btrim(p_admin_password)
         OR EXISTS (
           SELECT 1 FROM public.staff_auth_sessions s
-          WHERE s.user_id = u.id
-            AND s.session_token::TEXT = btrim(p_admin_password)
+          WHERE s.user_id = u.id AND s.session_token::TEXT = btrim(p_admin_password)
             AND s.revoked_at IS NULL AND s.expires_at > NOW()
         )
       )
   ) THEN
     RAISE EXCEPTION 'A valid administrator session is required.';
   END IF;
+
   DELETE FROM public.pending_commission_recalculations
   WHERE patient_id = p_patient_id AND request_token = p_request_token;
   RETURN FOUND;
@@ -362,19 +231,7 @@ NOTIFY pgrst, 'reload schema';
 COMMIT;
 
 SELECT
-  EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'expenses' AND column_name = 'source_type'
-  ) AS expenses_source_type_ready,
-  EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'expenses' AND column_name = 'source_id'
-  ) AS expenses_source_id_ready,
-  EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'expenses' AND column_name = 'is_system_generated'
-  ) AS expenses_system_flag_ready,
   to_regprocedure('public.replace_treatment_costs(uuid,jsonb,uuid,text,uuid)') IS NOT NULL AS replacement_rpc_ready,
   to_regprocedure('public.acknowledge_commission_recalculation(uuid,uuid,uuid,text)') IS NOT NULL AS commission_ack_rpc_ready,
-  to_regprocedure('public.authenticate_staff_user(text,text)') IS NOT NULL AS staff_auth_rpc_ready,
-  to_regprocedure('public.authenticate_staff_user_session(text,text)') IS NOT NULL AS staff_session_auth_rpc_ready;
+  to_regprocedure('public.authenticate_staff_user_session(text,text)') IS NOT NULL AS staff_session_auth_rpc_ready,
+  to_regprocedure('public.revoke_staff_auth_session(text)') IS NOT NULL AS staff_session_revoke_rpc_ready;

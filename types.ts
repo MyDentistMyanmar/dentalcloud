@@ -393,6 +393,7 @@ export interface User {
   location_id: string | null; // null for global admins
   doctor_id?: string | null;
   username: string;
+  auth_session_token?: string;
   password?: string; // Only for creation/update, not returned in queries
   role: 'admin' | 'normal';
   allowed_tabs?: AppTabPermission[];

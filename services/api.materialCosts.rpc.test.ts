@@ -45,13 +45,13 @@ describe('api.materialCosts transactional RPC', () => {
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
-  it('sends categorized items and administrator credentials to the replacement RPC', async () => {
+  it('sends categorized items and the logged-in administrator ID without a password', async () => {
     const result = await api.materialCosts.upsertForTreatment({
       id: 'treatment-1', location_id: 'location-1', patient_id: 'patient-1', teeth: [], description: 'Crown', cost: 1000, date: '2026-07-18'
     }, [
       { materialName: ' Composite ', costType: 'material', costAmount: 100, quantity: 2 },
       { materialName: 'Crown lab', costType: 'lab', costAmount: 300, quantity: 1 }
-    ], { userId: 'admin-1', username: 'Admin', password: 'secret' });
+    ], { userId: 'admin-1', username: 'Admin', authToken: 'session-token-1' });
 
     expect(supabaseMock.rpcCalls[0]).toEqual({
       name: 'replace_treatment_costs',
@@ -62,7 +62,7 @@ describe('api.materialCosts transactional RPC', () => {
           { material_name: 'Crown lab', cost_type: 'lab', cost_amount: 300, quantity: 1 }
         ],
         p_admin_user_id: 'admin-1',
-        p_admin_password: 'secret',
+        p_admin_password: 'session-token-1',
         p_request_token: expect.any(String)
       }
     });

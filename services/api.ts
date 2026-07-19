@@ -251,14 +251,15 @@ const recalculatePatientDoctorCommissions = async (patientId: string): Promise<v
 const processPendingCommissionRecalculation = async (
   patientId: string,
   requestToken: string,
-  admin: { userId: string; password: string }
+  admin: { userId: string; authToken: string }
 ): Promise<void> => {
   await recalculatePatientDoctorCommissions(patientId);
   const { error } = await supabase.rpc('acknowledge_commission_recalculation', {
     p_patient_id: patientId,
     p_request_token: requestToken,
     p_admin_user_id: admin.userId,
-    p_admin_password: admin.password
+    // The legacy parameter name is retained for rolling-deployment compatibility.
+    p_admin_password: admin.authToken
   });
   if (error) throw new Error(error.message);
 };
@@ -2960,7 +2961,7 @@ export const api = {
     upsertForTreatment: async (
       treatment: ClinicalRecord,
       items: PatientMaterialCostInput[],
-      createdBy?: { userId?: string | null; username?: string | null; password?: string }
+      createdBy?: { userId?: string | null; username?: string | null; authToken?: string }
     ): Promise<{ auditLogId: string; items: PatientMaterialCost[]; commissionRefreshPending: boolean }> => {
       const treatmentId = trimRequired(treatment.id, 'Treatment audit row');
       const normalizedItems = items
@@ -3000,7 +3001,8 @@ export const api = {
         p_audit_log_id: auditLogId,
         p_items: normalizedItems,
         p_admin_user_id: createdBy?.userId || null,
-        p_admin_password: createdBy?.password || '',
+        // The legacy parameter name is retained for rolling-deployment compatibility.
+        p_admin_password: createdBy?.authToken || '',
         p_request_token: requestToken
       });
       if (replaceError) {
@@ -3014,7 +3016,7 @@ export const api = {
       try {
         await processPendingCommissionRecalculation(treatment.patient_id, requestToken, {
           userId: createdBy?.userId || '',
-          password: createdBy?.password || ''
+          authToken: createdBy?.authToken || ''
         });
       } catch (commissionError) {
         commissionRefreshPending = true;
@@ -5356,6 +5358,13 @@ export const api = {
   },
 
   users: {
+    revokeAuthSession: async (authToken: string): Promise<void> => {
+      if (!authToken) return;
+      const { error } = await supabase.rpc('revoke_staff_auth_session', {
+        p_session_token: authToken
+      });
+      if (error) throw new Error(error.message || 'Failed to revoke staff session.');
+    },
     getById: async (id: string): Promise<User | null> => {
       const supportsAllowedTabs = await detectUsersAllowedTabsSupport();
       const supportsDoctorId = await detectUsersDoctorIdSupport();
@@ -5432,18 +5441,17 @@ export const api = {
           location_id: user.location_id,
           doctor_id: supportsDoctorId ? (user.doctor_id || null) : null,
           username: user.username,
+          auth_session_token: user.auth_session_token,
           role: user.role,
           allowed_tabs: resolveAllowedTabs(user.role, supportsAllowedTabs ? user.allowed_tabs : undefined)
         });
   
-        const authResult = await supabase.rpc('authenticate_staff_user', {
+        const authResult = await supabase.rpc('authenticate_staff_user_session', {
           p_username: trimmedUsername,
           p_password: password
         });
         const data = authResult.data as User[] | null;
         const error = authResult.error;
-
-        console.log('Supabase response:', { data, error });
 
         if (error) {
           console.error('Supabase error:', error);

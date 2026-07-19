@@ -541,6 +541,16 @@ CREATE TABLE pending_commission_recalculations (
   requested_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE staff_auth_sessions (
+  session_token UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '1 year'),
+  revoked_at TIMESTAMPTZ
+);
+CREATE INDEX idx_staff_auth_sessions_user_id ON staff_auth_sessions(user_id);
+CREATE INDEX idx_staff_auth_sessions_expires_at ON staff_auth_sessions(expires_at);
+
 -- Conversations (Messaging)
 CREATE TABLE conversations (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -1453,8 +1463,15 @@ DECLARE
 BEGIN
   SELECT u.username INTO v_admin_username FROM users u
   WHERE u.id = p_admin_user_id AND u.role = 'admin'
-    AND (u.password = p_admin_password OR btrim(u.password) = btrim(p_admin_password));
-  IF NOT FOUND THEN RAISE EXCEPTION 'Administrator password is incorrect.'; END IF;
+    AND (
+      u.password = p_admin_password OR btrim(u.password) = btrim(p_admin_password)
+      OR EXISTS (
+        SELECT 1 FROM staff_auth_sessions s
+        WHERE s.user_id = u.id AND s.session_token::TEXT = btrim(p_admin_password)
+          AND s.revoked_at IS NULL AND s.expires_at > NOW()
+      )
+    );
+  IF NOT FOUND THEN RAISE EXCEPTION 'A valid administrator session is required.'; END IF;
   SELECT t.location_id, t.date, t.patient_id, COALESCE(p.name, 'Unknown patient'), COALESCE(t.description, 'Treatment')
   INTO v_location_id, v_treatment_date, v_patient_id, v_patient_name, v_treatment_label
   FROM audit_logs a JOIN treatments t ON t.id = a.source_id LEFT JOIN patients p ON p.id = t.patient_id
@@ -1496,8 +1513,15 @@ RETURNS BOOLEAN LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM users u WHERE u.id = p_admin_user_id AND u.role = 'admin'
-      AND (u.password = p_admin_password OR btrim(u.password) = btrim(p_admin_password))
-  ) THEN RAISE EXCEPTION 'Administrator password is incorrect.'; END IF;
+      AND (
+        u.password = p_admin_password OR btrim(u.password) = btrim(p_admin_password)
+        OR EXISTS (
+          SELECT 1 FROM staff_auth_sessions s
+          WHERE s.user_id = u.id AND s.session_token::TEXT = btrim(p_admin_password)
+            AND s.revoked_at IS NULL AND s.expires_at > NOW()
+        )
+      )
+  ) THEN RAISE EXCEPTION 'A valid administrator session is required.'; END IF;
   DELETE FROM pending_commission_recalculations
   WHERE patient_id = p_patient_id AND request_token = p_request_token;
   RETURN FOUND;
@@ -1865,6 +1889,9 @@ REVOKE INSERT, UPDATE, DELETE ON patient_material_costs FROM anon, authenticated
 ALTER TABLE pending_commission_recalculations ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON pending_commission_recalculations FROM anon, authenticated;
 
+ALTER TABLE staff_auth_sessions ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON staff_auth_sessions FROM anon, authenticated;
+
 REVOKE SELECT ON users FROM anon, authenticated;
 GRANT SELECT (id, location_id, username, role, allowed_tabs, created_at, updated_at, doctor_id) ON users TO anon, authenticated;
 
@@ -1879,6 +1906,34 @@ LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
 $$;
 REVOKE ALL ON FUNCTION authenticate_staff_user(TEXT, TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION authenticate_staff_user(TEXT, TEXT) TO anon, authenticated;
+
+CREATE OR REPLACE FUNCTION authenticate_staff_user_session(p_username TEXT, p_password TEXT)
+RETURNS TABLE (id UUID, location_id UUID, username TEXT, role TEXT, allowed_tabs JSONB, doctor_id UUID, auth_session_token TEXT)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_user users%ROWTYPE; v_token UUID;
+BEGIN
+  SELECT u.* INTO v_user FROM users u
+  WHERE lower(u.username) = lower(btrim(p_username))
+    AND (u.password = p_password OR btrim(u.password) = btrim(p_password)) LIMIT 1;
+  IF NOT FOUND THEN RETURN; END IF;
+  DELETE FROM staff_auth_sessions WHERE expires_at <= NOW() OR revoked_at IS NOT NULL;
+  INSERT INTO staff_auth_sessions(user_id) VALUES (v_user.id) RETURNING session_token INTO v_token;
+  RETURN QUERY SELECT v_user.id, v_user.location_id, v_user.username::TEXT, v_user.role::TEXT,
+    v_user.allowed_tabs, v_user.doctor_id, v_token::TEXT;
+END;
+$$;
+CREATE OR REPLACE FUNCTION revoke_staff_auth_session(p_session_token TEXT)
+RETURNS BOOLEAN LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  UPDATE staff_auth_sessions SET revoked_at = NOW()
+  WHERE session_token::TEXT = btrim(p_session_token) AND revoked_at IS NULL;
+  RETURN FOUND;
+END;
+$$;
+REVOKE ALL ON FUNCTION authenticate_staff_user_session(TEXT, TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION authenticate_staff_user_session(TEXT, TEXT) TO anon, authenticated;
+REVOKE ALL ON FUNCTION revoke_staff_auth_session(TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION revoke_staff_auth_session(TEXT) TO anon, authenticated;
 
 -- ============================================================================
 -- 7.1 STORAGE BUCKET POLICIES

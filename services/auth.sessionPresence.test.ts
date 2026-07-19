@@ -15,7 +15,8 @@ vi.mock('./api', () => ({
       getAll: vi.fn(),
       getById: vi.fn(),
       create: vi.fn(),
-      authenticate: vi.fn()
+      authenticate: vi.fn(),
+      revokeAuthSession: vi.fn()
     }
   }
 }));
@@ -80,6 +81,24 @@ describe('auth staff session presence resilience', () => {
 
     expect(auth.getSession()).toBeNull();
     expect(localStorage.removeItem).toHaveBeenCalledWith('dental_auth_session');
+  });
+
+  it('revokes the server-issued staff token during logout', async () => {
+    presenceMock.markActive.mockResolvedValueOnce(undefined);
+    presenceMock.markInactive.mockResolvedValueOnce(undefined);
+
+    await auth.createStaffSession({
+      id: '00000000-0000-0000-0000-000000000005',
+      username: 'admin',
+      auth_session_token: 'server-token-1',
+      role: 'admin',
+      location_id: null
+    });
+
+    await auth.logout();
+
+    expect(api.users.revokeAuthSession).toHaveBeenCalledWith('server-token-1');
+    expect(auth.getSession()).toBeNull();
   });
 
   it('refreshes branch permission changes from the database without requiring a new login', async () => {
