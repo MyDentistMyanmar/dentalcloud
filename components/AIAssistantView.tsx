@@ -166,6 +166,12 @@ const customStyles = `
     100% { opacity: 1; transform: translateY(0) scale(1); }
   }
 
+  @keyframes loli-intro-dismiss {
+    0% { opacity: 1; transform: translateY(0) scale(1); max-height: 40rem; margin-bottom: 1.25rem; }
+    70% { opacity: 0; transform: translateY(-10px) scale(0.985); max-height: 40rem; margin-bottom: 1.25rem; }
+    100% { opacity: 0; transform: translateY(-10px) scale(0.985); max-height: 0; margin-bottom: 0; }
+  }
+
   @keyframes loli-intro-draw {
     0% { stroke-dashoffset: 980; opacity: 0.25; }
     100% { stroke-dashoffset: 0; opacity: 1; }
@@ -196,6 +202,11 @@ const customStyles = `
   .loli-intro-scene {
     transform-origin: center top;
     animation: loli-intro-rise 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .loli-intro-scene--leaving {
+    pointer-events: none;
+    animation: loli-intro-dismiss 0.45s cubic-bezier(0.4, 0, 0.2, 1) forwards;
   }
 
   .loli-intro-grid {

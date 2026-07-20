@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   LOLI_WELCOME_MESSAGE,
   LOLI_WELCOME_MESSAGE_ID,
+  LOLI_INTRO_EXIT_MS,
+  LOLI_INTRO_VISIBLE_MS,
   isWelcomeMessage,
   isWelcomeOnlyConversation
 } from './assistantIntro';
@@ -14,6 +16,12 @@ const welcome = {
 };
 
 describe('assistant intro presentation', () => {
+  it('keeps the card readable before a short exit transition', () => {
+    expect(LOLI_INTRO_VISIBLE_MS).toBe(4500);
+    expect(LOLI_INTRO_EXIT_MS).toBe(450);
+    expect(LOLI_INTRO_VISIBLE_MS).toBeGreaterThan(LOLI_INTRO_EXIT_MS);
+  });
+
   it('recognizes the current welcome-only conversation', () => {
     expect(isWelcomeOnlyConversation([welcome])).toBe(true);
     expect(isWelcomeMessage(welcome)).toBe(true);

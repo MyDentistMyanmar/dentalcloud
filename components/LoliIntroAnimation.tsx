@@ -1,10 +1,30 @@
 import React from 'react';
+import { LOLI_INTRO_EXIT_MS, LOLI_INTRO_VISIBLE_MS } from '../utils/assistantIntro';
 
-const LoliIntroAnimation: React.FC = () => (
-  <section
-    className="loli-intro-scene relative mx-auto mb-5 w-full max-w-4xl overflow-hidden rounded-[1.75rem] border border-slate-800 bg-slate-950 shadow-[0_24px_65px_-38px_rgba(15,23,42,0.9)]"
-    aria-label="Loli clinical assistant is online"
-  >
+const LoliIntroAnimation: React.FC = () => {
+  const [phase, setPhase] = React.useState<'visible' | 'leaving' | 'hidden'>('visible');
+
+  React.useEffect(() => {
+    const exitTimer = window.setTimeout(() => setPhase('leaving'), LOLI_INTRO_VISIBLE_MS);
+    const removeTimer = window.setTimeout(
+      () => setPhase('hidden'),
+      LOLI_INTRO_VISIBLE_MS + LOLI_INTRO_EXIT_MS
+    );
+
+    return () => {
+      window.clearTimeout(exitTimer);
+      window.clearTimeout(removeTimer);
+    };
+  }, []);
+
+  if (phase === 'hidden') return null;
+
+  return (
+    <section
+      className={`loli-intro-scene relative mx-auto mb-5 w-full max-w-4xl overflow-hidden rounded-[1.75rem] border border-slate-800 bg-slate-950 shadow-[0_24px_65px_-38px_rgba(15,23,42,0.9)] ${phase === 'leaving' ? 'loli-intro-scene--leaving' : ''}`}
+      aria-label="Loli clinical assistant is online"
+      aria-hidden={phase === 'leaving' ? true : undefined}
+    >
     <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_78%_20%,rgba(99,102,241,0.22),transparent_34%),radial-gradient(circle_at_18%_90%,rgba(6,182,212,0.14),transparent_32%)]" />
     <svg
       className="relative block h-auto w-full"
@@ -59,11 +79,12 @@ const LoliIntroAnimation: React.FC = () => (
         <image href="/loliAiAssistant.svg" x="547" y="57" width="112" height="112" clipPath="url(#loli-avatar-clip)" className="loli-intro-avatar" />
         <path d="M665 105h21l9 8-9 8h-21" fill="none" stroke="#a5b4fc" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="loli-intro-handoff" />
 
-        <text x="554" y="197" fill="#f8fafc" fontSize="17" fontWeight="800" letterSpacing="0.2">Ready when you are.</text>
-        <text x="554" y="216" fill="#94a3b8" fontSize="10" fontWeight="600" letterSpacing="1.2">CLINICAL COPILOT · v2.0</text>
+        <text x="603" y="196" textAnchor="middle" fill="#f8fafc" fontSize="15" fontWeight="800" letterSpacing="0.1">Ready when you are.</text>
+        <text x="603" y="215" textAnchor="middle" fill="#94a3b8" fontSize="9" fontWeight="600" letterSpacing="1">CLINICAL COPILOT · v2.0</text>
       </g>
     </svg>
-  </section>
-);
+    </section>
+  );
+};
 
 export default LoliIntroAnimation;

@@ -1,4 +1,6 @@
 export const LOLI_WELCOME_MESSAGE_ID = 'loli-welcome-v2';
+export const LOLI_INTRO_VISIBLE_MS = 4500;
+export const LOLI_INTRO_EXIT_MS = 450;
 
 export const LOLI_WELCOME_MESSAGE = `Hi, I'm Loli — your AI clinical assistant.
 
