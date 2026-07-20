@@ -146,7 +146,7 @@ const TreatmentAnalysisView: React.FC<TreatmentAnalysisViewProps> = ({
         <div className="grid border-t border-white/10 sm:grid-cols-2 xl:grid-cols-4">
           {[
             { label: 'Performed', value: analysis.totalTreatments.toLocaleString(), note: `${analysis.rows.length} treatment types`, icon: <Stethoscope className="h-4 w-4" /> },
-            { label: 'Patients treated', value: analysis.uniquePatients.toLocaleString(), note: `${repeatRate.toFixed(0)}% returned in range`, icon: <Users className="h-4 w-4" /> },
+            { label: 'Patients treated', value: analysis.uniquePatients.toLocaleString(), note: `${repeatRate.toFixed(0)}% had multiple treatment records`, icon: <Users className="h-4 w-4" /> },
             { label: 'Production', value: formatCurrency(analysis.production, currency), note: 'Recorded treatment value', icon: <CircleDollarSign className="h-4 w-4" /> },
             { label: 'Average value', value: formatCurrency(analysis.averageValue, currency), note: `${analysis.discountedCount} discounted · ${analysis.focCount} FOC`, icon: <BadgeDollarSign className="h-4 w-4" /> }
           ].map((metric) => (
