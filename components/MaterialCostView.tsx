@@ -7,6 +7,7 @@ import { toLocalISODate } from '../utils/auditLogFilters';
 import { buildAuditLogRows, filterAuditLogRowsForExport, type AuditExportRow } from '../utils/auditLogExport';
 import { formatTeethWithPosition } from '../utils/toothNumbering';
 import { formatDoctorName } from '../utils/doctorName';
+import { sortMaterialCostRowsNewestFirst } from '../utils/materialCostRows';
 import {
   calculateMaterialAdjustedDoctorEarnings,
   calculateMaterialNetProfit
@@ -123,7 +124,7 @@ const MaterialCostView: React.FC<MaterialCostViewProps> = ({ records, paymentRec
     const doctorTerm = doctorSearchTerm.trim().toLowerCase();
     const treatmentTerm = treatmentSearchTerm.trim().toLowerCase();
 
-    return baseFilteredRows.filter((row) => {
+    const matchingRows = baseFilteredRows.filter((row) => {
       const record = row.record;
       const groupedRecords = record._groupedRecords?.length ? record._groupedRecords : [record];
 
@@ -134,6 +135,8 @@ const MaterialCostView: React.FC<MaterialCostViewProps> = ({ records, paymentRec
 
       return matchesDoctor && matchesTreatment;
     });
+
+    return sortMaterialCostRowsNewestFirst(matchingRows);
   }, [baseFilteredRows, doctorSearchTerm, treatmentSearchTerm]);
 
   const loadMaterialSummaries = React.useCallback(async (rowsToLoad: TreatmentAuditRow[]) => {
@@ -437,7 +440,7 @@ const MaterialCostView: React.FC<MaterialCostViewProps> = ({ records, paymentRec
                 <th className="px-6 py-4 text-right text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Total Cost</th>
                 <th className="px-6 py-4 text-right text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Doctor Earned</th>
                 <th className="px-6 py-4 text-right text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Net Profit</th>
-                <th className="px-6 py-4 text-right text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Action</th>
+                <th className="sticky right-0 z-20 min-w-[172px] border-l border-slate-200 bg-slate-50 px-6 py-4 text-right text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 shadow-[-10px_0_16px_-14px_rgba(15,23,42,0.55)]">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
@@ -458,7 +461,7 @@ const MaterialCostView: React.FC<MaterialCostViewProps> = ({ records, paymentRec
                   const adjustedDoctorEarned = getAdjustedDoctorEarned(record);
                   const netProfit = getNetProfit(record);
                   return (
-                    <tr key={`material-cost-${record.id}`} className="border-l-4 border-[var(--hover-300)] transition-colors hover:bg-[var(--hover-50)]/30">
+                    <tr key={`material-cost-${record.id}`} className="group border-l-4 border-[var(--hover-300)] transition-colors hover:bg-[var(--hover-50)]/30">
                       <td className="whitespace-nowrap px-4 py-4 text-sm text-slate-500 xl:px-6">{record.date}</td>
                       <td className="px-4 py-4 font-bold text-slate-900 xl:px-6">{record.patient_name || 'Unknown'}</td>
                       <td className="px-4 py-4 text-sm text-slate-700 xl:px-6">{formatDoctorName(record.doctor_name)}</td>
@@ -476,7 +479,7 @@ const MaterialCostView: React.FC<MaterialCostViewProps> = ({ records, paymentRec
                       <td className="px-4 py-4 text-right text-sm font-black text-slate-800 xl:px-6">{getMaterialTotal(record) > 0 ? formatCurrency(getMaterialTotal(record), currency) : '-'}</td>
                       <td className="px-4 py-4 text-right text-sm font-bold text-emerald-700 xl:px-6">{adjustedDoctorEarned > 0 ? formatCurrency(adjustedDoctorEarned, currency) : '-'}</td>
                       <td className={`px-4 py-4 text-right text-sm font-black xl:px-6 ${netProfit >= 0 ? 'text-slate-900' : 'text-red-600'}`}>{formatCurrency(netProfit, currency)}</td>
-                      <td className="px-4 py-4 text-right xl:px-6">
+                      <td className="sticky right-0 z-10 min-w-[172px] border-l border-slate-100 bg-white px-4 py-4 text-right shadow-[-10px_0_16px_-14px_rgba(15,23,42,0.55)] transition-colors group-hover:bg-[var(--hover-50)] xl:px-6">
                         {canManageMaterials ? (
                           <button
                             type="button"
