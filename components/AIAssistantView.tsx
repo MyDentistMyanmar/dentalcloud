@@ -13,6 +13,8 @@ import { buildFinancialReport, renderFinancialReportMarkdown, buildInsightsNoNum
 import { formatPaymentMethod, isSelectablePaymentMethod, normalizePaymentMethod } from '../utils/paymentMethods';
 import { formatDoctorName } from '../utils/doctorName';
 import { ASSISTANT_PRODUCT_KNOWLEDGE } from '../utils/assistantProductKnowledge';
+import { LOLI_WELCOME_MESSAGE, LOLI_WELCOME_MESSAGE_ID, isWelcomeMessage, isWelcomeOnlyConversation } from '../utils/assistantIntro';
+import LoliIntroAnimation from './LoliIntroAnimation';
 import {
   ExpectedAppointmentState,
   renderVerificationResult,
@@ -157,6 +159,124 @@ const customStyles = `
   @keyframes loli-talk {
     0%, 100% { transform: scaleY(0.35); opacity: 0.5; }
     45% { transform: scaleY(1); opacity: 1; }
+  }
+
+  @keyframes loli-intro-rise {
+    0% { opacity: 0; transform: translateY(18px) scale(0.985); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  @keyframes loli-intro-draw {
+    0% { stroke-dashoffset: 980; opacity: 0.25; }
+    100% { stroke-dashoffset: 0; opacity: 1; }
+  }
+
+  @keyframes loli-intro-pop {
+    0% { opacity: 0; transform: translateY(16px) scale(0.88); }
+    68% { opacity: 1; transform: translateY(-2px) scale(1.015); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  @keyframes loli-intro-avatar {
+    0% { opacity: 0; transform: scale(0.72) rotate(-5deg); }
+    70% { opacity: 1; transform: scale(1.04) rotate(1deg); }
+    100% { opacity: 1; transform: scale(1) rotate(0); }
+  }
+
+  @keyframes loli-intro-reveal {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+  }
+
+  @keyframes loli-intro-pulse {
+    0%, 100% { opacity: 0.45; transform: scale(0.94); }
+    50% { opacity: 0.9; transform: scale(1.06); }
+  }
+
+  .loli-intro-scene {
+    transform-origin: center top;
+    animation: loli-intro-rise 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .loli-intro-grid {
+    fill: none;
+    stroke: rgba(148, 163, 184, 0.08);
+    stroke-width: 1;
+  }
+
+  .loli-intro-tooth {
+    transform-origin: 126px 127px;
+    animation: loli-intro-pulse 3.6s ease-in-out 1.2s infinite;
+  }
+
+  .loli-intro-signal-shadow,
+  .loli-intro-signal {
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-dasharray: 980;
+    stroke-dashoffset: 980;
+  }
+
+  .loli-intro-signal-shadow {
+    stroke: rgba(129, 140, 248, 0.2);
+    stroke-width: 9;
+    animation: loli-intro-draw 1.15s ease-out 0.28s both;
+  }
+
+  .loli-intro-signal {
+    stroke: url(#loli-signal-gradient);
+    stroke-width: 3;
+    filter: url(#loli-signal-glow);
+    animation: loli-intro-draw 1.15s ease-out 0.28s both;
+  }
+
+  .loli-intro-avatar,
+  .loli-intro-avatar-ring,
+  .loli-intro-handoff {
+    opacity: 0;
+    transform-origin: 603px 113px;
+    animation: loli-intro-avatar 0.58s cubic-bezier(0.22, 1, 0.36, 1) 1.05s both;
+  }
+
+  .loli-intro-signal-head {
+    opacity: 0;
+    animation: loli-intro-reveal 0.24s ease-out 1.02s both;
+  }
+
+  .loli-intro-halo {
+    transform-origin: 603px 113px;
+    animation: loli-intro-pulse 3s ease-in-out 1.4s infinite;
+  }
+
+  .loli-intro-online-dot {
+    transform-origin: 166px 31px;
+    animation: loli-intro-pulse 1.8s ease-in-out infinite;
+  }
+
+  .loli-welcome-message {
+    opacity: 0;
+    transform-origin: 1.25rem 0;
+    animation: loli-intro-pop 0.52s cubic-bezier(0.22, 1, 0.36, 1) 1.38s both;
+  }
+
+  .loli-welcome-bubble {
+    position: relative;
+    border-color: rgba(129, 140, 248, 0.4) !important;
+    box-shadow: 0 18px 42px -30px rgba(79, 70, 229, 0.65);
+  }
+
+  .loli-welcome-bubble::before {
+    content: '';
+    position: absolute;
+    left: -7px;
+    top: 18px;
+    width: 13px;
+    height: 13px;
+    background: white;
+    border-left: 1px solid rgba(129, 140, 248, 0.4);
+    border-bottom: 1px solid rgba(129, 140, 248, 0.4);
+    transform: rotate(45deg);
   }
 
   .loli-orbit {
@@ -413,8 +533,22 @@ const customStyles = `
     .loli-orbit,
     .loli-breathe,
     .loli-scan,
-    .loli-talk-bar {
+    .loli-talk-bar,
+    .loli-intro-scene,
+    .loli-intro-tooth,
+    .loli-intro-signal-shadow,
+    .loli-intro-signal,
+    .loli-intro-signal-head,
+    .loli-intro-avatar,
+    .loli-intro-avatar-ring,
+    .loli-intro-handoff,
+    .loli-intro-halo,
+    .loli-intro-online-dot,
+    .loli-welcome-message {
       animation: none !important;
+      opacity: 1 !important;
+      transform: none !important;
+      stroke-dashoffset: 0 !important;
     }
   }
 `;
@@ -1184,17 +1318,9 @@ const AIAssistantView: React.FC<AIAssistantViewProps> = ({
   };
 
   const getDefaultMessages = (): Message[] => [{
-    id: '1',
+    id: LOLI_WELCOME_MESSAGE_ID,
     role: 'assistant',
-    content: `👋 Hello! I'm Loli, your AI Clinical Assistant. I can help you with:
-
-• Patient case analysis
-• Treatment recommendations
-• Dental diagnosis suggestions
-• Clinical documentation
-• Medical history interpretation
-
-How can I assist you today?`,
+    content: LOLI_WELCOME_MESSAGE,
     timestamp: new Date()
   }];
 
@@ -5292,6 +5418,7 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
     : 'Tell Loli what to update, schedule, record, or create in the system...';
 
   const activeSession = chatSessions.find(session => session.id === currentSessionId) ?? null;
+  const showIntroPresentation = isWelcomeOnlyConversation(messages);
   
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white animate-fade-in">
@@ -5475,25 +5602,32 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                 )}
 
                 <div className="space-y-4">
-                  {messages.map((message, index) => (
-                    <div
-                      key={message.id}
-                      className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in-up`}
-                      style={{ animationDelay: `${index * 45}ms` }}
-                    >
-                      {message.role === 'assistant' && (
-                        <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-                          <Bot className="h-4 w-4" />
-                        </div>
-                      )}
-                      
+                  {showIntroPresentation && (
+                    <LoliIntroAnimation key={`intro-${currentSessionId || messages[0]?.timestamp.getTime()}`} />
+                  )}
+                  {messages.map((message, index) => {
+                    const isIntroWelcome = showIntroPresentation && isWelcomeMessage(message);
+                    return (
                       <div
-                      className={`group max-w-[min(100%,76rem)] rounded-2xl px-4 sm:px-5 py-3 sm:py-4 shadow-sm transition ${
+                        key={isIntroWelcome ? `${currentSessionId || message.timestamp.getTime()}-${message.id}` : message.id}
+                        className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'} ${isIntroWelcome ? 'loli-welcome-message' : 'animate-fade-in-up'}`}
+                        style={isIntroWelcome ? undefined : { animationDelay: `${index * 45}ms` }}
+                      >
+                        {message.role === 'assistant' && (
+                          <div className={`mt-1 flex flex-shrink-0 items-center justify-center overflow-hidden ${isIntroWelcome ? 'h-10 w-10 rounded-full bg-indigo-50 ring-2 ring-indigo-100' : 'h-8 w-8 rounded-lg bg-slate-100 text-slate-600'}`}>
+                            {isIntroWelcome
+                              ? <img src="/loliAiAssistant.svg" alt="" className="h-9 w-9 object-cover" />
+                              : <Bot className="h-4 w-4" />}
+                          </div>
+                        )}
+
+                        <div
+                          className={`group max-w-[min(100%,76rem)] rounded-2xl px-4 sm:px-5 py-3 sm:py-4 shadow-sm transition ${isIntroWelcome ? 'loli-welcome-bubble' : ''} ${
                           message.role === 'user'
                             ? 'bg-indigo-600 text-white'
                             : 'border border-gray-200 bg-white text-gray-900'
                         }`}
-                      >
+                        >
                         {message.role === 'assistant' && (
                           <div className="mb-3 flex items-center justify-between gap-3 border-b border-gray-100 pb-3">
                             <div className="flex items-center gap-2">
@@ -5604,8 +5738,9 @@ This action requires Agent Mode to be enabled. Please switch to Agent Mode using
                           <User className="h-4 w-4" />
                         </div>
                       )}
-                    </div>
-                  ))}
+                      </div>
+                    );
+                  })}
 
                   {isLoading && (
                     <div className="flex justify-start gap-3 animate-fade-in-up">
