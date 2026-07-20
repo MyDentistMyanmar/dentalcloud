@@ -3903,6 +3903,12 @@ const App: React.FC = () => {
                   allBranchesValue={ALL_BRANCHES_VALUE}
                   canViewAllBranches={canAdminViewAllBranches}
                   onLocationChange={handleDashboardLocationChange}
+                  onLoadTreatmentAnalysis={async (dateFrom, dateTo) => {
+                    const session = auth.getSession();
+                    const restrictedLocationId = getSessionRestrictedLocationId(session);
+                    const queryLocationId = restrictedLocationId || (dashboardLocationId === ALL_BRANCHES_VALUE ? undefined : dashboardLocationId);
+                    return api.treatments.getAnalysisRecords({ locationId: queryLocationId, dateFrom, dateTo });
+                  }}
                   onSelectPatient={handlePatientSelect}
                   loading={loading}
                 />

@@ -3119,6 +3119,65 @@ export const api = {
         doctor_commission_per_visit: rec.doctors?.commission_per_visit !== undefined ? Number(rec.doctors.commission_per_visit || 0) : null
       }));
     },
+    getAnalysisRecords: async ({
+      locationId,
+      dateFrom,
+      dateTo
+    }: {
+      locationId?: string;
+      dateFrom: string;
+      dateTo: string;
+    }): Promise<ClinicalRecord[]> => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo) || dateFrom > dateTo) {
+        throw new Error('A valid treatment analysis date range is required.');
+      }
+
+      const pageSize = 1000;
+      const records: ClinicalRecord[] = [];
+
+      for (let offset = 0; ; offset += pageSize) {
+        let query = supabase
+          .from('treatments')
+          .select('id, location_id, patient_id, doctor_id, treatment_type_id, teeth, description, cost, standard_cost, discount_amount, pricing_note, date, doctors(name)')
+          .gte('date', dateFrom)
+          .lte('date', dateTo)
+          .order('date', { ascending: false })
+          .order('id', { ascending: true })
+          .range(offset, offset + pageSize - 1);
+
+        if (locationId) query = query.eq('location_id', locationId);
+
+        let { data, error }: { data: any[] | null; error: any } = await query;
+        if (error && isOptionalRelationAccessError(error, ['doctors'])) {
+          let fallbackQuery = supabase
+            .from('treatments')
+            .select('id, location_id, patient_id, doctor_id, treatment_type_id, teeth, description, cost, standard_cost, discount_amount, pricing_note, date')
+            .gte('date', dateFrom)
+            .lte('date', dateTo)
+            .order('date', { ascending: false })
+            .order('id', { ascending: true })
+            .range(offset, offset + pageSize - 1);
+          if (locationId) fallbackQuery = fallbackQuery.eq('location_id', locationId);
+          const fallback = await fallbackQuery;
+          data = fallback.data;
+          error = fallback.error;
+        }
+        if (error) throw new Error(error.message || 'Treatment analysis could not be loaded.');
+
+        const page = data || [];
+        records.push(...page.map((record: any) => ({
+          ...record,
+          standardCost: record.standard_cost ?? null,
+          discountAmount: Number(record.discount_amount || 0),
+          pricingNote: record.pricing_note || null,
+          doctor_name: record.doctors?.name || undefined
+        })));
+
+        if (page.length < pageSize) break;
+      }
+
+      return records;
+    },
     getAllRecords: async (locationId?: string, options?: { limit?: number | null }): Promise<ClinicalRecord[]> => {
       try {
         let query = supabase
