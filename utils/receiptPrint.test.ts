@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   getReceiptPageSize,
+  getReceiptPrintPosition,
   getThermalPageHeightMm,
   getThermalPaperWidthMm,
   THERMAL_PAGE_SAFETY_MM
@@ -15,6 +16,12 @@ describe('receipt print sizing', () => {
   it('uses the physical roll width for both thermal formats', () => {
     expect(getThermalPaperWidthMm('THERMAL_55MM')).toBe(58);
     expect(getThermalPaperWidthMm('THERMAL_80MM')).toBe(80);
+  });
+
+  it('anchors thermal receipts to page one without fixed paged-media positioning', () => {
+    expect(getReceiptPrintPosition('THERMAL_55MM')).toBe('absolute');
+    expect(getReceiptPrintPosition('THERMAL_80MM')).toBe('absolute');
+    expect(getReceiptPrintPosition('A4')).toBe('static');
   });
 
   it('sizes a thermal page to its rendered content instead of a fixed A4 height', () => {

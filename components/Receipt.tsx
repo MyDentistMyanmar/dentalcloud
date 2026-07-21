@@ -7,7 +7,7 @@ import { formatPaymentMethod } from '../utils/paymentMethods';
 import { normalizePaymentAllocations } from '../utils/paymentMethods';
 import { resolveReceiptHeaderTitle } from '../utils/receiptPreferences';
 import { formatTeethWithPosition } from '../utils/toothNumbering';
-import { getReceiptPageSize, getThermalPageHeightMm } from '../utils/receiptPrint';
+import { getReceiptPageSize, getReceiptPrintPosition, getThermalPageHeightMm } from '../utils/receiptPrint';
 
 interface ReceiptProps {
   patient: Patient;
@@ -1196,6 +1196,7 @@ const Receipt: React.FC<ReceiptProps> = ({
     ? (isThermal ? renderPaymentThermalPrint() : renderPaymentA4Print())
     : (isThermal ? renderThermalPrint() : renderA4Print());
   const printPageSize = getReceiptPageSize(receiptSize, thermalPageHeightMm);
+  const printPosition = getReceiptPrintPosition(receiptSize);
   const printPortal = typeof document === 'undefined'
     ? null
     : createPortal(
@@ -1231,10 +1232,11 @@ const Receipt: React.FC<ReceiptProps> = ({
 
           body > .receipt-print {
             display: block !important;
-            /* XP80C can vertically center normal-flow content when its driver
-               substitutes a longer roll page. Pin thermal output to the
-               physical page origin; keep A4 in normal flow. */
-            position: ${isThermal ? 'fixed' : 'static'} !important;
+            /* Fixed elements have special paged-media behavior in Chromium and
+               can be centered or repeated when a thermal driver substitutes a
+               longer roll page. Anchor the one thermal copy to page one instead;
+               keep A4 in normal flow. */
+            position: ${printPosition} !important;
             top: 0 !important;
             left: 0 !important;
             visibility: visible !important;
