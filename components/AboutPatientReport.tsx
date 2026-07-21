@@ -1,15 +1,17 @@
 import React, { useMemo } from 'react';
 import {
   Activity, CalendarDays, CheckCircle2, CircleDollarSign, Clock3, FileHeart,
-  Pill, Stethoscope, UserRound, WalletCards
+  Download, Pill, Stethoscope, UserRound, WalletCards
 } from 'lucide-react';
 import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
-import type { Appointment, ClinicalRecord, Doctor, MedicineSale, Patient, PaymentRecord } from '../types';
+import type { Appointment, ClinicalRecord, Doctor, MedicineSale, Patient, PaymentAllocation, PaymentMethod, PaymentRecord } from '../types';
 import type { Currency } from '../utils/currency';
 import { formatCurrency } from '../utils/currency';
 import { formatDoctorName } from '../utils/doctorName';
 import { formatMedicineQuantity } from '../utils/medicineHistory';
+import { formatPaymentAllocations, formatPaymentMethod } from '../utils/paymentMethods';
 import { buildPatientReport, type PatientReportTimelineKind } from '../utils/patientReport';
+import { formatTeethWithPosition } from '../utils/toothNumbering';
 import { Modal } from './Shared';
 
 interface AboutPatientReportProps {
@@ -39,6 +41,11 @@ const formatReportDate = (date: string | null): string => {
     : parsed.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
 };
 
+const formatPaymentMethodSummary = (payment: { paymentMethod?: PaymentMethod; allocations?: PaymentAllocation[] }): string => {
+  const methods = payment.allocations?.map((allocation) => formatPaymentMethod(allocation.method)).filter(Boolean) || [];
+  return methods.length ? methods.join(' + ') : formatPaymentMethod(payment.paymentMethod);
+};
+
 const timelineStyle: Record<PatientReportTimelineKind, { label: string; dot: string; icon: React.ReactNode }> = {
   appointment: { label: 'Appointment', dot: 'bg-indigo-500', icon: <CalendarDays size={15} /> },
   treatment: { label: 'Treatment', dot: 'bg-sky-500', icon: <Stethoscope size={15} /> },
@@ -64,6 +71,21 @@ const AboutPatientReport: React.FC<AboutPatientReportProps> = ({
     { name: 'Service fees', value: report.serviceFeeValue }
   ].filter((item) => item.value > 0);
 
+  const [isExportingPdf, setIsExportingPdf] = React.useState(false);
+  const handleExportPdf = async () => {
+    if (isExportingPdf) return;
+    setIsExportingPdf(true);
+    try {
+      const { exportAboutPatientToPDF } = await import('../utils/pdfExport');
+      exportAboutPatientToPDF({ patient, appointments, treatments, medicineSales, payments, paymentsAvailable, doctors, currency });
+    } catch (error) {
+      console.error('Failed to export patient report PDF:', error);
+      window.alert('The patient report PDF could not be created. Please try again.');
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
   return (
     <Modal title="About this patient" onClose={onClose} maxWidthClassName="max-w-7xl">
       <div className="space-y-6 text-slate-900">
@@ -82,7 +104,11 @@ const AboutPatientReport: React.FC<AboutPatientReportProps> = ({
                 </p>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+            <div className="flex flex-col items-stretch gap-3 sm:items-end">
+              <button type="button" onClick={handleExportPdf} disabled={isExportingPdf} className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-300 px-4 py-2 text-sm font-black text-slate-950 transition-colors hover:bg-cyan-200 disabled:cursor-wait disabled:opacity-70">
+                <Download size={16} aria-hidden="true" />{isExportingPdf ? 'Preparing PDF…' : 'Export PDF'}
+              </button>
+              <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
               <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
                 <p className="text-xs text-slate-400">First visit</p>
                 <p className="mt-1 font-bold">{formatReportDate(report.firstVisitDate)}</p>
@@ -95,6 +121,7 @@ const AboutPatientReport: React.FC<AboutPatientReportProps> = ({
                 <p className="text-xs text-slate-400">Patient type</p>
                 <p className="mt-1 font-bold">{patient.patient_type || 'Not assigned'}</p>
               </div>
+              </div>
             </div>
           </div>
         </section>
@@ -102,7 +129,7 @@ const AboutPatientReport: React.FC<AboutPatientReportProps> = ({
         <section aria-label="Patient summary" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {[
             { label: 'Visits', value: String(report.visitDates.length), note: 'Unique care dates', icon: <CalendarDays size={18} />, tone: 'text-indigo-700 bg-indigo-50' },
-            { label: 'Amount paid', value: report.totalPaid === null ? 'Restricted' : formatCurrency(report.totalPaid, currency), note: report.totalPaid === null ? 'Not available in this role' : `${payments.filter((item) => item.patientId === patient.id).length} payments`, icon: <WalletCards size={18} />, tone: 'text-emerald-700 bg-emerald-50' },
+            { label: 'Amount paid', value: report.totalPaid === null ? 'Restricted' : formatCurrency(report.totalPaid, currency), note: report.totalPaid === null ? 'Not available in this role' : `${report.paymentHistory?.length || 0} payments`, icon: <WalletCards size={18} />, tone: 'text-emerald-700 bg-emerald-50' },
             { label: 'Care value', value: formatCurrency(report.careValue, currency), note: 'Treatment, medicine & fees', icon: <Activity size={18} />, tone: 'text-sky-700 bg-sky-50' },
             { label: 'Current debt', value: formatCurrency(report.currentDebt, currency), note: report.currentDebt > 0 ? 'Outstanding balance' : 'Balance is clear', icon: <CircleDollarSign size={18} />, tone: report.currentDebt > 0 ? 'text-rose-700 bg-rose-50' : 'text-emerald-700 bg-emerald-50' }
           ].map((item) => (
@@ -191,6 +218,61 @@ const AboutPatientReport: React.FC<AboutPatientReportProps> = ({
               )) : <EmptyPanel>No doctor has been linked to this patient's care.</EmptyPanel>}
             </div>
           </div>
+        </section>
+
+        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h3 className="font-black text-slate-950">Treatment amounts & payments</h3>
+              <p className="mt-1 text-xs text-slate-500">Treatment fees, linked collections, remaining amounts, and payment details.</p>
+            </div>
+            <span className="w-fit rounded-full bg-sky-50 px-3 py-1 text-xs font-bold text-sky-700">{report.treatmentLedger.length} treatments</span>
+          </div>
+          {!paymentsAvailable && <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">Paid amounts, remaining treatment amounts, and payment details are not available to your role. Treatment fees remain visible.</div>}
+          {report.treatmentLedger.length ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[64rem] text-left text-sm">
+                <thead className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-500">
+                  <tr><th className="py-3 pr-4">Treatment</th><th className="px-4 py-3">Date & clinician</th><th className="px-4 py-3 text-right">Amount</th><th className="px-4 py-3 text-right">Paid</th><th className="px-4 py-3 text-right">Remaining</th><th className="py-3 pl-4">Payment dates & info</th></tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {report.treatmentLedger.map((item) => (
+                    <tr key={item.id} className="align-top">
+                      <td className="py-4 pr-4"><p className="font-bold text-slate-950">{item.name}</p><p className="mt-1 text-xs text-slate-500">{item.teeth.length ? formatTeethWithPosition(item.teeth) : 'No teeth recorded'}</p></td>
+                      <td className="px-4 py-4"><p className="whitespace-nowrap font-semibold">{formatReportDate(item.date)}</p><p className="mt-1 text-xs text-slate-500">{formatDoctorName(item.doctorName)}</p></td>
+                      <td className="whitespace-nowrap px-4 py-4 text-right font-bold">{formatCurrency(item.amount, currency)}</td>
+                      <td className="whitespace-nowrap px-4 py-4 text-right font-bold text-emerald-700">{item.paid === null ? <span className="text-xs text-slate-400">Restricted</span> : formatCurrency(item.paid, currency)}</td>
+                      <td className={`whitespace-nowrap px-4 py-4 text-right font-black ${item.balance === null ? 'text-slate-400' : item.balance > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>{item.balance === null ? <span className="text-xs">Restricted</span> : formatCurrency(item.balance, currency)}</td>
+                      <td className="py-4 pl-4">
+                        {!paymentsAvailable ? <span className="text-xs font-medium text-slate-400">Restricted</span> : item.payments.length ? <div className="space-y-2">{item.payments.map((payment) => (
+                          <div key={`${item.id}-${payment.id}`} className="rounded-xl bg-slate-50 px-3 py-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2"><span className="font-bold text-slate-800">{formatReportDate(payment.date)}</span><span className="font-black text-emerald-700">{formatCurrency(payment.amount, currency)}</span></div>
+                            <p className="mt-1 text-xs text-slate-500">{formatPaymentMethodSummary(payment)}{payment.receiptNumber ? ` · ${payment.receiptNumber}` : ''}</p>
+                          </div>
+                        ))}</div> : <span className="text-xs font-medium text-slate-400">No linked payment</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : <EmptyPanel>No treatments recorded.</EmptyPanel>}
+          {paymentsAvailable && report.treatmentLedger.length > 0 && <p className="mt-4 text-xs text-slate-500">Remaining amounts are calculated from payments linked to each treatment. Current debt above is the authoritative patient account balance and may also include medicines or service fees.</p>}
+        </section>
+
+        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div><h3 className="font-black text-slate-950">Payment history</h3><p className="mt-1 text-xs text-slate-500">All collections available for this patient, including legacy payments not linked to a treatment.</p></div>
+            {report.paymentHistory && <span className="w-fit rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">{report.paymentHistory.length} payments</span>}
+          </div>
+          {!report.paymentHistory ? <EmptyPanel>Payment history is not available to your role.</EmptyPanel> : report.paymentHistory.length ? (
+            <div className="overflow-x-auto"><table className="w-full min-w-[48rem] text-left text-sm">
+              <thead className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-500"><tr><th className="py-3 pr-4">Payment date</th><th className="px-4 py-3">Method</th><th className="px-4 py-3">Receipt</th><th className="px-4 py-3 text-right">Amount</th><th className="py-3 pl-4 text-right">Patient balance after</th></tr></thead>
+              <tbody className="divide-y divide-slate-100">{report.paymentHistory.map((payment) => (
+                <tr key={payment.id}><td className="whitespace-nowrap py-3 pr-4 font-semibold">{formatReportDate(payment.date)}</td><td className="px-4 py-3 font-medium">{payment.allocations?.length ? formatPaymentAllocations(payment.allocations) : formatPaymentMethod(payment.paymentMethod)}</td><td className="px-4 py-3 text-slate-500">{payment.receiptNumber || payment.receiptSnapshot?.receiptNumber || '—'}</td><td className="whitespace-nowrap px-4 py-3 text-right font-black text-emerald-700">{formatCurrency(payment.clearedAmount ?? payment.amount, currency)}</td><td className="whitespace-nowrap py-3 pl-4 text-right font-bold">{formatCurrency(payment.patientCurrentBalance ?? payment.remainingBalance, currency)}</td></tr>
+              ))}</tbody>
+            </table></div>
+          ) : <EmptyPanel>No payments recorded for this patient.</EmptyPanel>}
         </section>
 
         <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
