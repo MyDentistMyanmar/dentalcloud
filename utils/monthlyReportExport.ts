@@ -128,71 +128,138 @@ export const exportMonthlyReportToPDF = (report: MonthlyReport, metadata: Monthl
 
 const currencyFormat = (currency: MonthlyReportMetadata['currency']) => currency === 'MMK' ? '#,##0" Ks"' : '$#,##0.00';
 
-const styleSheet = (worksheet: any, range: string, currencyColumns: number[], percentColumns: number[] = []) => {
-  worksheet['!autofilter'] = { ref: range };
-  worksheet['!freeze'] = { xSplit: 0, ySplit: 1, topLeftCell: 'A2', activePane: 'bottomLeft', state: 'frozen' };
-  const decoded = range.match(/:([A-Z]+)(\d+)$/);
-  const rowCount = decoded ? Number(decoded[2]) : 1;
-  for (let row = 2; row <= rowCount; row += 1) {
-    currencyColumns.forEach(column => {
-      const cell = worksheet[`${String.fromCharCode(65 + column)}${row}`];
-      if (cell?.t === 'n') cell.z = worksheet.__currencyFormat;
-    });
-    percentColumns.forEach(column => {
-      const cell = worksheet[`${String.fromCharCode(65 + column)}${row}`];
-      if (cell?.t === 'n') cell.z = '0.0%';
+const setNumberFormat = (XLSX: any, worksheet: any, rowFrom: number, rowTo: number, columns: number[], format: string) => {
+  for (let row = rowFrom; row <= rowTo; row += 1) {
+    columns.forEach(column => {
+      const cell = worksheet[XLSX.utils.encode_cell({ r: row - 1, c: column })];
+      if (cell?.t === 'n') cell.z = format;
     });
   }
 };
 
-const groupSheetRows = (groups: MonthlyReportGroup[]) => groups.map(group => ({
-  Category: group.name, Treatments: group.treatments, Patients: group.patients, Production: group.production,
-  Payment: group.payment, 'Total Cost': group.totalCost, 'Net Profit': group.netProfit, 'Net Margin': group.netMargin
-}));
+const reportSubtitle = (metadata: MonthlyReportMetadata) => (
+  `${metadata.locationName} | ${metadata.dateFrom} to ${metadata.dateTo} | Currency: ${metadata.currency}`
+);
 
-export const exportMonthlyReportToExcel = async (report: MonthlyReport, metadata: MonthlyReportMetadata) => {
+const configureTableSheet = (
+  worksheet: any,
+  headerRow: number,
+  dataRowCount: number,
+  lastColumn: string,
+  columnWidths: number[]
+) => {
+  const lastDataRow = Math.max(headerRow, headerRow + dataRowCount);
+  worksheet['!cols'] = columnWidths.map(wch => ({ wch }));
+  worksheet['!rows'] = [{ hpt: 28 }, { hpt: 20 }, { hpt: 8 }, { hpt: 24 }];
+  worksheet['!autofilter'] = { ref: `A${headerRow}:${lastColumn}${lastDataRow}` };
+  worksheet['!freeze'] = {
+    xSplit: 0,
+    ySplit: headerRow,
+    topLeftCell: `A${headerRow + 1}`,
+    activePane: 'bottomLeft',
+    state: 'frozen'
+  };
+};
+
+export const buildMonthlyReportExcelWorkbook = async (report: MonthlyReport, metadata: MonthlyReportMetadata) => {
   const XLSX = await import('xlsx');
   const workbook = XLSX.utils.book_new();
   const generatedAt = metadata.generatedAt || new Date();
-  const summaryRows: Array<[string, string | number]> = [
-    ['MONTHLY TREATMENT & PROFITABILITY REPORT', ''], ['Report Scope', metadata.locationName], ['Date From', metadata.dateFrom],
-    ['Date To', metadata.dateTo], ['Generated', generatedLabel(generatedAt)], ['Currency', metadata.currency], ['', ''],
-    ['Treatments', report.summary.treatmentCount], ['Distinct Patients', report.summary.patientCount], ['Production', report.summary.production],
-    ['Payment', report.summary.payment], ['Treatment Balance', report.summary.balance], ['Material Cost', report.summary.materialCost],
-    ['Lab Cost', report.summary.labCost], ['Doctor Cost', report.summary.doctorCost], ['Total Cost', report.summary.totalCost],
-    ['Net Profit', report.summary.netProfit], ['Net Margin', report.summary.netMargin], ['Collection Rate', report.summary.collectionRate], ['', ''],
-    ['Definition', 'Net Profit = Treatment Cost - Material Cost - Lab Cost - Doctor Cost. Unrelated operating expenses are excluded.']
+  const currency = currencyFormat(metadata.currency);
+  workbook.Props = {
+    Title: 'Monthly Treatment & Profitability Report',
+    Subject: `${metadata.locationName} | ${metadata.dateFrom} to ${metadata.dateTo}`,
+    Author: 'Dental Cloud',
+    CreatedDate: generatedAt
+  };
+
+  const summaryRows: Array<Array<string | number>> = [
+    ['MONTHLY TREATMENT & PROFITABILITY REPORT', '', '', '', '', '', '', ''],
+    [reportSubtitle(metadata), '', '', '', '', '', '', ''],
+    [`Generated ${generatedLabel(generatedAt)}`, '', '', '', '', '', '', ''],
+    ['', '', '', '', '', '', '', ''],
+    ['REPORT VOLUME', '', '', 'REVENUE & COLLECTIONS', '', '', 'COSTS & PROFITABILITY', ''],
+    ['Treatments Performed', report.summary.treatmentCount, '', 'Treatment Production', report.summary.production, '', 'Material Cost', report.summary.materialCost],
+    ['Distinct Patients', report.summary.patientCount, '', 'Collected Payment', report.summary.payment, '', 'Lab Cost', report.summary.labCost],
+    ['', '', '', 'Outstanding Balance', report.summary.balance, '', 'Doctor Cost', report.summary.doctorCost],
+    ['', '', '', 'Collection Rate', report.summary.collectionRate, '', 'Total Cost', report.summary.totalCost],
+    ['', '', '', '', '', '', 'Net Profit', report.summary.netProfit],
+    ['', '', '', '', '', '', 'Net Margin', report.summary.netMargin],
+    ['', '', '', '', '', '', '', ''],
+    ['REPORT DEFINITION', '', '', '', '', '', '', ''],
+    ['Net Profit = Treatment Production - Material Cost - Lab Cost - Doctor Cost. Unrelated operating expenses are excluded.', '', '', '', '', '', '', '']
   ];
   const summarySheet: any = XLSX.utils.aoa_to_sheet(summaryRows);
-  summarySheet['!cols'] = [{ wch: 24 }, { wch: 90 }];
-  [10, 11, 12, 13, 14, 15, 16, 17].forEach(row => { if (summarySheet[`B${row}`]?.t === 'n') summarySheet[`B${row}`].z = currencyFormat(metadata.currency); });
-  [18, 19].forEach(row => { if (summarySheet[`B${row}`]?.t === 'n') summarySheet[`B${row}`].z = '0.0%'; });
+  summarySheet['!cols'] = [24, 16, 4, 24, 18, 4, 24, 18].map(wch => ({ wch }));
+  summarySheet['!rows'] = [{ hpt: 30 }, { hpt: 20 }, { hpt: 18 }, { hpt: 8 }, { hpt: 24 }];
+  summarySheet['!merges'] = [
+    XLSX.utils.decode_range('A1:H1'), XLSX.utils.decode_range('A2:H2'), XLSX.utils.decode_range('A3:H3'),
+    XLSX.utils.decode_range('A5:B5'), XLSX.utils.decode_range('D5:E5'), XLSX.utils.decode_range('G5:H5'),
+    XLSX.utils.decode_range('A13:H13'), XLSX.utils.decode_range('A14:H14')
+  ];
+  summarySheet['!freeze'] = { xSplit: 0, ySplit: 4, topLeftCell: 'A5', activePane: 'bottomLeft', state: 'frozen' };
+  ['E6', 'E7', 'E8', 'H6', 'H7', 'H8', 'H9', 'H10'].forEach(address => {
+    if (summarySheet[address]?.t === 'n') summarySheet[address].z = currency;
+  });
+  ['E9', 'H11'].forEach(address => {
+    if (summarySheet[address]?.t === 'n') summarySheet[address].z = '0.0%';
+  });
   XLSX.utils.book_append_sheet(workbook, summarySheet, 'Executive Summary');
 
-  const detailRows = report.rows.map(row => ({
-    Date: row.date, 'Pt Name': row.patientName, Age: row.age ?? '', Phone: row.phone, City: row.city, 'Pt Type': row.patientType,
-    Treatment: row.treatment, 'Dentist / Doctor': row.doctor, Cost: row.cost, Payment: row.payment, Balance: row.balance,
-    'Lab Cost': row.labCost, 'Material Cost': row.materialCost, 'Doctor Cost': row.doctorCost, 'Total Cost': row.totalCost,
-    'Net Profit': row.netProfit, 'Net Margin': row.netMargin
-  }));
-  const detailSheet: any = XLSX.utils.json_to_sheet(detailRows, { header: ['Date', 'Pt Name', 'Age', 'Phone', 'City', 'Pt Type', 'Treatment', 'Dentist / Doctor', 'Cost', 'Payment', 'Balance', 'Lab Cost', 'Material Cost', 'Doctor Cost', 'Total Cost', 'Net Profit', 'Net Margin'] });
-  detailSheet['!cols'] = [12, 24, 8, 17, 16, 16, 30, 24, 15, 15, 15, 15, 16, 15, 15, 15, 13].map(wch => ({ wch }));
-  detailSheet.__currencyFormat = currencyFormat(metadata.currency);
-  styleSheet(detailSheet, `A1:Q${Math.max(1, detailRows.length + 1)}`, [8, 9, 10, 11, 12, 13, 14, 15], [16]);
-  delete detailSheet.__currencyFormat;
+  const detailHeaders = [
+    'Treatment Date', 'Patient Name', 'Age', 'Phone Number', 'City', 'Patient Type', 'Treatment', 'Clinician',
+    'Treatment Production', 'Collected Payment', 'Outstanding Balance', 'Material Cost', 'Lab Cost', 'Doctor Cost',
+    'Total Cost', 'Net Profit', 'Net Margin'
+  ];
+  const detailData = report.rows.map(row => [
+    row.date, row.patientName, row.age ?? '', row.phone, row.city, row.patientType, row.treatment, row.doctor,
+    row.cost, row.payment, row.balance, row.materialCost, row.labCost, row.doctorCost, row.totalCost, row.netProfit, row.netMargin
+  ]);
+  const detailRows: Array<Array<string | number>> = [
+    ['TREATMENT DETAIL', ...Array(16).fill('')],
+    [reportSubtitle(metadata), ...Array(16).fill('')],
+    ['', ...Array(16).fill('')],
+    detailHeaders,
+    ...detailData,
+    ['REPORT TOTAL', '', '', '', '', '', '', '', report.summary.production, report.summary.payment, report.summary.balance,
+      report.summary.materialCost, report.summary.labCost, report.summary.doctorCost, report.summary.totalCost, report.summary.netProfit, report.summary.netMargin]
+  ];
+  const detailSheet: any = XLSX.utils.aoa_to_sheet(detailRows);
+  detailSheet['!merges'] = [XLSX.utils.decode_range('A1:Q1'), XLSX.utils.decode_range('A2:Q2')];
+  configureTableSheet(detailSheet, 4, detailData.length, 'Q', [15, 25, 8, 18, 18, 18, 32, 24, 20, 19, 20, 16, 16, 16, 16, 16, 14]);
+  setNumberFormat(XLSX, detailSheet, 5, 5 + detailData.length, [8, 9, 10, 11, 12, 13, 14, 15], currency);
+  setNumberFormat(XLSX, detailSheet, 5, 5 + detailData.length, [16], '0.0%');
   XLSX.utils.book_append_sheet(workbook, detailSheet, 'Treatment Detail');
 
-  const appendGroupSheet = (name: string, groups: MonthlyReportGroup[]) => {
-    const rows = groupSheetRows(groups);
-    const sheet: any = XLSX.utils.json_to_sheet(rows, { header: ['Category', 'Treatments', 'Patients', 'Production', 'Payment', 'Total Cost', 'Net Profit', 'Net Margin'] });
-    sheet['!cols'] = [32, 12, 12, 16, 16, 16, 16, 13].map(wch => ({ wch }));
-    sheet.__currencyFormat = currencyFormat(metadata.currency);
-    styleSheet(sheet, `A1:H${Math.max(1, rows.length + 1)}`, [3, 4, 5, 6], [7]);
-    delete sheet.__currencyFormat;
+  const appendGroupSheet = (name: string, title: string, categoryHeader: string, groups: MonthlyReportGroup[]) => {
+    const groupData = groups.map(group => [
+      group.name, group.treatments, group.patients, group.production, group.payment, group.totalCost, group.netProfit, group.netMargin
+    ]);
+    const rows: Array<Array<string | number>> = [
+      [title, '', '', '', '', '', '', ''],
+      [reportSubtitle(metadata), '', '', '', '', '', '', ''],
+      ['', '', '', '', '', '', '', ''],
+      [categoryHeader, 'Treatments', 'Distinct Patients', 'Treatment Production', 'Collected Payment', 'Total Cost', 'Net Profit', 'Net Margin'],
+      ...groupData,
+      ['REPORT TOTAL', report.summary.treatmentCount, report.summary.patientCount, report.summary.production, report.summary.payment,
+        report.summary.totalCost, report.summary.netProfit, report.summary.netMargin]
+    ];
+    const sheet: any = XLSX.utils.aoa_to_sheet(rows);
+    sheet['!merges'] = [XLSX.utils.decode_range('A1:H1'), XLSX.utils.decode_range('A2:H2')];
+    configureTableSheet(sheet, 4, groupData.length, 'H', [34, 13, 18, 21, 19, 16, 16, 14]);
+    setNumberFormat(XLSX, sheet, 5, 5 + groupData.length, [3, 4, 5, 6], currency);
+    setNumberFormat(XLSX, sheet, 5, 5 + groupData.length, [7], '0.0%');
     XLSX.utils.book_append_sheet(workbook, sheet, name);
   };
-  appendGroupSheet('By Treatment', report.byTreatment);
-  appendGroupSheet('By Doctor', report.byDoctor);
-  appendGroupSheet('By Patient Type', report.byPatientType);
+
+  appendGroupSheet('By Treatment', 'TREATMENT PERFORMANCE', 'Treatment Category', report.byTreatment);
+  appendGroupSheet('By Clinician', 'CLINICIAN PERFORMANCE', 'Clinician', report.byDoctor);
+  appendGroupSheet('By Patient Type', 'PATIENT TYPE PERFORMANCE', 'Patient Type', report.byPatientType);
+  return workbook;
+};
+
+export const exportMonthlyReportToExcel = async (report: MonthlyReport, metadata: MonthlyReportMetadata) => {
+  const XLSX = await import('xlsx');
+  const workbook = await buildMonthlyReportExcelWorkbook(report, metadata);
   XLSX.writeFile(workbook, monthlyReportFilename(metadata, 'xlsx'), { compression: true });
 };
