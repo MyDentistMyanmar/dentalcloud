@@ -128,6 +128,115 @@ export const exportMonthlyReportToPDF = (report: MonthlyReport, metadata: Monthl
 
 const currencyFormat = (currency: MonthlyReportMetadata['currency']) => currency === 'MMK' ? '#,##0" Ks"' : '$#,##0.00';
 
+const EXCEL_COLORS = {
+  navy: '0F172A',
+  slate: '334155',
+  muted: '64748B',
+  border: 'CBD5E1',
+  indigo: '4F46E5',
+  stripe: 'F8FAFC',
+  total: 'E2E8F0',
+  white: 'FFFFFF',
+  profit: '166534',
+  profitSoft: 'DCFCE7',
+  loss: 'B91C1C',
+  lossSoft: 'FEE2E2'
+} as const;
+
+const excelBorder = (style: 'thin' | 'medium' = 'thin', color: string = EXCEL_COLORS.border) => ({
+  top: { style, color: { rgb: color } },
+  bottom: { style, color: { rgb: color } },
+  left: { style, color: { rgb: color } },
+  right: { style, color: { rgb: color } }
+});
+
+const fill = (rgb: string) => ({ patternType: 'solid', fgColor: { rgb } });
+
+const applyCellStyle = (worksheet: any, address: string, style: Record<string, unknown>) => {
+  const cell = worksheet[address] || (worksheet[address] = { t: 's', v: '' });
+  cell.s = { ...(cell.s || {}), ...style };
+};
+
+const applyRangeStyle = (XLSX: any, worksheet: any, range: string, style: Record<string, unknown>) => {
+  const decoded = XLSX.utils.decode_range(range);
+  for (let row = decoded.s.r; row <= decoded.e.r; row += 1) {
+    for (let column = decoded.s.c; column <= decoded.e.c; column += 1) {
+      applyCellStyle(worksheet, XLSX.utils.encode_cell({ r: row, c: column }), style);
+    }
+  }
+};
+
+const styleReportBanner = (XLSX: any, worksheet: any, lastColumn: string) => {
+  applyRangeStyle(XLSX, worksheet, `A1:${lastColumn}1`, {
+    fill: fill(EXCEL_COLORS.navy),
+    font: { name: 'Calibri', sz: 16, bold: true, color: { rgb: EXCEL_COLORS.white } },
+    alignment: { vertical: 'center', horizontal: 'left' },
+    border: excelBorder('medium', EXCEL_COLORS.navy)
+  });
+  applyRangeStyle(XLSX, worksheet, `A2:${lastColumn}2`, {
+    fill: fill(EXCEL_COLORS.slate),
+    font: { name: 'Calibri', sz: 10, color: { rgb: EXCEL_COLORS.white } },
+    alignment: { vertical: 'center', horizontal: 'left' },
+    border: excelBorder('thin', EXCEL_COLORS.slate)
+  });
+};
+
+const styleTable = (
+  XLSX: any,
+  worksheet: any,
+  headerRow: number,
+  dataRowCount: number,
+  totalRow: number,
+  lastColumn: string,
+  numericColumns: number[],
+  centeredColumns: number[] = []
+) => {
+  applyRangeStyle(XLSX, worksheet, `A${headerRow}:${lastColumn}${headerRow}`, {
+    fill: fill(EXCEL_COLORS.indigo),
+    font: { name: 'Calibri', sz: 10, bold: true, color: { rgb: EXCEL_COLORS.white } },
+    alignment: { vertical: 'center', horizontal: 'center', wrapText: true },
+    border: excelBorder('medium', EXCEL_COLORS.indigo)
+  });
+
+  for (let row = headerRow + 1; row <= headerRow + dataRowCount; row += 1) {
+    applyRangeStyle(XLSX, worksheet, `A${row}:${lastColumn}${row}`, {
+      fill: fill((row - headerRow) % 2 === 0 ? EXCEL_COLORS.stripe : EXCEL_COLORS.white),
+      font: { name: 'Calibri', sz: 10, color: { rgb: EXCEL_COLORS.slate } },
+      alignment: { vertical: 'center', horizontal: 'left' },
+      border: excelBorder()
+    });
+  }
+
+  applyRangeStyle(XLSX, worksheet, `A${totalRow}:${lastColumn}${totalRow}`, {
+    fill: fill(EXCEL_COLORS.total),
+    font: { name: 'Calibri', sz: 10, bold: true, color: { rgb: EXCEL_COLORS.navy } },
+    alignment: { vertical: 'center', horizontal: 'left' },
+    border: excelBorder('medium', EXCEL_COLORS.slate)
+  });
+
+  for (let row = headerRow + 1; row <= totalRow; row += 1) {
+    numericColumns.forEach(column => {
+      applyCellStyle(worksheet, XLSX.utils.encode_cell({ r: row - 1, c: column }), {
+        alignment: { vertical: 'center', horizontal: 'right' }
+      });
+    });
+    centeredColumns.forEach(column => {
+      applyCellStyle(worksheet, XLSX.utils.encode_cell({ r: row - 1, c: column }), {
+        alignment: { vertical: 'center', horizontal: 'center' }
+      });
+    });
+  }
+};
+
+const styleProfitCell = (worksheet: any, address: string, value: number, bold = false) => {
+  applyCellStyle(worksheet, address, {
+    fill: fill(value < 0 ? EXCEL_COLORS.lossSoft : EXCEL_COLORS.profitSoft),
+    font: { name: 'Calibri', sz: 10, bold, color: { rgb: value < 0 ? EXCEL_COLORS.loss : EXCEL_COLORS.profit } },
+    alignment: { vertical: 'center', horizontal: 'right' },
+    border: excelBorder()
+  });
+};
+
 const setNumberFormat = (XLSX: any, worksheet: any, rowFrom: number, rowTo: number, columns: number[], format: string) => {
   for (let row = rowFrom; row <= rowTo; row += 1) {
     columns.forEach(column => {
@@ -162,7 +271,7 @@ const configureTableSheet = (
 };
 
 export const buildMonthlyReportExcelWorkbook = async (report: MonthlyReport, metadata: MonthlyReportMetadata) => {
-  const XLSX = await import('xlsx');
+  const XLSX = await import('xlsx-js-style');
   const workbook = XLSX.utils.book_new();
   const generatedAt = metadata.generatedAt || new Date();
   const currency = currencyFormat(metadata.currency);
@@ -204,6 +313,41 @@ export const buildMonthlyReportExcelWorkbook = async (report: MonthlyReport, met
   ['E9', 'H11'].forEach(address => {
     if (summarySheet[address]?.t === 'n') summarySheet[address].z = '0.0%';
   });
+  styleReportBanner(XLSX, summarySheet, 'H');
+  applyRangeStyle(XLSX, summarySheet, 'A3:H3', {
+    fill: fill(EXCEL_COLORS.stripe),
+    font: { name: 'Calibri', sz: 9, italic: true, color: { rgb: EXCEL_COLORS.muted } },
+    alignment: { vertical: 'center', horizontal: 'left' }
+  });
+  ['A5:B5', 'D5:E5', 'G5:H5'].forEach(range => applyRangeStyle(XLSX, summarySheet, range, {
+    fill: fill(EXCEL_COLORS.indigo),
+    font: { name: 'Calibri', sz: 10, bold: true, color: { rgb: EXCEL_COLORS.white } },
+    alignment: { vertical: 'center', horizontal: 'left' },
+    border: excelBorder('medium', EXCEL_COLORS.indigo)
+  }));
+  ['A6:B11', 'D6:E11', 'G6:H11'].forEach(range => applyRangeStyle(XLSX, summarySheet, range, {
+    fill: fill(EXCEL_COLORS.white),
+    font: { name: 'Calibri', sz: 10, color: { rgb: EXCEL_COLORS.slate } },
+    alignment: { vertical: 'center', horizontal: 'left' },
+    border: excelBorder()
+  }));
+  ['B6', 'B7', 'E6', 'E7', 'E8', 'E9', 'H6', 'H7', 'H8', 'H9', 'H10', 'H11'].forEach(address => {
+    applyCellStyle(summarySheet, address, { alignment: { vertical: 'center', horizontal: 'right' } });
+  });
+  styleProfitCell(summarySheet, 'H10', report.summary.netProfit, true);
+  styleProfitCell(summarySheet, 'H11', report.summary.netProfit, true);
+  applyRangeStyle(XLSX, summarySheet, 'A13:H13', {
+    fill: fill(EXCEL_COLORS.total),
+    font: { name: 'Calibri', sz: 10, bold: true, color: { rgb: EXCEL_COLORS.navy } },
+    alignment: { vertical: 'center', horizontal: 'left' },
+    border: excelBorder('medium', EXCEL_COLORS.slate)
+  });
+  applyRangeStyle(XLSX, summarySheet, 'A14:H14', {
+    fill: fill(EXCEL_COLORS.stripe),
+    font: { name: 'Calibri', sz: 9, italic: true, color: { rgb: EXCEL_COLORS.slate } },
+    alignment: { vertical: 'center', horizontal: 'left', wrapText: true },
+    border: excelBorder()
+  });
   XLSX.utils.book_append_sheet(workbook, summarySheet, 'Executive Summary');
 
   const detailHeaders = [
@@ -229,6 +373,10 @@ export const buildMonthlyReportExcelWorkbook = async (report: MonthlyReport, met
   configureTableSheet(detailSheet, 4, detailData.length, 'Q', [15, 25, 8, 18, 18, 18, 32, 24, 20, 19, 20, 16, 16, 16, 16, 16, 14]);
   setNumberFormat(XLSX, detailSheet, 5, 5 + detailData.length, [8, 9, 10, 11, 12, 13, 14, 15], currency);
   setNumberFormat(XLSX, detailSheet, 5, 5 + detailData.length, [16], '0.0%');
+  styleReportBanner(XLSX, detailSheet, 'Q');
+  styleTable(XLSX, detailSheet, 4, detailData.length, 5 + detailData.length, 'Q', [2, 8, 9, 10, 11, 12, 13, 14, 15, 16], [2]);
+  report.rows.forEach((row, index) => styleProfitCell(detailSheet, `P${5 + index}`, row.netProfit));
+  styleProfitCell(detailSheet, `P${5 + detailData.length}`, report.summary.netProfit, true);
   XLSX.utils.book_append_sheet(workbook, detailSheet, 'Treatment Detail');
 
   const appendGroupSheet = (name: string, title: string, categoryHeader: string, groups: MonthlyReportGroup[]) => {
@@ -249,6 +397,10 @@ export const buildMonthlyReportExcelWorkbook = async (report: MonthlyReport, met
     configureTableSheet(sheet, 4, groupData.length, 'H', [34, 13, 18, 21, 19, 16, 16, 14]);
     setNumberFormat(XLSX, sheet, 5, 5 + groupData.length, [3, 4, 5, 6], currency);
     setNumberFormat(XLSX, sheet, 5, 5 + groupData.length, [7], '0.0%');
+    styleReportBanner(XLSX, sheet, 'H');
+    styleTable(XLSX, sheet, 4, groupData.length, 5 + groupData.length, 'H', [1, 2, 3, 4, 5, 6, 7], [1, 2]);
+    groups.forEach((group, index) => styleProfitCell(sheet, `G${5 + index}`, group.netProfit));
+    styleProfitCell(sheet, `G${5 + groupData.length}`, report.summary.netProfit, true);
     XLSX.utils.book_append_sheet(workbook, sheet, name);
   };
 
@@ -259,7 +411,7 @@ export const buildMonthlyReportExcelWorkbook = async (report: MonthlyReport, met
 };
 
 export const exportMonthlyReportToExcel = async (report: MonthlyReport, metadata: MonthlyReportMetadata) => {
-  const XLSX = await import('xlsx');
+  const XLSX = await import('xlsx-js-style');
   const workbook = await buildMonthlyReportExcelWorkbook(report, metadata);
-  XLSX.writeFile(workbook, monthlyReportFilename(metadata, 'xlsx'), { compression: true });
+  XLSX.writeFile(workbook, monthlyReportFilename(metadata, 'xlsx'), { compression: true, cellStyles: true });
 };

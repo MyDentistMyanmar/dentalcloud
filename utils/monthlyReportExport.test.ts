@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 import type { MonthlyReport, MonthlyReportMetadata } from './monthlyReport';
 import { buildMonthlyReportExcelWorkbook } from './monthlyReportExport';
 
@@ -44,6 +44,18 @@ describe('monthly report Excel workbook', () => {
     expect(summary.E6.z).toBe('#,##0" Ks"');
     expect(summary.E9.z).toBe('0.0%');
     expect(summary.H11.z).toBe('0.0%');
+    expect(summary.A1.s).toMatchObject({
+      fill: { patternType: 'solid', fgColor: { rgb: '0F172A' } },
+      font: { bold: true, color: { rgb: 'FFFFFF' } }
+    });
+    expect(summary.A5.s).toMatchObject({
+      fill: { patternType: 'solid', fgColor: { rgb: '4F46E5' } },
+      border: { bottom: { style: 'medium' } }
+    });
+    expect(summary.H10.s).toMatchObject({
+      fill: { patternType: 'solid', fgColor: { rgb: 'DCFCE7' } },
+      font: { color: { rgb: '166534' } }
+    });
     expect(summary['!merges']).toHaveLength(8);
     expect(summary['!freeze']).toMatchObject({ ySplit: 4, topLeftCell: 'A5' });
 
@@ -54,6 +66,20 @@ describe('monthly report Excel workbook', () => {
     expect(detail.A6.v).toBe('REPORT TOTAL');
     expect(detail.I5.z).toBe('#,##0" Ks"');
     expect(detail.Q5.z).toBe('0.0%');
+    expect(detail.A4.s).toMatchObject({
+      fill: { patternType: 'solid', fgColor: { rgb: '4F46E5' } },
+      border: { left: { style: 'medium' } }
+    });
+    expect(detail.A5.s).toMatchObject({ border: { bottom: { style: 'thin' } } });
+    expect(detail.P5.s).toMatchObject({ fill: { fgColor: { rgb: 'DCFCE7' } } });
+    expect(detail.B6.s).toMatchObject({
+      fill: { patternType: 'solid', fgColor: { rgb: 'E2E8F0' } },
+      border: { top: { style: 'medium' }, bottom: { style: 'medium' } }
+    });
+    expect(detail.A6.s).toMatchObject({
+      fill: { patternType: 'solid', fgColor: { rgb: 'E2E8F0' } },
+      border: { top: { style: 'medium' } }
+    });
     expect(detail['!autofilter']).toEqual({ ref: 'A4:Q5' });
     expect(detail['!freeze']).toMatchObject({ ySplit: 4, topLeftCell: 'A5' });
     expect(detail['!cols'][6].wch).toBe(32);
@@ -66,8 +92,8 @@ describe('monthly report Excel workbook', () => {
 
   it('preserves report labels and numeric formats in the written XLSX file', async () => {
     const workbook = await buildMonthlyReportExcelWorkbook(report, metadata);
-    const file = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx', compression: true });
-    const reopened = XLSX.read(file, { type: 'buffer', cellNF: true });
+    const file = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx', compression: true, cellStyles: true });
+    const reopened = XLSX.read(file, { type: 'buffer', cellNF: true, cellStyles: true });
     const detail = reopened.Sheets['Treatment Detail'];
 
     expect(detail.B5.v).toBe('Aye Aye');
@@ -75,8 +101,17 @@ describe('monthly report Excel workbook', () => {
     expect(detail.I5.z).toBe('#,##0" Ks"');
     expect(detail.Q5.v).toBe(0.65);
     expect(detail.Q5.z).toBe('0.0%');
+    expect(detail.A4.s?.fgColor?.rgb).toBe('4F46E5');
+    expect(detail.P5.s?.fgColor?.rgb).toBe('DCFCE7');
     expect(detail.A6.v).toBe('REPORT TOTAL');
     expect(reopened.Props?.Title).toBe('Monthly Treatment & Profitability Report');
+
+    const uncompressed = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx', compression: false, cellStyles: true });
+    const openXml = uncompressed.toString('utf8');
+    expect(openXml).toContain('<borders count=');
+    expect(openXml).toContain('style="medium"');
+    expect(openXml).toContain('4F46E5');
+    expect(openXml).toContain('CBD5E1');
   });
 
   it('keeps empty reporting periods structured and filterable', async () => {
@@ -98,5 +133,25 @@ describe('monthly report Excel workbook', () => {
     expect(detail.I5.v).toBe(0);
     expect(detail.I5.z).toBe('#,##0" Ks"');
     expect(detail['!autofilter']).toEqual({ ref: 'A4:Q4' });
+  });
+
+  it('uses an explicit loss treatment without changing the underlying numeric value', async () => {
+    const lossReport: MonthlyReport = {
+      ...report,
+      rows: [{ ...report.rows[0], netProfit: -5000, netMargin: -0.05 }],
+      summary: { ...report.summary, netProfit: -5000, netMargin: -0.05 },
+      byTreatment: [{ ...report.byTreatment[0], netProfit: -5000, netMargin: -0.05 }],
+      byDoctor: [{ ...report.byDoctor[0], netProfit: -5000, netMargin: -0.05 }],
+      byPatientType: [{ ...report.byPatientType[0], netProfit: -5000, netMargin: -0.05 }]
+    };
+    const workbook = await buildMonthlyReportExcelWorkbook(lossReport, metadata);
+    const detail = workbook.Sheets['Treatment Detail'];
+
+    expect(detail.P5.v).toBe(-5000);
+    expect(detail.P5.s).toMatchObject({
+      fill: { patternType: 'solid', fgColor: { rgb: 'FEE2E2' } },
+      font: { color: { rgb: 'B91C1C' } }
+    });
+    expect(workbook.Sheets['Executive Summary'].H10.s?.fill?.fgColor?.rgb).toBe('FEE2E2');
   });
 });
