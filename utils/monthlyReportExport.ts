@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { formatCurrency } from './currency';
-import { buildMonthlyReport, monthlyReportFilename, type MonthlyReport, type MonthlyReportData, type MonthlyReportGroup, type MonthlyReportMetadata } from './monthlyReport';
+import { monthlyReportFilename, type MonthlyReport, type MonthlyReportGroup, type MonthlyReportMetadata } from './monthlyReport';
 
 const percentage = (value: number): string => `${(value * 100).toFixed(1)}%`;
 const generatedLabel = (date: Date): string => date.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
@@ -40,10 +40,9 @@ const addPdfGroupTable = (doc: jsPDF, title: string, groups: MonthlyReportGroup[
   });
 };
 
-export const exportMonthlyReportToPDF = (data: MonthlyReportData, metadata: MonthlyReportMetadata) => {
-  const report = buildMonthlyReport(data);
+export const exportMonthlyReportToPDF = (report: MonthlyReport, metadata: MonthlyReportMetadata) => {
   const generatedAt = metadata.generatedAt || new Date();
-  const doc = new jsPDF('landscape', 'mm', 'a3');
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3', compress: true } as any);
   const drawingDoc = doc as any;
   const width = doc.internal.pageSize.width;
 
@@ -151,9 +150,8 @@ const groupSheetRows = (groups: MonthlyReportGroup[]) => groups.map(group => ({
   Payment: group.payment, 'Total Cost': group.totalCost, 'Net Profit': group.netProfit, 'Net Margin': group.netMargin
 }));
 
-export const exportMonthlyReportToExcel = async (data: MonthlyReportData, metadata: MonthlyReportMetadata) => {
+export const exportMonthlyReportToExcel = async (report: MonthlyReport, metadata: MonthlyReportMetadata) => {
   const XLSX = await import('xlsx');
-  const report: MonthlyReport = buildMonthlyReport(data);
   const workbook = XLSX.utils.book_new();
   const generatedAt = metadata.generatedAt || new Date();
   const summaryRows: Array<[string, string | number]> = [
@@ -196,5 +194,5 @@ export const exportMonthlyReportToExcel = async (data: MonthlyReportData, metada
   appendGroupSheet('By Treatment', report.byTreatment);
   appendGroupSheet('By Doctor', report.byDoctor);
   appendGroupSheet('By Patient Type', report.byPatientType);
-  XLSX.writeFile(workbook, monthlyReportFilename(metadata, 'xlsx'));
+  XLSX.writeFile(workbook, monthlyReportFilename(metadata, 'xlsx'), { compression: true });
 };

@@ -1,6 +1,7 @@
 import type { ClinicalRecord, PaymentRecord, TreatmentCostSummary } from '../types';
 import type { Currency } from './currency';
 import { allocateCommissionablePayments } from './doctorCommissionLedger';
+import { chunkUniqueIds, REPORT_URL_BATCH_SIZE } from './reportBatching';
 
 export interface MonthlyReportSourceRecord extends ClinicalRecord {
   patient_age?: number | null;
@@ -79,19 +80,19 @@ export interface MonthlyReportMetadata {
   generatedAt?: Date;
 }
 
+export interface MonthlyReportProgress {
+  percent: number;
+  label: string;
+}
+
+export type MonthlyReportProgressCallback = (progress: MonthlyReportProgress) => void;
+
 // Keep PostgREST `in.(...)` URLs below production proxy limits. Larger UUID batches can
 // be rejected by the gateway before CORS headers are added, which browsers report as a
 // misleading CORS failure rather than an HTTP 414/502 response.
-export const MONTHLY_REPORT_PATIENT_BATCH_SIZE = 20;
+export const MONTHLY_REPORT_PATIENT_BATCH_SIZE = REPORT_URL_BATCH_SIZE;
 
-export const chunkMonthlyReportPatientIds = (patientIds: string[]): string[][] => {
-  const uniqueIds = Array.from(new Set(patientIds.filter(Boolean)));
-  const batches: string[][] = [];
-  for (let index = 0; index < uniqueIds.length; index += MONTHLY_REPORT_PATIENT_BATCH_SIZE) {
-    batches.push(uniqueIds.slice(index, index + MONTHLY_REPORT_PATIENT_BATCH_SIZE));
-  }
-  return batches;
-};
+export const chunkMonthlyReportPatientIds = (patientIds: string[]): string[][] => chunkUniqueIds(patientIds);
 
 const money = (value: unknown): number => {
   const numeric = Number(value);

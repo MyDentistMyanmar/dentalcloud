@@ -3909,17 +3909,44 @@ const App: React.FC = () => {
                     const queryLocationId = restrictedLocationId || (dashboardLocationId === ALL_BRANCHES_VALUE ? undefined : dashboardLocationId);
                     return api.treatments.getAnalysisRecords({ locationId: queryLocationId, dateFrom, dateTo });
                   }}
-                  onLoadMonthlyReport={async (dateFrom, dateTo) => {
+                  onLoadMonthlyReport={async (dateFrom, dateTo, onProgress) => {
                     const session = auth.getSession();
                     const restrictedLocationId = getSessionRestrictedLocationId(session);
                     const queryLocationId = restrictedLocationId || (dashboardLocationId === ALL_BRANCHES_VALUE ? undefined : dashboardLocationId);
-                    const { records, allocationRecords } = await api.treatments.getMonthlyReportRecords({ locationId: queryLocationId, dateFrom, dateTo });
+                    onProgress({ percent: 8, label: 'Loading treatments…' });
+                    const { records, allocationRecords } = await api.treatments.getMonthlyReportRecords({
+                      locationId: queryLocationId,
+                      dateFrom,
+                      dateTo,
+                      onProgress: (completed, total) => onProgress({
+                        percent: 8 + Math.round((completed / Math.max(total, 1)) * 35),
+                        label: `Loading treatment history ${completed}/${total}…`
+                      })
+                    });
+                    onProgress({ percent: 45, label: 'Treatment history loaded' });
                     const patientIds = Array.from(new Set(records.map(record => record.patient_id).filter(Boolean)));
                     const [payments, costSummaries] = await Promise.all([
-                      api.finance.getMonthlyReportPayments({ locationId: queryLocationId, dateTo, patientIds }),
-                      api.materialCosts.getTotalsByTreatmentIds(records.map(record => record.id))
+                      api.finance.getMonthlyReportPayments({
+                        locationId: queryLocationId,
+                        dateTo,
+                        patientIds,
+                        onProgress: (completed, total) => onProgress({
+                          percent: 45 + Math.round((completed / Math.max(total, 1)) * 20),
+                          label: `Loading payments ${completed}/${total}…`
+                        })
+                      }),
+                      api.materialCosts.getTotalsByTreatmentIds(records.map(record => record.id), {
+                        onProgress: (completed, total) => onProgress({
+                          percent: 45 + Math.round((completed / Math.max(total, 1)) * 38),
+                          label: `Loading material & lab costs ${completed}/${total}…`
+                        })
+                      })
                     ]);
-                    return { records, allocationRecords, payments, costSummaries };
+                    onProgress({ percent: 86, label: 'Calculating balances and profit…' });
+                    const { buildMonthlyReport } = await import('./utils/monthlyReport');
+                    const report = buildMonthlyReport({ records, allocationRecords, payments, costSummaries });
+                    onProgress({ percent: 92, label: 'Report calculations complete' });
+                    return report;
                   }}
                   onSelectPatient={handlePatientSelect}
                   loading={loading}

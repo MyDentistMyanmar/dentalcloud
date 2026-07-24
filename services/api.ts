@@ -17,6 +17,7 @@ import { buildPatientCreatedAt } from '../utils/patientCreationDate';
 import { summarizeTreatmentCostRows } from '../utils/treatmentCostSummaries';
 import { buildPatientProfileUpdatePayload } from '../utils/patientProfileUpdate';
 import { chunkMonthlyReportPatientIds, type MonthlyReportSourceRecord } from '../utils/monthlyReport';
+import { chunkUniqueIds, mapWithConcurrency, REPORT_REQUEST_CONCURRENCY } from '../utils/reportBatching';
 
 let usersAllowedTabsSupport: boolean | null = null;
 let usersDoctorIdSupport: boolean | null = null;
@@ -2856,21 +2857,15 @@ export const api = {
 
   materialCosts: {
     getTotalsByTreatmentIds: async (
-      treatmentIds: string[]
+      treatmentIds: string[],
+      options?: { onProgress?: (completed: number, total: number) => void }
     ): Promise<Record<string, TreatmentCostSummary>> => {
       const uniqueIds = Array.from(new Set(treatmentIds.filter(Boolean)));
       if (uniqueIds.length === 0) return {};
 
       try {
-        const chunk = <T,>(items: T[], size: number): T[][] => {
-          const chunks: T[][] = [];
-          for (let index = 0; index < items.length; index += size) {
-            chunks.push(items.slice(index, index + size));
-          }
-          return chunks;
-        };
-
-        const auditBatches = await Promise.all(chunk(uniqueIds, 100).map(async (idBatch) => {
+        const auditIdBatches = chunkUniqueIds(uniqueIds);
+        const auditBatches = await mapWithConcurrency(auditIdBatches, REPORT_REQUEST_CONCURRENCY, async (idBatch) => {
           const { data, error: auditLogError } = await supabase
             .from('audit_logs')
             .select('id, source_id')
@@ -2883,13 +2878,19 @@ export const api = {
           }
 
           return data || [];
-        }));
+        }, (completed, total) => {
+          options?.onProgress?.(Math.round((completed / Math.max(total, 1)) * 50), 100);
+        });
         const auditRows: any[] = auditBatches.flat();
 
         const auditIds = auditRows.map((row: any) => row.id).filter(Boolean);
-        if (auditIds.length === 0) return {};
+        if (auditIds.length === 0) {
+          options?.onProgress?.(1, 1);
+          return {};
+        }
 
-        const materialBatches = await Promise.all(chunk(auditIds, 100).map(async (auditIdBatch) => {
+        const materialIdBatches = chunkUniqueIds(auditIds);
+        const materialBatches = await mapWithConcurrency(materialIdBatches, REPORT_REQUEST_CONCURRENCY, async (auditIdBatch) => {
           let { data, error: materialError } = await supabase
             .from('patient_material_costs')
             .select('audit_log_id, cost_type, total_amount')
@@ -2910,7 +2911,9 @@ export const api = {
           }
 
           return data || [];
-        }));
+        }, (completed, total) => {
+          options?.onProgress?.(50 + Math.round((completed / Math.max(total, 1)) * 50), 100);
+        });
         const materialRows: any[] = materialBatches.flat();
 
         const sourceByAuditId = new Map(auditRows.map((row: any) => [row.id, row.source_id]));
@@ -3128,11 +3131,13 @@ export const api = {
     getAnalysisRecords: async ({
       locationId,
       dateFrom,
-      dateTo
+      dateTo,
+      onProgress
     }: {
       locationId?: string;
       dateFrom: string;
       dateTo: string;
+      onProgress?: (completed: number, total: number) => void;
     }): Promise<ClinicalRecord[]> => {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo) || dateFrom > dateTo) {
         throw new Error('A valid treatment analysis date range is required.');
@@ -3187,11 +3192,13 @@ export const api = {
     getMonthlyReportRecords: async ({
       locationId,
       dateFrom,
-      dateTo
+      dateTo,
+      onProgress
     }: {
       locationId?: string;
       dateFrom: string;
       dateTo: string;
+      onProgress?: (completed: number, total: number) => void;
     }): Promise<{ records: MonthlyReportSourceRecord[]; allocationRecords: MonthlyReportSourceRecord[] }> => {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo) || dateFrom > dateTo) {
         throw new Error('A valid monthly report date range is required.');
@@ -3258,9 +3265,12 @@ export const api = {
       });
       const patientBatches = chunkMonthlyReportPatientIds(records.map(record => record.patient_id));
       const allocationRecords: MonthlyReportSourceRecord[] = [];
+      onProgress?.(1, patientBatches.length + 1);
       // Run bounded requests sequentially to avoid a burst of long PostgREST URLs at the proxy.
-      for (const patientBatch of patientBatches) {
+      for (let batchIndex = 0; batchIndex < patientBatches.length; batchIndex += 1) {
+        const patientBatch = patientBatches[batchIndex];
         allocationRecords.push(...await loadPages(undefined, patientBatch));
+        onProgress?.(batchIndex + 2, patientBatches.length + 1);
       }
       return { records, allocationRecords };
     },
@@ -4184,13 +4194,14 @@ export const api = {
         .limit(1);
       return !error;
     },
-    getMonthlyReportPayments: async ({ locationId, dateTo, patientIds }: { locationId?: string; dateTo: string; patientIds: string[] }): Promise<PaymentRecord[]> => {
+    getMonthlyReportPayments: async ({ locationId, dateTo, patientIds, onProgress }: { locationId?: string; dateTo: string; patientIds: string[]; onProgress?: (completed: number, total: number) => void }): Promise<PaymentRecord[]> => {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(dateTo)) throw new Error('A valid monthly report end date is required.');
       const patientBatches = chunkMonthlyReportPatientIds(patientIds);
       if (patientBatches.length === 0) return [];
       const pageSize = 1000;
       const payments: PaymentRecord[] = [];
-      for (const patientBatch of patientBatches) {
+      for (let batchIndex = 0; batchIndex < patientBatches.length; batchIndex += 1) {
+        const patientBatch = patientBatches[batchIndex];
         for (let offset = 0; ; offset += pageSize) {
         const buildQuery = (withRelations: boolean) => {
           let query = supabase
@@ -4221,6 +4232,7 @@ export const api = {
         payments.push(...page.map(mapPaymentRow));
         if (page.length < pageSize) break;
         }
+        onProgress?.(batchIndex + 1, patientBatches.length);
       }
       return payments;
     },

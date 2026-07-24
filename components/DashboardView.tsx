@@ -15,7 +15,7 @@ import {
   countPatientsCreatedInRange
 } from '../utils/dashboardMath';
 import { buildTreatmentAnalysis } from '../utils/treatmentAnalytics';
-import type { MonthlyReportData } from '../utils/monthlyReport';
+import type { MonthlyReport, MonthlyReportProgressCallback } from '../utils/monthlyReport';
 
 interface DashboardViewProps {
   patients: Patient[];
@@ -30,7 +30,7 @@ interface DashboardViewProps {
   canViewAllBranches: boolean;
   onLocationChange: (locationId: string) => void;
   onLoadTreatmentAnalysis: (dateFrom: string, dateTo: string) => Promise<ClinicalRecord[]>;
-  onLoadMonthlyReport: (dateFrom: string, dateTo: string) => Promise<MonthlyReportData>;
+  onLoadMonthlyReport: (dateFrom: string, dateTo: string, onProgress: MonthlyReportProgressCallback) => Promise<MonthlyReport>;
   onSelectPatient: (patient: Patient) => void;
   loading?: boolean;
 }
@@ -68,6 +68,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({
   const [activeTab, setActiveTab] = useState<'overview' | 'recalls-cancels' | 'treatment-analysis'>('overview');
   const [exportingRecallsCancels, setExportingRecallsCancels] = useState(false);
   const [exportingMonthlyReport, setExportingMonthlyReport] = useState(false);
+  const [monthlyReportProgress, setMonthlyReportProgress] = useState({ percent: 0, label: '' });
   const [dateFrom, setDateFrom] = useState(todayKey);
   const [dateTo, setDateTo] = useState(todayKey);
   const [analysisRecords, setAnalysisRecords] = useState<ClinicalRecord[]>([]);
@@ -131,17 +132,24 @@ const DashboardView: React.FC<DashboardViewProps> = ({
   const handleMonthlyReportExport = async (format: 'pdf' | 'excel') => {
     if (exportingMonthlyReport) return;
     setExportingMonthlyReport(true);
+    setMonthlyReportProgress({ percent: 2, label: 'Starting report…' });
     try {
-      const data = await onLoadMonthlyReport(dateFrom, dateTo);
+      const report = await onLoadMonthlyReport(dateFrom, dateTo, progress => {
+        setMonthlyReportProgress(current => progress.percent >= current.percent ? progress : current);
+      });
       const metadata = { dateFrom, dateTo, locationName: selectedLocationName, currency };
+      setMonthlyReportProgress({ percent: 94, label: `Creating ${format === 'pdf' ? 'PDF' : 'Excel workbook'}…` });
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
       const exports = await import('../utils/monthlyReportExport');
-      if (format === 'pdf') exports.exportMonthlyReportToPDF(data, metadata);
-      else await exports.exportMonthlyReportToExcel(data, metadata);
+      if (format === 'pdf') exports.exportMonthlyReportToPDF(report, metadata);
+      else await exports.exportMonthlyReportToExcel(report, metadata);
+      setMonthlyReportProgress({ percent: 100, label: 'Download ready' });
     } catch (error) {
       console.error('Monthly report export failed:', error);
       alert(error instanceof Error ? error.message : 'Monthly report could not be generated. Please try again.');
     } finally {
       setExportingMonthlyReport(false);
+      window.setTimeout(() => setMonthlyReportProgress({ percent: 0, label: '' }), 1800);
     }
   };
 
@@ -739,6 +747,27 @@ const DashboardView: React.FC<DashboardViewProps> = ({
                 onExportExcel={() => void handleMonthlyReportExport('excel')}
               />
               <p className="mt-2 text-[11px] text-gray-400">Uses the selected dates and scope.</p>
+              {monthlyReportProgress.percent > 0 && (
+                <div className="mt-3" aria-live="polite">
+                  <div className="mb-1 flex items-center justify-between gap-3 text-[11px] font-semibold text-indigo-700">
+                    <span className="truncate">{monthlyReportProgress.label}</span>
+                    <span className="tabular-nums">{monthlyReportProgress.percent}%</span>
+                  </div>
+                  <div
+                    role="progressbar"
+                    aria-label="Monthly report preparation progress"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={monthlyReportProgress.percent}
+                    className="h-2 overflow-hidden rounded-full bg-indigo-100"
+                  >
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-indigo-600 to-emerald-500 transition-[width] duration-300 ease-out"
+                      style={{ width: `${monthlyReportProgress.percent}%` }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
