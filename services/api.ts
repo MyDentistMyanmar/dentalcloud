@@ -16,7 +16,7 @@ import { enumValue, finiteNumber, strictDateString, trimOptional, trimRequired }
 import { buildPatientCreatedAt } from '../utils/patientCreationDate';
 import { summarizeTreatmentCostRows } from '../utils/treatmentCostSummaries';
 import { buildPatientProfileUpdatePayload } from '../utils/patientProfileUpdate';
-import type { MonthlyReportSourceRecord } from '../utils/monthlyReport';
+import { chunkMonthlyReportPatientIds, type MonthlyReportSourceRecord } from '../utils/monthlyReport';
 
 let usersAllowedTabsSupport: boolean | null = null;
 let usersDoctorIdSupport: boolean | null = null;
@@ -3256,12 +3256,12 @@ export const api = {
             .reduce((sum, entry) => sum + Number(entry.earnings || 0), 0)
         };
       });
-      const patientIds = Array.from(new Set(records.map(record => record.patient_id).filter(Boolean)));
-      const allocationBatches = await Promise.all(
-        Array.from({ length: Math.ceil(patientIds.length / 100) }, (_, index) => patientIds.slice(index * 100, (index + 1) * 100))
-          .map(patientBatch => loadPages(undefined, patientBatch))
-      );
-      const allocationRecords = allocationBatches.flat();
+      const patientBatches = chunkMonthlyReportPatientIds(records.map(record => record.patient_id));
+      const allocationRecords: MonthlyReportSourceRecord[] = [];
+      // Run bounded requests sequentially to avoid a burst of long PostgREST URLs at the proxy.
+      for (const patientBatch of patientBatches) {
+        allocationRecords.push(...await loadPages(undefined, patientBatch));
+      }
       return { records, allocationRecords };
     },
     getAllRecords: async (locationId?: string, options?: { limit?: number | null }): Promise<ClinicalRecord[]> => {
@@ -4186,11 +4186,10 @@ export const api = {
     },
     getMonthlyReportPayments: async ({ locationId, dateTo, patientIds }: { locationId?: string; dateTo: string; patientIds: string[] }): Promise<PaymentRecord[]> => {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(dateTo)) throw new Error('A valid monthly report end date is required.');
-      const uniquePatientIds = Array.from(new Set(patientIds.filter(Boolean)));
-      if (uniquePatientIds.length === 0) return [];
+      const patientBatches = chunkMonthlyReportPatientIds(patientIds);
+      if (patientBatches.length === 0) return [];
       const pageSize = 1000;
       const payments: PaymentRecord[] = [];
-      const patientBatches = Array.from({ length: Math.ceil(uniquePatientIds.length / 100) }, (_, index) => uniquePatientIds.slice(index * 100, (index + 1) * 100));
       for (const patientBatch of patientBatches) {
         for (let offset = 0; ; offset += pageSize) {
         const buildQuery = (withRelations: boolean) => {

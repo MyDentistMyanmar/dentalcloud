@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PaymentRecord, TreatmentCostSummary } from '../types';
-import { buildMonthlyReport, monthlyReportFilename, type MonthlyReportSourceRecord } from './monthlyReport';
+import { buildMonthlyReport, chunkMonthlyReportPatientIds, MONTHLY_REPORT_PATIENT_BATCH_SIZE, monthlyReportFilename, type MonthlyReportSourceRecord } from './monthlyReport';
 
 const record = (overrides: Partial<MonthlyReportSourceRecord> = {}): MonthlyReportSourceRecord => ({
   id: 'treatment-1', location_id: 'location-1', patient_id: 'patient-1', patient_name: 'Aye Aye',
@@ -20,6 +20,14 @@ const costs = (overrides: Partial<TreatmentCostSummary> = {}): TreatmentCostSumm
 });
 
 describe('monthly report', () => {
+  it('deduplicates and limits patient batches to production-safe request sizes', () => {
+    const ids = [...Array.from({ length: 45 }, (_, index) => `patient-${index}`), 'patient-0', ''];
+    const batches = chunkMonthlyReportPatientIds(ids);
+    expect(batches.map(batch => batch.length)).toEqual([20, 20, 5]);
+    expect(Math.max(...batches.map(batch => batch.length))).toBe(MONTHLY_REPORT_PATIENT_BATCH_SIZE);
+    expect(batches.flat()).toHaveLength(45);
+  });
+
   it('calculates payment, treatment balance, total cost, and production-based net profit', () => {
     const report = buildMonthlyReport({ records: [record()], payments: [payment()], costSummaries: { 'treatment-1': costs() } });
     expect(report.rows[0]).toMatchObject({ cost: 100, payment: 60, balance: 40, materialCost: 10, labCost: 5, doctorCost: 20, totalCost: 35, netProfit: 65, netMargin: 0.65 });

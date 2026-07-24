@@ -79,6 +79,20 @@ export interface MonthlyReportMetadata {
   generatedAt?: Date;
 }
 
+// Keep PostgREST `in.(...)` URLs below production proxy limits. Larger UUID batches can
+// be rejected by the gateway before CORS headers are added, which browsers report as a
+// misleading CORS failure rather than an HTTP 414/502 response.
+export const MONTHLY_REPORT_PATIENT_BATCH_SIZE = 20;
+
+export const chunkMonthlyReportPatientIds = (patientIds: string[]): string[][] => {
+  const uniqueIds = Array.from(new Set(patientIds.filter(Boolean)));
+  const batches: string[][] = [];
+  for (let index = 0; index < uniqueIds.length; index += MONTHLY_REPORT_PATIENT_BATCH_SIZE) {
+    batches.push(uniqueIds.slice(index, index + MONTHLY_REPORT_PATIENT_BATCH_SIZE));
+  }
+  return batches;
+};
+
 const money = (value: unknown): number => {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? Math.round(numeric * 100) / 100 : 0;
