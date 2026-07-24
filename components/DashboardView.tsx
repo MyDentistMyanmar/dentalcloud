@@ -75,6 +75,8 @@ const DashboardView: React.FC<DashboardViewProps> = ({
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState('');
   const analysisRequestRef = useRef(0);
+  const monthlyReportRequestRef = useRef(0);
+  const monthlyReportResetTimerRef = useRef<number | null>(null);
   const analysisPanelRef = useRef<HTMLDivElement>(null);
   const moreDetailButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -131,12 +133,19 @@ const DashboardView: React.FC<DashboardViewProps> = ({
 
   const handleMonthlyReportExport = async (format: 'pdf' | 'excel') => {
     if (exportingMonthlyReport) return;
+    if (monthlyReportResetTimerRef.current !== null) {
+      window.clearTimeout(monthlyReportResetTimerRef.current);
+      monthlyReportResetTimerRef.current = null;
+    }
+    const requestId = ++monthlyReportRequestRef.current;
     setExportingMonthlyReport(true);
     setMonthlyReportProgress({ percent: 2, label: 'Starting report…' });
     try {
       const report = await onLoadMonthlyReport(dateFrom, dateTo, progress => {
+        if (requestId !== monthlyReportRequestRef.current) return;
         setMonthlyReportProgress(current => progress.percent >= current.percent ? progress : current);
       });
+      if (requestId !== monthlyReportRequestRef.current) return;
       const metadata = { dateFrom, dateTo, locationName: selectedLocationName, currency };
       setMonthlyReportProgress({ percent: 94, label: `Creating ${format === 'pdf' ? 'PDF' : 'Excel workbook'}…` });
       await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
@@ -145,16 +154,26 @@ const DashboardView: React.FC<DashboardViewProps> = ({
       else await exports.exportMonthlyReportToExcel(report, metadata);
       setMonthlyReportProgress({ percent: 100, label: 'Download ready' });
     } catch (error) {
+      if (requestId !== monthlyReportRequestRef.current) return;
       console.error('Monthly report export failed:', error);
       alert(error instanceof Error ? error.message : 'Monthly report could not be generated. Please try again.');
     } finally {
-      setExportingMonthlyReport(false);
-      window.setTimeout(() => setMonthlyReportProgress({ percent: 0, label: '' }), 1800);
+      if (requestId === monthlyReportRequestRef.current) {
+        setExportingMonthlyReport(false);
+        monthlyReportResetTimerRef.current = window.setTimeout(() => {
+          if (requestId === monthlyReportRequestRef.current) {
+            setMonthlyReportProgress({ percent: 0, label: '' });
+          }
+          monthlyReportResetTimerRef.current = null;
+        }, 1800);
+      }
     }
   };
 
   useEffect(() => () => {
     analysisRequestRef.current += 1;
+    monthlyReportRequestRef.current += 1;
+    if (monthlyReportResetTimerRef.current !== null) window.clearTimeout(monthlyReportResetTimerRef.current);
   }, []);
 
   const isWithinRange = (dateStr?: string) => {

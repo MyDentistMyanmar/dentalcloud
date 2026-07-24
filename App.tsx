@@ -3936,6 +3936,7 @@ const App: React.FC = () => {
                         })
                       }),
                       api.materialCosts.getTotalsByTreatmentIds(records.map(record => record.id), {
+                        requireCostTables: true,
                         onProgress: (completed, total) => onProgress({
                           percent: 45 + Math.round((completed / Math.max(total, 1)) * 38),
                           label: `Loading material & lab costs ${completed}/${total}…`

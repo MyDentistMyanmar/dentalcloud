@@ -2858,7 +2858,7 @@ export const api = {
   materialCosts: {
     getTotalsByTreatmentIds: async (
       treatmentIds: string[],
-      options?: { onProgress?: (completed: number, total: number) => void }
+      options?: { onProgress?: (completed: number, total: number) => void; requireCostTables?: boolean }
     ): Promise<Record<string, TreatmentCostSummary>> => {
       const uniqueIds = Array.from(new Set(treatmentIds.filter(Boolean)));
       if (uniqueIds.length === 0) return {};
@@ -2873,7 +2873,10 @@ export const api = {
             .in('source_id', idBatch);
 
           if (auditLogError) {
-            if (isMissingRelationError(auditLogError, 'audit_logs')) return [];
+            if (isMissingRelationError(auditLogError, 'audit_logs')) {
+              if (options?.requireCostTables) throw new Error('Monthly Report cost data is unavailable because audit log storage is not installed.');
+              return [];
+            }
             throw auditLogError;
           }
 
@@ -2906,7 +2909,10 @@ export const api = {
           }
 
           if (materialError) {
-            if (isMissingRelationError(materialError, 'patient_material_costs')) return [];
+            if (isMissingRelationError(materialError, 'patient_material_costs')) {
+              if (options?.requireCostTables) throw new Error('Monthly Report cost data is unavailable because material and lab cost storage is not installed.');
+              return [];
+            }
             throw materialError;
           }
 
@@ -4225,7 +4231,9 @@ export const api = {
           error = fallback.error;
         }
         if (error) {
-          if (isMissingRelationError(error, 'payments')) return [];
+          if (isMissingRelationError(error, 'payments')) {
+            throw new Error('Monthly Report payment data is unavailable because payment storage is not installed.');
+          }
           throw new Error(error.message || 'Monthly report payments could not be loaded.');
         }
         const page = data || [];
