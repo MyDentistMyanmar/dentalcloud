@@ -16,6 +16,7 @@ import { enumValue, finiteNumber, strictDateString, trimOptional, trimRequired }
 import { buildPatientCreatedAt } from '../utils/patientCreationDate';
 import { summarizeTreatmentCostRows } from '../utils/treatmentCostSummaries';
 import { buildPatientProfileUpdatePayload } from '../utils/patientProfileUpdate';
+import type { MonthlyReportSourceRecord } from '../utils/monthlyReport';
 
 let usersAllowedTabsSupport: boolean | null = null;
 let usersDoctorIdSupport: boolean | null = null;
@@ -3183,6 +3184,86 @@ export const api = {
 
       return records;
     },
+    getMonthlyReportRecords: async ({
+      locationId,
+      dateFrom,
+      dateTo
+    }: {
+      locationId?: string;
+      dateFrom: string;
+      dateTo: string;
+    }): Promise<{ records: MonthlyReportSourceRecord[]; allocationRecords: MonthlyReportSourceRecord[] }> => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo) || dateFrom > dateTo) {
+        throw new Error('A valid monthly report date range is required.');
+      }
+
+      const pageSize = 1000;
+      const loadPages = async (fromDate?: string, patientIds?: string[]): Promise<MonthlyReportSourceRecord[]> => {
+        const records: MonthlyReportSourceRecord[] = [];
+        for (let offset = 0; ; offset += pageSize) {
+          const buildQuery = (withRelations: boolean) => {
+            let query = supabase
+              .from('treatments')
+              .select(withRelations
+                ? 'id, location_id, patient_id, doctor_id, treatment_type_id, teeth, description, cost, standard_cost, discount_amount, pricing_note, doctor_earnings, date, patients(name, age, phone, city, patient_type), doctors(name)'
+                : 'id, location_id, patient_id, doctor_id, treatment_type_id, teeth, description, cost, standard_cost, discount_amount, pricing_note, doctor_earnings, date')
+              .lte('date', dateTo)
+              .order('date', { ascending: true })
+              .order('id', { ascending: true })
+              .range(offset, offset + pageSize - 1);
+            if (fromDate) query = query.gte('date', fromDate);
+            if (patientIds?.length) query = query.in('patient_id', patientIds);
+            if (locationId) query = query.eq('location_id', locationId);
+            return query;
+          };
+
+          let { data, error }: { data: any[] | null; error: any } = await buildQuery(true);
+          if (error && isOptionalRelationAccessError(error, ['patients', 'doctors'])) {
+            const fallback = await buildQuery(false);
+            data = fallback.data;
+            error = fallback.error;
+          }
+          if (error) throw new Error(error.message || 'Monthly report treatments could not be loaded.');
+          const page = data || [];
+          records.push(...page.map((record: any) => ({
+            ...record,
+            standardCost: record.standard_cost ?? null,
+            discountAmount: Number(record.discount_amount || 0),
+            pricingNote: record.pricing_note || null,
+            doctorEarnings: Number(record.doctor_earnings || 0),
+            patient_name: record.patients?.name || 'Unknown patient',
+            patient_age: record.patients?.age ?? null,
+            patient_phone: record.patients?.phone || null,
+            patient_city: record.patients?.city || null,
+            patient_type: record.patients?.patient_type || null,
+            doctor_name: record.doctors?.name || undefined
+          })));
+          if (page.length < pageSize) break;
+        }
+        return records;
+      };
+
+      let records = await loadPages(dateFrom);
+      if (records.length === 0) return { records: [], allocationRecords: [] };
+      const entriesByTreatment = await getDoctorEarningEntriesByTreatmentIds(records.map(record => record.id));
+      records = records.map(record => {
+        const entries = entriesByTreatment.get(record.id);
+        if (!entries?.length) return record;
+        return {
+          ...record,
+          doctorEarnings: entries
+            .filter(entry => entry.paymentDate <= dateTo)
+            .reduce((sum, entry) => sum + Number(entry.earnings || 0), 0)
+        };
+      });
+      const patientIds = Array.from(new Set(records.map(record => record.patient_id).filter(Boolean)));
+      const allocationBatches = await Promise.all(
+        Array.from({ length: Math.ceil(patientIds.length / 100) }, (_, index) => patientIds.slice(index * 100, (index + 1) * 100))
+          .map(patientBatch => loadPages(undefined, patientBatch))
+      );
+      const allocationRecords = allocationBatches.flat();
+      return { records, allocationRecords };
+    },
     getAllRecords: async (locationId?: string, options?: { limit?: number | null }): Promise<ClinicalRecord[]> => {
       try {
         let query = supabase
@@ -4102,6 +4183,47 @@ export const api = {
         .select('id')
         .limit(1);
       return !error;
+    },
+    getMonthlyReportPayments: async ({ locationId, dateTo, patientIds }: { locationId?: string; dateTo: string; patientIds: string[] }): Promise<PaymentRecord[]> => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateTo)) throw new Error('A valid monthly report end date is required.');
+      const uniquePatientIds = Array.from(new Set(patientIds.filter(Boolean)));
+      if (uniquePatientIds.length === 0) return [];
+      const pageSize = 1000;
+      const payments: PaymentRecord[] = [];
+      const patientBatches = Array.from({ length: Math.ceil(uniquePatientIds.length / 100) }, (_, index) => uniquePatientIds.slice(index * 100, (index + 1) * 100));
+      for (const patientBatch of patientBatches) {
+        for (let offset = 0; ; offset += pageSize) {
+        const buildQuery = (withRelations: boolean) => {
+          let query = supabase
+            .from('payments')
+            .select(withRelations
+              ? '*, patients(name, balance, patient_type), payment_allocations(id, payment_id, payment_method, amount, reference), payment_corrections(id, payment_id, old_amount, new_amount, old_method, new_method, old_allocations, new_allocations, reason, edited_by, edited_at, editor:users!payment_corrections_edited_by_fkey(username))'
+              : '*')
+            .lte('payment_date', dateTo)
+            .order('payment_date', { ascending: true })
+            .order('id', { ascending: true })
+            .range(offset, offset + pageSize - 1);
+          if (locationId) query = query.eq('location_id', locationId);
+          query = query.in('patient_id', patientBatch);
+          return query;
+        };
+
+        let { data, error }: { data: any[] | null; error: any } = await buildQuery(true);
+        if (error && isOptionalRelationAccessError(error, ['patients', 'payment_allocations', 'payment_corrections', 'users'])) {
+          const fallback = await buildQuery(false);
+          data = fallback.data;
+          error = fallback.error;
+        }
+        if (error) {
+          if (isMissingRelationError(error, 'payments')) return [];
+          throw new Error(error.message || 'Monthly report payments could not be loaded.');
+        }
+        const page = data || [];
+        payments.push(...page.map(mapPaymentRow));
+        if (page.length < pageSize) break;
+        }
+      }
+      return payments;
     },
     getPayments: async (locationId?: string): Promise<PaymentRecord[]> => {
       let query = supabase

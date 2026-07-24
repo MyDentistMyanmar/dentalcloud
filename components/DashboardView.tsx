@@ -15,6 +15,7 @@ import {
   countPatientsCreatedInRange
 } from '../utils/dashboardMath';
 import { buildTreatmentAnalysis } from '../utils/treatmentAnalytics';
+import type { MonthlyReportData } from '../utils/monthlyReport';
 
 interface DashboardViewProps {
   patients: Patient[];
@@ -29,6 +30,7 @@ interface DashboardViewProps {
   canViewAllBranches: boolean;
   onLocationChange: (locationId: string) => void;
   onLoadTreatmentAnalysis: (dateFrom: string, dateTo: string) => Promise<ClinicalRecord[]>;
+  onLoadMonthlyReport: (dateFrom: string, dateTo: string) => Promise<MonthlyReportData>;
   onSelectPatient: (patient: Patient) => void;
   loading?: boolean;
 }
@@ -53,6 +55,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({
   canViewAllBranches,
   onLocationChange,
   onLoadTreatmentAnalysis,
+  onLoadMonthlyReport,
   onSelectPatient,
   loading = false
 }) => {
@@ -64,6 +67,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({
   const todayKey = useMemo(() => toLocalISODate(new Date()), []);
   const [activeTab, setActiveTab] = useState<'overview' | 'recalls-cancels' | 'treatment-analysis'>('overview');
   const [exportingRecallsCancels, setExportingRecallsCancels] = useState(false);
+  const [exportingMonthlyReport, setExportingMonthlyReport] = useState(false);
   const [dateFrom, setDateFrom] = useState(todayKey);
   const [dateTo, setDateTo] = useState(todayKey);
   const [analysisRecords, setAnalysisRecords] = useState<ClinicalRecord[]>([]);
@@ -122,6 +126,23 @@ const DashboardView: React.FC<DashboardViewProps> = ({
       moreDetailButtonRef.current?.focus();
       moreDetailButtonRef.current?.scrollIntoView({ block: 'center' });
     });
+  };
+
+  const handleMonthlyReportExport = async (format: 'pdf' | 'excel') => {
+    if (exportingMonthlyReport) return;
+    setExportingMonthlyReport(true);
+    try {
+      const data = await onLoadMonthlyReport(dateFrom, dateTo);
+      const metadata = { dateFrom, dateTo, locationName: selectedLocationName, currency };
+      const exports = await import('../utils/monthlyReportExport');
+      if (format === 'pdf') exports.exportMonthlyReportToPDF(data, metadata);
+      else await exports.exportMonthlyReportToExcel(data, metadata);
+    } catch (error) {
+      console.error('Monthly report export failed:', error);
+      alert(error instanceof Error ? error.message : 'Monthly report could not be generated. Please try again.');
+    } finally {
+      setExportingMonthlyReport(false);
+    }
   };
 
   useEffect(() => () => {
@@ -648,7 +669,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 w-full lg:w-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 w-full lg:w-auto">
             <div>
               <label className="block text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-2">
                 Date From
@@ -704,6 +725,20 @@ const DashboardView: React.FC<DashboardViewProps> = ({
                 </div>
               )}
               {loading && <p className="mt-2 text-xs text-[var(--hover-600)]">Refreshing dashboard data...</p>}
+            </div>
+            <div>
+              <label className="block text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-2">
+                Report Export
+              </label>
+              <ExportMenu
+                disabled={loading || exportingMonthlyReport}
+                label={exportingMonthlyReport ? 'Preparing report…' : 'Monthly Report'}
+                buttonLabelClassName="inline"
+                className="w-full min-h-[42px] bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                onExportPDF={() => void handleMonthlyReportExport('pdf')}
+                onExportExcel={() => void handleMonthlyReportExport('excel')}
+              />
+              <p className="mt-2 text-[11px] text-gray-400">Uses the selected dates and scope.</p>
             </div>
           </div>
         </div>

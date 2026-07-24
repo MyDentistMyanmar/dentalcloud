@@ -3909,6 +3909,18 @@ const App: React.FC = () => {
                     const queryLocationId = restrictedLocationId || (dashboardLocationId === ALL_BRANCHES_VALUE ? undefined : dashboardLocationId);
                     return api.treatments.getAnalysisRecords({ locationId: queryLocationId, dateFrom, dateTo });
                   }}
+                  onLoadMonthlyReport={async (dateFrom, dateTo) => {
+                    const session = auth.getSession();
+                    const restrictedLocationId = getSessionRestrictedLocationId(session);
+                    const queryLocationId = restrictedLocationId || (dashboardLocationId === ALL_BRANCHES_VALUE ? undefined : dashboardLocationId);
+                    const { records, allocationRecords } = await api.treatments.getMonthlyReportRecords({ locationId: queryLocationId, dateFrom, dateTo });
+                    const patientIds = Array.from(new Set(records.map(record => record.patient_id).filter(Boolean)));
+                    const [payments, costSummaries] = await Promise.all([
+                      api.finance.getMonthlyReportPayments({ locationId: queryLocationId, dateTo, patientIds }),
+                      api.materialCosts.getTotalsByTreatmentIds(records.map(record => record.id))
+                    ]);
+                    return { records, allocationRecords, payments, costSummaries };
+                  }}
                   onSelectPatient={handlePatientSelect}
                   loading={loading}
                 />
