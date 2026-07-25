@@ -15,6 +15,7 @@ import {
   countPatientsCreatedInRange
 } from '../utils/dashboardMath';
 import { buildTreatmentAnalysis } from '../utils/treatmentAnalytics';
+import type { MonthlyReport, MonthlyReportProgressCallback } from '../utils/monthlyReport';
 
 interface DashboardViewProps {
   patients: Patient[];
@@ -29,6 +30,7 @@ interface DashboardViewProps {
   canViewAllBranches: boolean;
   onLocationChange: (locationId: string) => void;
   onLoadTreatmentAnalysis: (dateFrom: string, dateTo: string) => Promise<ClinicalRecord[]>;
+  onLoadMonthlyReport: (dateFrom: string, dateTo: string, onProgress: MonthlyReportProgressCallback) => Promise<MonthlyReport>;
   onSelectPatient: (patient: Patient) => void;
   loading?: boolean;
 }
@@ -53,6 +55,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({
   canViewAllBranches,
   onLocationChange,
   onLoadTreatmentAnalysis,
+  onLoadMonthlyReport,
   onSelectPatient,
   loading = false
 }) => {
@@ -64,12 +67,16 @@ const DashboardView: React.FC<DashboardViewProps> = ({
   const todayKey = useMemo(() => toLocalISODate(new Date()), []);
   const [activeTab, setActiveTab] = useState<'overview' | 'recalls-cancels' | 'treatment-analysis'>('overview');
   const [exportingRecallsCancels, setExportingRecallsCancels] = useState(false);
+  const [exportingMonthlyReport, setExportingMonthlyReport] = useState(false);
+  const [monthlyReportProgress, setMonthlyReportProgress] = useState({ percent: 0, label: '' });
   const [dateFrom, setDateFrom] = useState(todayKey);
   const [dateTo, setDateTo] = useState(todayKey);
   const [analysisRecords, setAnalysisRecords] = useState<ClinicalRecord[]>([]);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState('');
   const analysisRequestRef = useRef(0);
+  const monthlyReportRequestRef = useRef(0);
+  const monthlyReportResetTimerRef = useRef<number | null>(null);
   const analysisPanelRef = useRef<HTMLDivElement>(null);
   const moreDetailButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -124,8 +131,49 @@ const DashboardView: React.FC<DashboardViewProps> = ({
     });
   };
 
+  const handleMonthlyReportExport = async (format: 'pdf' | 'excel') => {
+    if (exportingMonthlyReport) return;
+    if (monthlyReportResetTimerRef.current !== null) {
+      window.clearTimeout(monthlyReportResetTimerRef.current);
+      monthlyReportResetTimerRef.current = null;
+    }
+    const requestId = ++monthlyReportRequestRef.current;
+    setExportingMonthlyReport(true);
+    setMonthlyReportProgress({ percent: 2, label: 'Starting report…' });
+    try {
+      const report = await onLoadMonthlyReport(dateFrom, dateTo, progress => {
+        if (requestId !== monthlyReportRequestRef.current) return;
+        setMonthlyReportProgress(current => progress.percent >= current.percent ? progress : current);
+      });
+      if (requestId !== monthlyReportRequestRef.current) return;
+      const metadata = { dateFrom, dateTo, locationName: selectedLocationName, currency };
+      setMonthlyReportProgress({ percent: 94, label: `Creating ${format === 'pdf' ? 'PDF' : 'Excel workbook'}…` });
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+      const exports = await import('../utils/monthlyReportExport');
+      if (format === 'pdf') exports.exportMonthlyReportToPDF(report, metadata);
+      else await exports.exportMonthlyReportToExcel(report, metadata);
+      setMonthlyReportProgress({ percent: 100, label: 'Download ready' });
+    } catch (error) {
+      if (requestId !== monthlyReportRequestRef.current) return;
+      console.error('Monthly report export failed:', error);
+      alert(error instanceof Error ? error.message : 'Monthly report could not be generated. Please try again.');
+    } finally {
+      if (requestId === monthlyReportRequestRef.current) {
+        setExportingMonthlyReport(false);
+        monthlyReportResetTimerRef.current = window.setTimeout(() => {
+          if (requestId === monthlyReportRequestRef.current) {
+            setMonthlyReportProgress({ percent: 0, label: '' });
+          }
+          monthlyReportResetTimerRef.current = null;
+        }, 1800);
+      }
+    }
+  };
+
   useEffect(() => () => {
     analysisRequestRef.current += 1;
+    monthlyReportRequestRef.current += 1;
+    if (monthlyReportResetTimerRef.current !== null) window.clearTimeout(monthlyReportResetTimerRef.current);
   }, []);
 
   const isWithinRange = (dateStr?: string) => {
@@ -648,7 +696,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 w-full lg:w-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 w-full lg:w-auto">
             <div>
               <label className="block text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-2">
                 Date From
@@ -704,6 +752,41 @@ const DashboardView: React.FC<DashboardViewProps> = ({
                 </div>
               )}
               {loading && <p className="mt-2 text-xs text-[var(--hover-600)]">Refreshing dashboard data...</p>}
+            </div>
+            <div>
+              <label className="block text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-2">
+                Report Export
+              </label>
+              <ExportMenu
+                disabled={loading || exportingMonthlyReport}
+                label={exportingMonthlyReport ? 'Preparing report…' : 'Professional Reporting'}
+                buttonLabelClassName="inline font-semibold tracking-tight"
+                className="!min-h-11 !w-full !rounded-xl !bg-gradient-to-r !from-indigo-600 !to-violet-600 !px-4 !py-2.5 !font-semibold shadow-md shadow-indigo-600/20 !transition-all !duration-200 hover:!from-indigo-700 hover:!to-violet-700 hover:shadow-lg hover:shadow-indigo-600/25 active:scale-[0.98] focus:!outline-none focus:!ring-2 focus:!ring-indigo-500 focus:!ring-offset-2 disabled:active:scale-100 disabled:!shadow-none"
+                onExportPDF={() => void handleMonthlyReportExport('pdf')}
+                onExportExcel={() => void handleMonthlyReportExport('excel')}
+              />
+              <p className="mt-2 text-[11px] text-gray-400">Uses the selected dates and scope.</p>
+              {monthlyReportProgress.percent > 0 && (
+                <div className="mt-3" aria-live="polite">
+                  <div className="mb-1 flex items-center justify-between gap-3 text-[11px] font-semibold text-indigo-700">
+                    <span className="truncate">{monthlyReportProgress.label}</span>
+                    <span className="tabular-nums">{monthlyReportProgress.percent}%</span>
+                  </div>
+                  <div
+                    role="progressbar"
+                    aria-label="Monthly report preparation progress"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={monthlyReportProgress.percent}
+                    className="h-2 overflow-hidden rounded-full bg-indigo-100"
+                  >
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-indigo-600 to-emerald-500 transition-[width] duration-300 ease-out"
+                      style={{ width: `${monthlyReportProgress.percent}%` }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

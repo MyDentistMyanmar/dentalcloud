@@ -7,6 +7,7 @@ interface ExportMenuProps {
   onExportExcel: () => void;
   className?: string;
   buttonLabelClassName?: string;
+  label?: string;
 }
 
 const ExportMenu: React.FC<ExportMenuProps> = ({
@@ -14,7 +15,8 @@ const ExportMenu: React.FC<ExportMenuProps> = ({
   onExportPDF,
   onExportExcel,
   className = '',
-  buttonLabelClassName = 'hidden sm:inline'
+  buttonLabelClassName = 'hidden sm:inline',
+  label = 'Export'
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -59,7 +61,7 @@ const ExportMenu: React.FC<ExportMenuProps> = ({
         className={`flex items-center justify-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
       >
         <FileDown className="w-4 h-4" />
-        <span className={buttonLabelClassName}>Export</span>
+        <span className={buttonLabelClassName}>{label}</span>
         <ChevronDown className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
