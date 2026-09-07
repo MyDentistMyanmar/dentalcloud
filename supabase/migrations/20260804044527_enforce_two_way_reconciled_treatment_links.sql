@@ -10,7 +10,7 @@ DECLARE
   v_medicine_total NUMERIC := 0;
   v_service_fee NUMERIC := 0;
 BEGIN
-  -- Old clients and receipts that cannot be fully reconciled remain compatible.
+  -- Old clients and receipts that cannot be fully areconciled remain compatible.
   IF COALESCE((NEW.receipt_snapshot ->> 'allocationReconciled')::BOOLEAN, FALSE) IS NOT TRUE THEN
     RETURN NEW;
   END IF;
