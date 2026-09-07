@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ArrowLeftRight, Beaker, Package, Plus, RotateCw, Search, Stethoscope } from 'lucide-react';
+import { ArrowLeftRight, Beaker, CreditCard, ListChecks, Package, Plus, RotateCw, Search, Stethoscope } from 'lucide-react';
 import type { ClinicalRecord, PaymentRecord, TreatmentCostSummary } from '../types';
 import { api } from '../services/api';
 import { formatCurrency, type Currency } from '../utils/currency';
@@ -8,6 +8,8 @@ import { buildAuditLogRows, filterAuditLogRowsForExport, type AuditExportRow } f
 import { formatTeethWithPosition } from '../utils/toothNumbering';
 import { formatDoctorName } from '../utils/doctorName';
 import { sortMaterialCostRowsNewestFirst } from '../utils/materialCostRows';
+import { buildMaterialCostPaymentRows } from '../utils/materialCostPaymentRows';
+import { formatPaymentAllocations, formatPaymentMethod } from '../utils/paymentMethods';
 import {
   calculateCollectedByTreatmentId,
   calculateMaterialAdjustedDoctorEarnings,
@@ -33,6 +35,7 @@ interface MaterialCostViewProps {
 
 type TreatmentAuditRow = Extract<AuditExportRow, { kind: 'treatment' }>;
 type MaterialCostFilter = 'all' | 'tomorrow' | 'today' | 'custom';
+type MaterialCostViewMode = 'treatment' | 'payment';
 
 const getTreatmentRecordIds = (record: ClinicalRecord & { _groupedRecords?: ClinicalRecord[] }) => {
   const groupedRecords = record._groupedRecords?.length ? record._groupedRecords : [record];
@@ -48,6 +51,7 @@ const MaterialCostView: React.FC<MaterialCostViewProps> = ({ records, paymentRec
   const [doctorSearchTerm, setDoctorSearchTerm] = useState('');
   const [treatmentSearchTerm, setTreatmentSearchTerm] = useState('');
   const [materialFilter, setMaterialFilter] = useState<MaterialCostFilter>('today');
+  const [viewMode, setViewMode] = useState<MaterialCostViewMode>('treatment');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isTableScrollable, setIsTableScrollable] = useState(false);
   const [editingRecord, setEditingRecord] = useState<(ClinicalRecord & { _groupedRecords?: ClinicalRecord[] }) | null>(null);
@@ -103,6 +107,30 @@ const MaterialCostView: React.FC<MaterialCostViewProps> = ({ records, paymentRec
 
     return sortMaterialCostRowsNewestFirst(matchingRows);
   }, [baseFilteredRows, patientSearchTerm, doctorSearchTerm, treatmentSearchTerm]);
+
+  const paymentRows = useMemo(
+    () => buildMaterialCostPaymentRows(records, paymentRecords),
+    [records, paymentRecords]
+  );
+
+  const filteredPaymentRows = useMemo(() => {
+    const patientTerm = patientSearchTerm.trim().toLowerCase();
+    const doctorTerm = doctorSearchTerm.trim().toLowerCase();
+    const treatmentTerm = treatmentSearchTerm.trim().toLowerCase();
+
+    return paymentRows.filter((row) => {
+      if (dateFrom && row.date < dateFrom) return false;
+      if (dateTo && row.date > dateTo) return false;
+      const patientName = row.payment.patient_name || row.treatments[0]?.patient_name || '';
+      const patientIdentity = `${patientName} ${row.treatments[0]?.patient_unique_id || ''} ${row.payment.patientId}`.toLowerCase();
+      const doctorNames = row.doctorNames.join(' ').toLowerCase();
+      const treatmentNames = row.treatments.map((record) => record.description || '').join(' ').toLowerCase();
+
+      return (!patientTerm || patientIdentity.includes(patientTerm))
+        && (!doctorTerm || doctorNames.includes(doctorTerm))
+        && (!treatmentTerm || treatmentNames.includes(treatmentTerm));
+    });
+  }, [paymentRows, patientSearchTerm, doctorSearchTerm, treatmentSearchTerm, dateFrom, dateTo]);
 
   const loadMaterialSummaries = React.useCallback(async (rowsToLoad: TreatmentAuditRow[]) => {
     const requestVersion = ++summaryRequestVersion.current;
@@ -196,13 +224,21 @@ const MaterialCostView: React.FC<MaterialCostViewProps> = ({ records, paymentRec
   }, [statusFilteredRows, currentPage, showAll]);
 
   React.useEffect(() => {
-    if (loading) return;
+    if (loading || viewMode !== 'treatment') return;
     void loadMaterialSummaries(paginatedRows);
-  }, [loading, loadMaterialSummaries, paginatedRows]);
+  }, [loading, loadMaterialSummaries, paginatedRows, viewMode]);
 
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [records, patientSearchTerm, doctorSearchTerm, treatmentSearchTerm, dateFrom, dateTo, materialFilter]);
+  }, [records, patientSearchTerm, doctorSearchTerm, treatmentSearchTerm, dateFrom, dateTo, materialFilter, viewMode]);
+
+  const paginatedPaymentRows = useMemo(() => {
+    if (showAll) return filteredPaymentRows;
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredPaymentRows.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredPaymentRows, currentPage, showAll]);
+
+  const visibleRowCount = viewMode === 'payment' ? filteredPaymentRows.length : statusFilteredRows.length;
 
   React.useEffect(() => {
     if (loading) {
@@ -328,6 +364,25 @@ const MaterialCostView: React.FC<MaterialCostViewProps> = ({ records, paymentRec
     }
     setCurrentPage(1);
   };
+
+  const handleViewTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, currentMode: MaterialCostViewMode) => {
+    let nextMode: MaterialCostViewMode | null = null;
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      nextMode = currentMode === 'treatment' ? 'payment' : 'treatment';
+    } else if (event.key === 'Home') {
+      nextMode = 'treatment';
+    } else if (event.key === 'End') {
+      nextMode = 'payment';
+    }
+    if (!nextMode) return;
+
+    event.preventDefault();
+    setViewMode(nextMode);
+    requestAnimationFrame(() => {
+      document.getElementById(`mls-${nextMode}-tab`)?.focus();
+    });
+  };
+
   return (
     <div className="w-full min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm animate-fade-in">
       <div className="border-b border-slate-200 bg-gradient-to-br from-slate-50 via-white to-[var(--hover-50)]/40">
@@ -340,17 +395,9 @@ const MaterialCostView: React.FC<MaterialCostViewProps> = ({ records, paymentRec
               <p className="mb-1 text-[10px] font-black uppercase tracking-[0.2em] theme-accent-text sm:text-[11px] sm:tracking-[0.24em]">Service Menu</p>
               <h2 className="break-words text-xl font-bold text-slate-900 sm:text-2xl">MLS Costs</h2>
               <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-500 sm:text-sm">
-                Track Material, Lab & Special Cost items against completed treatment rows.
+                Track treatment costs and review doctor earnings from each collected payment.
               </p>
               <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-                <div className="flex max-w-full gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
-                  <span className="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1 font-semibold text-slate-700">
-                    {statusFilteredRows.length} visible
-                  </span>
-                  <span className="shrink-0 rounded-full border theme-accent-border theme-accent-soft-bg px-3 py-1 font-semibold theme-accent-text">
-                    {statusFilteredRows.length} treatments
-                  </span>
-                </div>
                 <button
                   type="button"
                   onClick={() => void handleRefresh()}
@@ -463,13 +510,138 @@ const MaterialCostView: React.FC<MaterialCostViewProps> = ({ records, paymentRec
         </div>
       </div>
 
+      <nav className="border-b border-slate-200 bg-white px-3 sm:px-6" aria-label="MLS report sections">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:gap-8" role="tablist" aria-label="Choose report type">
+          <button
+            id="mls-treatment-tab"
+            type="button"
+            role="tab"
+            aria-selected={viewMode === 'treatment'}
+            aria-controls="mls-report-content"
+            tabIndex={viewMode === 'treatment' ? 0 : -1}
+            onClick={() => setViewMode('treatment')}
+            onKeyDown={(event) => handleViewTabKeyDown(event, 'treatment')}
+            className={`group relative flex min-h-[68px] cursor-pointer items-center gap-3 border-b-[3px] px-2 py-3 text-left transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--hover-300)] sm:min-w-[230px] sm:px-1 ${
+              viewMode === 'treatment'
+                ? 'border-[var(--hover-500)] text-slate-900'
+                : 'border-transparent text-slate-500 hover:border-slate-200 hover:text-slate-800'
+            }`}
+          >
+            <span className={`hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg sm:flex ${viewMode === 'treatment' ? 'theme-accent-soft-bg theme-accent-text' : 'bg-slate-100 text-slate-500'}`}>
+              <ListChecks size={18} aria-hidden="true" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-black">Operation</span>
+              <span className="mt-0.5 hidden text-xs font-medium text-slate-500 sm:block">Costs and overall earnings</span>
+            </span>
+            <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold tabular-nums text-slate-600">{statusFilteredRows.length}</span>
+          </button>
+
+          <button
+            id="mls-payment-tab"
+            type="button"
+            role="tab"
+            aria-selected={viewMode === 'payment'}
+            aria-controls="mls-report-content"
+            tabIndex={viewMode === 'payment' ? 0 : -1}
+            onClick={() => setViewMode('payment')}
+            onKeyDown={(event) => handleViewTabKeyDown(event, 'payment')}
+            className={`group relative flex min-h-[68px] cursor-pointer items-center gap-3 border-b-[3px] px-2 py-3 text-left transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-400 sm:min-w-[230px] sm:px-1 ${
+              viewMode === 'payment'
+                ? 'border-blue-500 text-slate-900'
+                : 'border-transparent text-slate-500 hover:border-slate-200 hover:text-slate-800'
+            }`}
+          >
+            <span className={`hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg sm:flex ${viewMode === 'payment' ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>
+              <CreditCard size={18} aria-hidden="true" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-black">Payment History</span>
+              <span className="mt-0.5 hidden text-xs font-medium text-slate-500 sm:block">Each collection and commission</span>
+            </span>
+            <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold tabular-nums text-slate-600">{filteredPaymentRows.length}</span>
+          </button>
+        </div>
+      </nav>
+
       {(loading || typeof syncProgress === 'number') ? (
         <div className="px-4 py-10 sm:px-6">
           <ProgressBar progress={typeof syncProgress === 'number' ? syncProgress : null} label={loading ? 'Refreshing treatment cost rows…' : 'Loading treatment cost rows…'} />
         </div>
       ) : (
         <>
-        <div className="hidden xl:block">
+        <div
+          id="mls-report-content"
+          role="tabpanel"
+          aria-labelledby={viewMode === 'treatment' ? 'mls-treatment-tab' : 'mls-payment-tab'}
+        >
+        <div className={viewMode === 'payment' ? 'hidden xl:block' : 'hidden'}>
+          <div className="overflow-x-auto">
+            <table className="min-w-[1180px] w-full">
+              <thead className="border-b border-slate-200 bg-slate-50">
+                <tr>
+                  <th className="px-5 py-4 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Payment Date</th>
+                  <th className="px-5 py-4 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Receipt</th>
+                  <th className="px-5 py-4 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Patient</th>
+                  <th className="px-5 py-4 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Clinician</th>
+                  <th className="px-5 py-4 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Treatment</th>
+                  <th className="px-5 py-4 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Method</th>
+                  <th className="px-5 py-4 text-center text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Status</th>
+                  <th className="px-5 py-4 text-right text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Total Paid</th>
+                  <th className="px-5 py-4 text-right text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Applied to Treatment</th>
+                  <th className="px-5 py-4 text-right text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Balance After</th>
+                  <th className="px-5 py-4 text-right text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Doctor Earned</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white">
+                {filteredPaymentRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={11} className="px-6 py-12 text-center">
+                      <div className="mx-auto max-w-sm rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6">
+                        <p className="text-sm font-semibold text-slate-600">No treatment payments found</p>
+                        <p className="mt-1 text-xs text-slate-400">Try another payment date range or clear the search fields.</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : paginatedPaymentRows.map((row) => {
+                  const patientName = row.payment.patient_name || row.treatments[0]?.patient_name || 'Unknown';
+                  const patientIdentifier = row.treatments[0]?.patient_unique_id || row.payment.patientId;
+                  const paymentMethod = row.payment.allocations?.length
+                    ? formatPaymentAllocations(row.payment.allocations)
+                    : formatPaymentMethod(row.payment.paymentMethod);
+                  return (
+                    <tr key={`material-payment-${row.id}`} className="border-l-4 border-blue-300 transition-colors hover:bg-blue-50/40">
+                      <td className="whitespace-nowrap px-5 py-4 text-sm font-semibold text-slate-700">{row.date}</td>
+                      <td className="whitespace-nowrap px-5 py-4 font-mono text-xs text-slate-500">{row.payment.receiptNumber || '-'}</td>
+                      <td className="px-5 py-4">
+                        <p className="font-bold text-slate-900">{patientName}</p>
+                        <p className="mt-0.5 font-mono text-xs text-slate-400">{patientIdentifier}</p>
+                      </td>
+                      <td className="px-5 py-4 text-sm text-slate-700">{row.doctorNames.length ? row.doctorNames.map(formatDoctorName).join(', ') : '-'}</td>
+                      <td className="max-w-sm px-5 py-4 text-sm text-slate-700">
+                        <div className="space-y-1">
+                          {row.treatments.map((record) => <div key={record.id}>&bull; {record.description || 'Treatment record'}</div>)}
+                        </div>
+                      </td>
+                      <td className="px-5 py-4 text-sm text-slate-600">{paymentMethod}</td>
+                      <td className="px-5 py-4 text-center">
+                        <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-black ${row.payment.type === 'FULL' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
+                          {row.payment.type}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 text-right text-sm font-black tabular-nums text-slate-900">{formatCurrency(Number(row.payment.clearedAmount ?? row.payment.amount), currency)}</td>
+                      <td className="px-5 py-4 text-right text-sm font-black tabular-nums text-blue-700">{formatCurrency(row.allocatedTreatmentPayment, currency)}</td>
+                      <td className="px-5 py-4 text-right text-sm font-bold tabular-nums text-slate-700">{Number(row.payment.remainingBalance || 0) > 0 ? formatCurrency(row.payment.remainingBalance, currency) : 'Clear'}</td>
+                      <td className="px-5 py-4 text-right text-sm font-black tabular-nums text-emerald-700">{row.doctorEarnings > 0 ? formatCurrency(row.doctorEarnings, currency) : '-'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className={viewMode === 'treatment' ? 'hidden xl:block' : 'hidden'}>
           {isTableScrollable && (
             <div
               id="material-cost-scroll-instructions"
@@ -572,7 +744,7 @@ const MaterialCostView: React.FC<MaterialCostViewProps> = ({ records, paymentRec
           </table>
           </div>
         </div>
-        <div className="space-y-3 bg-slate-50/70 p-3 sm:p-4 xl:hidden">
+        <div className={viewMode === 'treatment' ? 'space-y-3 bg-slate-50/70 p-3 sm:p-4 xl:hidden' : 'hidden'}>
           {statusFilteredRows.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-center">
               <p className="text-sm font-semibold text-slate-600">No treatment rows found</p>
@@ -669,12 +841,73 @@ const MaterialCostView: React.FC<MaterialCostViewProps> = ({ records, paymentRec
             })
           )}
         </div>
+        <div className={viewMode === 'payment' ? 'space-y-3 bg-slate-50/70 p-3 sm:p-4 xl:hidden' : 'hidden'}>
+          {filteredPaymentRows.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-center">
+              <p className="text-sm font-semibold text-slate-600">No treatment payments found</p>
+              <p className="mt-1 text-xs text-slate-400">Try another payment date range or clear the search fields.</p>
+            </div>
+          ) : paginatedPaymentRows.map((row) => {
+            const patientName = row.payment.patient_name || row.treatments[0]?.patient_name || 'Unknown';
+            const patientIdentifier = row.treatments[0]?.patient_unique_id || row.payment.patientId;
+            const paymentMethod = row.payment.allocations?.length
+              ? formatPaymentAllocations(row.payment.allocations)
+              : formatPaymentMethod(row.payment.paymentMethod);
+            return (
+              <article key={`material-payment-card-${row.id}`} className="min-w-0 overflow-hidden rounded-2xl border border-blue-100 bg-white shadow-sm">
+                <div className="border-l-4 border-blue-300 p-3 sm:p-4">
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="break-words text-base font-bold text-slate-900">{patientName}</p>
+                      <p className="mt-1 break-words text-xs text-slate-500">{patientIdentifier} · {row.date} · {row.payment.receiptNumber || 'No receipt number'}</p>
+                    </div>
+                    <span className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-black ${row.payment.type === 'FULL' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
+                      {row.payment.type}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 rounded-xl bg-slate-50 p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Treatment activity</p>
+                    <div className="mt-1 space-y-1 break-words text-sm text-slate-800">
+                      {row.treatments.map((record) => <div key={record.id}>&bull; {record.description || 'Treatment record'}</div>)}
+                    </div>
+                    <p className="mt-2 text-xs text-slate-500">{row.doctorNames.length ? row.doctorNames.map(formatDoctorName).join(', ') : 'No clinician'}</p>
+                  </div>
+
+                  <dl className="mt-3 grid min-w-0 grid-cols-2 gap-2">
+                    <div className="min-w-0 rounded-xl border border-slate-100 p-3">
+                      <dt className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Total paid</dt>
+                      <dd className="mt-1 break-words text-sm font-black tabular-nums text-slate-900">{formatCurrency(Number(row.payment.clearedAmount ?? row.payment.amount), currency)}</dd>
+                    </div>
+                    <div className="min-w-0 rounded-xl border border-blue-100 bg-blue-50 p-3">
+                      <dt className="text-[10px] font-bold uppercase tracking-wide text-blue-600">Applied to treatment</dt>
+                      <dd className="mt-1 break-words text-sm font-black tabular-nums text-blue-700">{formatCurrency(row.allocatedTreatmentPayment, currency)}</dd>
+                    </div>
+                    <div className="min-w-0 rounded-xl border border-slate-100 p-3">
+                      <dt className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Balance after</dt>
+                      <dd className="mt-1 break-words text-sm font-bold tabular-nums text-slate-700">{Number(row.payment.remainingBalance || 0) > 0 ? formatCurrency(row.payment.remainingBalance, currency) : 'Clear'}</dd>
+                    </div>
+                    <div className="min-w-0 rounded-xl border border-emerald-100 bg-emerald-50 p-3">
+                      <dt className="text-[10px] font-bold uppercase tracking-wide text-emerald-700">Doctor earned</dt>
+                      <dd className="mt-1 break-words text-sm font-black tabular-nums text-emerald-700">{row.doctorEarnings > 0 ? formatCurrency(row.doctorEarnings, currency) : '-'}</dd>
+                    </div>
+                    <div className="col-span-2 min-w-0 rounded-xl border border-slate-100 p-3">
+                      <dt className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Payment method</dt>
+                      <dd className="mt-1 break-words text-sm font-semibold text-slate-700">{paymentMethod}</dd>
+                    </div>
+                  </dl>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+        </div>
         </>
       )}
 
-      {!loading && statusFilteredRows.length > 0 && (
+      {!loading && visibleRowCount > 0 && (
         <Pagination
-          totalItems={statusFilteredRows.length}
+          totalItems={visibleRowCount}
           itemsPerPage={itemsPerPage}
           currentPage={currentPage}
           onPageChange={setCurrentPage}
