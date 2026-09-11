@@ -115,6 +115,7 @@ export interface DoctorEarningEntry {
   treatmentDate: string;
   calculationMode: 'percentage' | 'flat_visit';
   allocatedPayment: number;
+  mlsDeduction?: number;
   commissionRate: number;
   earnings: number;
 }
@@ -137,6 +138,7 @@ export type TreatmentCostType = 'material' | 'lab' | 'special_doctor';
 export interface PatientMaterialCost {
   id: string;
   auditLogId: string;
+  paymentId?: string | null;
   materialName: string;
   costType: TreatmentCostType;
   costAmount: number;
@@ -208,6 +210,12 @@ export interface PaymentRecord {
   createdByUserId?: string | null;
   createdByUserName?: string | null;
   doctorEarningEntries?: DoctorEarningEntry[];
+  mlsCosts?: PatientMaterialCost[];
+  materialTotal?: number;
+  labTotal?: number;
+  specialDoctorTotal?: number;
+  mlsTotal?: number;
+  netRevenue?: number;
   corrections?: PaymentCorrection[];
 }
 

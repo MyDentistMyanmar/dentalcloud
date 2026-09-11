@@ -57,6 +57,12 @@ describe('MLS payment rows', () => {
   });
 
   it('does not create an MLS payment row for a payment with no treatment allocation', () => {
-    expect(buildMaterialCostPaymentRows([], [payment('payment-1', '2026-09-07', 50_000, 0)])).toEqual([]);
+    const rows = buildMaterialCostPaymentRows([], [payment('payment-1', '2026-09-07', 50_000, 0)]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      id: 'payment-1',
+      treatments: [],
+      allocatedTreatmentPayment: 0
+    });
   });
 });

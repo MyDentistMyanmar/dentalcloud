@@ -288,10 +288,12 @@ const readPaymentRecords = (): PaymentRecord[] => {
   }
 };
 
-const mergeLegacyPaymentRecords = (records: PaymentRecord[], locationId?: string): PaymentRecord[] => {
+const mergeLegacyPaymentRecords = (records: PaymentRecord[], locationId?: string, patientId?: string): PaymentRecord[] => {
   const knownPaymentKeys = new Set(records.map(getPaymentDedupeKey));
   const legacyRecords = readPaymentRecords().filter(
-    (record) => !knownPaymentKeys.has(getPaymentDedupeKey(record)) && (!locationId || record.location_id === locationId)
+    (record) => !knownPaymentKeys.has(getPaymentDedupeKey(record))
+      && (!locationId || record.location_id === locationId)
+      && (!patientId || record.patientId === patientId)
   );
   return [...records, ...legacyRecords].sort((a, b) =>
     (b.createdAt || b.date).localeCompare(a.createdAt || a.date)
@@ -2450,19 +2452,22 @@ const App: React.FC = () => {
     }
   };
 
-  // MLS saves only mutate one patient's ledger. Refetching that patient's rows
-  // keeps the save dialog fast instead of reloading every clinic record, expense,
-  // and payment while the user waits for the button.
+  // MLS saves mutate the selected payment and its related commission ledger.
+  // Refresh both treatment and payment rows for that patient so the MLS table
+  // receives the new typed totals immediately without a clinic-wide reload.
   const refreshGlobalRecordsForPatient = async (patientId?: string | null) => {
     if (!patientId) {
       await fetchGlobalRecords();
       return;
     }
     try {
-      const records = await api.treatments.getAllRecords(currentLocationId || undefined, {
-        limit: null,
-        patientId
-      });
+      const [records, payments] = await Promise.all([
+        api.treatments.getAllRecords(currentLocationId || undefined, {
+          limit: null,
+          patientId
+        }),
+        api.finance.getPayments(currentLocationId || undefined, { patientId })
+      ]);
       const session = auth.getSession();
       const scopedRecords = session?.role === 'doctor' && session.doctor_id
         ? records.filter((record) => record.doctor_id === session.doctor_id)
@@ -2470,6 +2475,13 @@ const App: React.FC = () => {
       setGlobalRecords((prev) => [...prev.filter((record) => record.patient_id !== patientId), ...scopedRecords].sort((a, b) => (
         String(b.date || '').localeCompare(String(a.date || '')) || String(a.id || '').localeCompare(String(b.id || ''))
       )));
+      if (session?.role !== 'doctor') {
+        const refreshedPayments = mergeLegacyPaymentRecords(payments, currentLocationId || undefined, patientId);
+        setPaymentRecords((prev) => [
+          ...prev.filter((payment) => payment.patientId !== patientId),
+          ...refreshedPayments
+        ].sort((a, b) => (b.createdAt || b.date).localeCompare(a.createdAt || a.date)));
+      }
     } catch (err) {
       console.error('Patient-scoped record refresh failed; falling back to a full reload.', err);
       await fetchGlobalRecords();

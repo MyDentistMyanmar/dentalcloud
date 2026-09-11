@@ -457,7 +457,7 @@ interface ClinicalRecordsExportOptions extends AuditLogFilterOptions {
 }
 
 export const AUDIT_LOG_PDF_TABLE_WIDTH = 260;
-export const AUDIT_LOG_PDF_COLUMN_WIDTHS = [15, 23, 26, 24, 50, 24, 21, 17, 17, 21, 22] as const;
+export const AUDIT_LOG_PDF_COLUMN_WIDTHS = [15, 23, 22, 20, 40, 24, 21, 17, 17, 21, 18, 22] as const;
 
 export const exportClinicalRecordsToPDF = (records: ClinicalRecord[], currency: Currency, options: ClinicalRecordsExportOptions = {}) => {
   const exportRows = filterAuditLogRowsForExport(
@@ -488,7 +488,7 @@ export const exportClinicalRecordsToPDF = (records: ClinicalRecord[], currency: 
   // Table
   autoTable(doc, {
     startY: options.dateFrom && options.dateTo ? 52 : 46,
-    head: [['Type', 'Date / Time', 'Patient', 'Clinician', 'Clinical Activity', 'Patient Type', 'Patient Balance', 'Amount', 'Discount', 'Service Charges', 'Doctor Earned']],
+    head: [['Type', 'Date / Time', 'Patient', 'Clinician', 'Clinical Activity', 'Patient Type', 'Patient Balance', 'Amount', 'Discount', 'Service Charges', 'MLS Costs', 'Doctor Earned']],
     body: tableRows.map((row) => [
       row.type,
       row.dateTime,
@@ -500,6 +500,7 @@ export const exportClinicalRecordsToPDF = (records: ClinicalRecord[], currency: 
       row.amount === null ? '-' : formatCurrency(row.amount, currency),
       row.discount === null ? '-' : `-${formatCurrency(row.discount, currency)}`,
       row.serviceCharges === null ? '-' : formatCurrency(row.serviceCharges, currency),
+      row.mlsCosts === null ? '-' : formatCurrency(row.mlsCosts, currency),
       row.doctorEarned === null ? '-' : formatCurrency(row.doctorEarned, currency)
     ]),
     theme: 'grid',

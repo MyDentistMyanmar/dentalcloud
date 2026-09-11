@@ -181,6 +181,10 @@ const recalculatePatientDoctorCommissions = async (patientId: string): Promise<v
     api.materialCosts.getTotalsByTreatmentIds(treatmentIds, { idBatchSize: 50 })
   ]);
   if (paymentError && !isMissingRelationError(paymentError, 'payments')) throw new Error(paymentError.message);
+  const paymentCostsByPayment = await api.materialCosts.getTotalsByPaymentIds(
+    (paymentRows || []).map((row: any) => row.id).filter(Boolean),
+    { idBatchSize: 50 }
+  );
 
   let customRows: any[] = [];
   if (doctorIds.length > 0) {
@@ -257,7 +261,10 @@ const recalculatePatientDoctorCommissions = async (patientId: string): Promise<v
     treatmentIds: Array.from(new Set([
       ...(Array.isArray(row.treatment_ids) ? row.treatment_ids : []),
       ...getPaymentReceiptTreatmentIds(row)
-    ]))
+    ])),
+    // Missing means legacy treatment-bound MLS. New payment audits include an
+    // explicit summary, even when their total is zero.
+    mlsCost: paymentCostsByPayment[row.id]?.totalAmount
   }));
   const allocations = allocateCommissionablePayments(treatments, payments);
   const existingEntries = (existingResult.data || []).map((row: any) => ({
@@ -499,7 +506,7 @@ const getDoctorEarningEntriesByTreatmentIds = async (treatmentIds: string[]) => 
     try {
       const { data, error } = await supabase
         .from('doctor_commission_entries')
-        .select('id, payment_id, treatment_id, doctor_id, payment_date, treatment_date, calculation_mode, allocated_payment, commission_rate, earnings')
+        .select('id, payment_id, treatment_id, doctor_id, payment_date, treatment_date, calculation_mode, allocated_payment, material_deduction, commission_rate, earnings')
         .in('treatment_id', uniqueIds.slice(index, index + requestBatchSize));
 
       if (error) {
@@ -567,6 +574,7 @@ const getDoctorEarningEntriesByPaymentIds = async (paymentIds: string[]) => {
           treatmentDate: row.treatment_date,
           calculationMode: row.calculation_mode,
           allocatedPayment: Number(row.allocated_payment || 0),
+          mlsDeduction: Number(row.material_deduction || 0),
           commissionRate: Number(row.commission_rate || 0),
           earnings: Number(row.earnings || 0)
         });
@@ -648,6 +656,7 @@ const mapPatientMaterialCostRow = (row: any): PatientMaterialCost => {
   return {
     id: row.id,
     auditLogId: row.audit_log_id,
+    paymentId: row.payment_id || null,
     materialName: row.material_name,
     costType: row.cost_type === 'lab' ? 'lab' : row.cost_type === 'special_doctor' ? 'special_doctor' : 'material',
     costAmount,
@@ -3365,6 +3374,169 @@ export const api = {
       }
     },
 
+    getTotalsByPaymentIds: async (
+      paymentIds: string[],
+      options?: { idBatchSize?: number }
+    ): Promise<Record<string, TreatmentCostSummary>> => {
+      const uniqueIds = Array.from(new Set(paymentIds.filter(Boolean)));
+      if (uniqueIds.length === 0) return {};
+
+      const auditBatches = await mapWithConcurrency(
+        chunkUniqueIds(uniqueIds, options?.idBatchSize),
+        REPORT_REQUEST_CONCURRENCY,
+        async (idBatch) => {
+          const { data, error } = await supabase
+            .from('audit_logs')
+            .select('id, source_id')
+            .eq('source_type', 'payment')
+            .in('source_id', idBatch);
+          if (error) {
+            if (isMissingRelationError(error, 'audit_logs')) return [];
+            throw new Error(error.message);
+          }
+          return data || [];
+        }
+      );
+      const auditRows: any[] = auditBatches.flat();
+      if (auditRows.length === 0) return {};
+
+      const costBatches = await mapWithConcurrency(
+        chunkUniqueIds(auditRows.map((row) => row.id), options?.idBatchSize),
+        REPORT_REQUEST_CONCURRENCY,
+        async (idBatch) => {
+          const { data, error } = await supabase
+            .from('patient_material_costs')
+            .select('audit_log_id, cost_type, total_amount')
+            .in('audit_log_id', idBatch);
+          if (error) throw new Error(error.message);
+          return data || [];
+        }
+      );
+      const sourceByAuditId = new Map(auditRows.map((row) => [row.id, row.source_id]));
+      const summaries = summarizeTreatmentCostRows(costBatches.flat(), sourceByAuditId);
+
+      // An audit row with no items is meaningful: it marks this payment as the
+      // new payment-bound flow with a zero MLS deduction.
+      auditRows.forEach((row) => {
+        if (summaries[row.source_id]) return;
+        summaries[row.source_id] = {
+          auditLogId: row.id,
+          materialTotal: 0,
+          materialItemCount: 0,
+          labTotal: 0,
+          labItemCount: 0,
+          specialDoctorTotal: 0,
+          specialDoctorItemCount: 0,
+          totalAmount: 0,
+          itemCount: 0
+        };
+      });
+      return summaries;
+    },
+
+    getByPaymentId: async (paymentId: string): Promise<{ auditLogId: string | null; items: PatientMaterialCost[] }> => {
+      const { data: auditLog, error: auditLogError } = await supabase
+        .from('audit_logs')
+        .select('id')
+        .eq('source_type', 'payment')
+        .eq('source_id', trimRequired(paymentId, 'Payment'))
+        .maybeSingle();
+      if (auditLogError) throw new Error(auditLogError.message);
+      if (!auditLog?.id) return { auditLogId: null, items: [] };
+
+      const { data, error } = await supabase
+        .from('patient_material_costs')
+        .select('*, users(username)')
+        .eq('audit_log_id', auditLog.id)
+        .order('created_at', { ascending: true });
+      if (error) throw new Error(error.message);
+      return { auditLogId: auditLog.id, items: (data || []).map(mapPatientMaterialCostRow) };
+    },
+
+    upsertForPayment: async (
+      payment: PaymentRecord,
+      items: PatientMaterialCostInput[],
+      actor: { userId: string; username?: string | null; authToken: string }
+    ): Promise<{ auditLogId: string; items: PatientMaterialCost[]; commissionRefreshPending: boolean }> => {
+      const normalizedItems = items.map((item) => ({
+        material_name: trimRequired(item.materialName, 'MLS cost name', { maxLength: 255 }),
+        cost_type: enumValue(item.costType, ['material', 'lab', 'special_doctor'] as const, 'Cost type'),
+        cost_amount: finiteNumber(item.costAmount, 'MLS unit cost', { min: 0.01 }),
+        quantity: finiteNumber(item.quantity, 'MLS quantity', { min: 0.01 })
+      }));
+      const total = normalizedItems.reduce((sum, item) => sum + item.cost_amount * item.quantity, 0);
+      if (Math.round(total * 100) / 100 > Math.round(Number(payment.clearedAmount ?? payment.amount) * 100) / 100) {
+        throw new Error('Payment MLS costs cannot exceed the amount collected in this payment.');
+      }
+
+      const requestToken = generateRequestUuid();
+      const { data, error } = await supabase.rpc('replace_payment_costs', {
+        p_payment_id: trimRequired(payment.id, 'Payment'),
+        p_items: normalizedItems,
+        p_user_id: trimRequired(actor.userId, 'Staff user'),
+        p_session_token: trimRequired(actor.authToken, 'Staff session'),
+        p_request_token: requestToken
+      });
+      if (error) {
+        if (isMissingRpcError(error, 'replace_payment_costs')) {
+          throw new Error('Payment MLS storage is not installed. Apply the payment-bound MLS migration first.');
+        }
+        throw new Error(error.message);
+      }
+
+      let commissionRefreshPending = false;
+      try {
+        await processPendingCommissionRecalculation(payment.patientId, requestToken, actor);
+      } catch (commissionError) {
+        commissionRefreshPending = true;
+        console.error('Payment MLS was saved, but commission refresh needs retry.', commissionError);
+      }
+      const payload = data && !Array.isArray(data) ? data : {};
+      return {
+        auditLogId: String(payload.audit_log_id || ''),
+        items: (Array.isArray(payload.items) ? payload.items : []).map(mapPatientMaterialCostRow),
+        commissionRefreshPending
+      };
+    },
+
+    retryPendingCommissionRecalculations: async (
+      actor: { userId: string; authToken: string }
+    ): Promise<{ processed: number; failed: number }> => {
+      const { data, error } = await supabase.rpc('get_pending_mls_commission_recalculations', {
+        p_user_id: trimRequired(actor.userId, 'Staff user'),
+        p_session_token: trimRequired(actor.authToken, 'Staff session')
+      });
+      if (error) {
+        if (isMissingRpcError(error, 'get_pending_mls_commission_recalculations')) {
+          throw new Error('Payment MLS recovery is not installed. Apply the payment-bound MLS hardening migration.');
+        }
+        throw new Error(error.message);
+      }
+
+      const pendingRows = Array.isArray(data) ? data : [];
+      const results = await mapWithConcurrency(
+        pendingRows,
+        2,
+        async (row: any) => {
+          try {
+            await processPendingCommissionRecalculation(
+              trimRequired(row.patient_id, 'Pending patient'),
+              trimRequired(row.request_token, 'Pending request'),
+              actor
+            );
+            return true;
+          } catch (retryError) {
+            console.error('Pending MLS commission recalculation still needs retry.', retryError);
+            return false;
+          }
+        }
+      );
+      return {
+        processed: results.filter(Boolean).length,
+        failed: results.filter((completed) => !completed).length
+      };
+    },
+
     getByTreatmentId: async (treatmentId: string): Promise<{ auditLogId: string | null; items: PatientMaterialCost[] }> => {
       const { data: auditLog, error: auditLogError } = await supabase
         .from('audit_logs')
@@ -4668,10 +4840,19 @@ export const api = {
       }
 
       const payments = (data || []).map(mapPaymentRow);
-      const entriesByPayment = await getDoctorEarningEntriesByPaymentIds(payments.map((payment) => payment.id));
+      const paymentIds = payments.map((payment) => payment.id);
+      const [entriesByPayment, costsByPayment] = await Promise.all([
+        getDoctorEarningEntriesByPaymentIds(paymentIds),
+        api.materialCosts.getTotalsByPaymentIds(paymentIds, { idBatchSize: 50 })
+      ]);
       return payments.map((payment) => ({
         ...payment,
-        doctorEarningEntries: entriesByPayment.get(payment.id) || []
+        doctorEarningEntries: entriesByPayment.get(payment.id) || [],
+        materialTotal: costsByPayment[payment.id]?.materialTotal || 0,
+        labTotal: costsByPayment[payment.id]?.labTotal || 0,
+        specialDoctorTotal: costsByPayment[payment.id]?.specialDoctorTotal || 0,
+        mlsTotal: costsByPayment[payment.id]?.totalAmount || 0,
+        netRevenue: Math.max(0, Number(payment.clearedAmount ?? payment.amount) - (costsByPayment[payment.id]?.totalAmount || 0))
       }));
     },
     processPayment: async (input: {
@@ -4685,6 +4866,8 @@ export const api = {
       receiptSnapshot?: PaymentReceiptSnapshot | Record<string, unknown> | null;
       createdByUserId?: string | null;
       createdByUserName?: string | null;
+      mlsCosts?: PatientMaterialCostInput[];
+      staffAuthToken?: string | null;
     }) => {
       const normalizedAmount = Number(input.amount || 0);
       if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
@@ -4696,9 +4879,24 @@ export const api = {
       const allocations = normalizePaymentAllocations(input.allocations, input.paymentMethod, normalizedAmount);
       const allocationError = validatePaymentAllocations(allocations, normalizedAmount);
       if (allocationError) throw new Error(allocationError);
+      const normalizedMlsItems = input.mlsCosts?.map((item) => ({
+        material_name: trimRequired(item.materialName, 'MLS cost name', { maxLength: 255 }),
+        cost_type: enumValue(item.costType, ['material', 'lab', 'special_doctor'] as const, 'Cost type'),
+        cost_amount: finiteNumber(item.costAmount, 'MLS unit cost', { min: 0.01 }),
+        quantity: finiteNumber(item.quantity, 'MLS quantity', { min: 0.01 })
+      }));
+      const mlsTotal = (normalizedMlsItems || []).reduce((sum, item) => sum + item.cost_amount * item.quantity, 0);
+      if (Math.round(mlsTotal * 100) > Math.round(normalizedAmount * 100)) {
+        throw new Error('Payment MLS costs cannot exceed the amount collected in this payment.');
+      }
+      const usePaymentMlsFlow = normalizedMlsItems !== undefined;
+      if (usePaymentMlsFlow && (!input.createdByUserId || !input.staffAuthToken)) {
+        throw new Error('A current staff session is required to record payment MLS costs.');
+      }
+      const requestToken = usePaymentMlsFlow ? generateRequestUuid() : null;
 
       if (allocations.length > 1) {
-        const { data, error } = await supabase.rpc('process_patient_split_payment', {
+        const splitPayload = {
           p_patient_id: input.patientId,
           p_amount: normalizedAmount,
           p_allocations: allocations.map(({ method, amount, reference }) => ({ method, amount, reference: reference || null })),
@@ -4708,8 +4906,20 @@ export const api = {
           p_submission_key: input.submissionKey?.trim() || null,
           p_created_by_user_id: input.createdByUserId || null,
           p_created_by_user_name: input.createdByUserName || null
-        });
+        };
+        const { data, error } = await supabase.rpc(
+          usePaymentMlsFlow ? 'process_patient_split_payment_with_mls' : 'process_patient_split_payment',
+          usePaymentMlsFlow ? {
+            ...splitPayload,
+            p_mls_items: normalizedMlsItems,
+            p_session_token: input.staffAuthToken,
+            p_request_token: requestToken
+          } : splitPayload
+        );
         if (error) {
+          if (usePaymentMlsFlow && isMissingFunctionError(error, 'process_patient_split_payment_with_mls')) {
+            throw new Error('Payment MLS storage is not installed. Apply the payment-bound MLS migration before collecting payments.');
+          }
           if (isMissingFunctionError(error, 'process_patient_split_payment')) {
             throw new Error('Split payment storage is not installed. Run database/split_payment_allocations_migration.sql in Supabase before collecting a split payment.');
           }
@@ -4718,7 +4928,23 @@ export const api = {
         const row = Array.isArray(data) ? data[0] : data;
         if (!row) throw new Error('Payment was not recorded.');
         const payment = mapPaymentRow({ ...row, payment_allocations: allocations });
-        await recalculateDoctorEarningsForTreatments(await resolvePaymentCommissionTreatmentIds(payment));
+        if (usePaymentMlsFlow && requestToken) {
+          await processPendingCommissionRecalculation(payment.patientId, requestToken, {
+            userId: input.createdByUserId as string,
+            authToken: input.staffAuthToken as string
+          });
+        } else {
+          await recalculateDoctorEarningsForTreatments(await resolvePaymentCommissionTreatmentIds(payment));
+        }
+        if (usePaymentMlsFlow) {
+          const entries = await getDoctorEarningEntriesByPaymentIds([payment.id]);
+          payment.doctorEarningEntries = entries.get(payment.id) || [];
+          payment.mlsTotal = Math.round(mlsTotal * 100) / 100;
+          payment.materialTotal = (normalizedMlsItems || []).filter((item) => item.cost_type === 'material').reduce((sum, item) => sum + item.cost_amount * item.quantity, 0);
+          payment.labTotal = (normalizedMlsItems || []).filter((item) => item.cost_type === 'lab').reduce((sum, item) => sum + item.cost_amount * item.quantity, 0);
+          payment.specialDoctorTotal = (normalizedMlsItems || []).filter((item) => item.cost_type === 'special_doctor').reduce((sum, item) => sum + item.cost_amount * item.quantity, 0);
+          payment.netRevenue = Math.max(0, Number(payment.clearedAmount ?? payment.amount) - payment.mlsTotal);
+        }
         return {
           status: 'success',
           new_balance: payment.remainingBalance,
@@ -4740,9 +4966,21 @@ export const api = {
       };
 
       const submissionKey = input.submissionKey?.trim() || null;
-      const { data, error } = await supabase.rpc('process_patient_payment', submissionKey
-        ? { ...rpcPayload, p_submission_key: submissionKey }
-        : rpcPayload);
+      const basePayload = submissionKey ? { ...rpcPayload, p_submission_key: submissionKey } : rpcPayload;
+      const { data, error } = await supabase.rpc(
+        usePaymentMlsFlow ? 'process_patient_payment_with_mls' : 'process_patient_payment',
+        usePaymentMlsFlow ? {
+          ...basePayload,
+          p_submission_key: submissionKey,
+          p_mls_items: normalizedMlsItems,
+          p_session_token: input.staffAuthToken,
+          p_request_token: requestToken
+        } : basePayload
+      );
+
+      if (error && usePaymentMlsFlow && isMissingFunctionError(error, 'process_patient_payment_with_mls')) {
+        throw new Error('Payment MLS storage is not installed. Apply the payment-bound MLS migration before collecting payments.');
+      }
 
       if (error && submissionKey && isMissingFunctionError(error, 'process_patient_payment')) {
         throw new Error('Idempotent payment storage is not installed. Apply the payment submission idempotency migration before collecting payments.');
@@ -4759,7 +4997,23 @@ export const api = {
       if (!row) throw new Error('Payment was not recorded.');
 
       const payment: PaymentRecord = mapPaymentRow(row);
-      await recalculateDoctorEarningsForTreatments(await resolvePaymentCommissionTreatmentIds(payment));
+      if (usePaymentMlsFlow && requestToken) {
+        await processPendingCommissionRecalculation(payment.patientId, requestToken, {
+          userId: input.createdByUserId as string,
+          authToken: input.staffAuthToken as string
+        });
+      } else {
+        await recalculateDoctorEarningsForTreatments(await resolvePaymentCommissionTreatmentIds(payment));
+      }
+      if (usePaymentMlsFlow) {
+        const entries = await getDoctorEarningEntriesByPaymentIds([payment.id]);
+        payment.doctorEarningEntries = entries.get(payment.id) || [];
+        payment.mlsTotal = Math.round(mlsTotal * 100) / 100;
+        payment.materialTotal = (normalizedMlsItems || []).filter((item) => item.cost_type === 'material').reduce((sum, item) => sum + item.cost_amount * item.quantity, 0);
+        payment.labTotal = (normalizedMlsItems || []).filter((item) => item.cost_type === 'lab').reduce((sum, item) => sum + item.cost_amount * item.quantity, 0);
+        payment.specialDoctorTotal = (normalizedMlsItems || []).filter((item) => item.cost_type === 'special_doctor').reduce((sum, item) => sum + item.cost_amount * item.quantity, 0);
+        payment.netRevenue = Math.max(0, Number(payment.clearedAmount ?? payment.amount) - payment.mlsTotal);
+      }
 
       return {
         status: 'success',

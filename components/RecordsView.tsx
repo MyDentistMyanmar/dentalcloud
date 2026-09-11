@@ -36,6 +36,7 @@ interface RecordsViewProps {
 }
 
 const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], rescheduleLogs = [], payments = [], loading, onRefresh, onDeleteAll, currency, isDoctor = false, initialFilter = 'all', onOpenPaymentReceipt, canEditPayments = false, onPaymentCorrected, loadError = null, onQueryChange }) => {
+  const desktopTableScrollRef = React.useRef<HTMLDivElement>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -161,6 +162,27 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], r
     return calculateMaterialAdjustedDoctorEarnings(groupedRecords);
   };
 
+  const renderPaymentMlsCosts = (payment: PaymentRecord) => {
+    const materialTotal = Number(payment.materialTotal || 0);
+    const labTotal = Number(payment.labTotal || 0);
+    const specialDoctorTotal = Number(payment.specialDoctorTotal || 0);
+    if (materialTotal <= 0 && labTotal <= 0 && specialDoctorTotal <= 0) return '-';
+
+    return (
+      <div className="space-y-1 whitespace-nowrap">
+        {materialTotal > 0 && <div className="text-cyan-700">M: {formatCurrency(materialTotal, currency)}</div>}
+        {labTotal > 0 && <div className="text-violet-700">L: {formatCurrency(labTotal, currency)}</div>}
+        {specialDoctorTotal > 0 && <div className="text-amber-700">S: {formatCurrency(specialDoctorTotal, currency)}</div>}
+      </div>
+    );
+  };
+
+  const getPaymentServiceCharges = (payment: PaymentRecord) => Number(
+    payment.receiptSnapshot?.payment?.serviceFeeAmount
+    ?? (payment as PaymentRecord & { serviceFeeAmount?: number }).serviceFeeAmount
+    ?? 0
+  );
+
   const auditRows = useMemo<AuditExportRow[]>(
     () => buildAuditLogRows(records, appointments, !isDoctor, payments, rescheduleLogs),
     [records, appointments, payments, rescheduleLogs, isDoctor]
@@ -169,6 +191,11 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], r
   const filteredRows = useMemo(() => {
     return filterAuditLogRowsForExport(auditRows, buildRecordsViewFilterOptions({ isDoctor, auditFilter, dateFrom, dateTo, searchTerm }));
   }, [auditRows, auditFilter, searchTerm, dateFrom, dateTo, isDoctor]);
+  const isPaymentOnlyView = auditFilter === 'payments';
+
+  React.useEffect(() => {
+    if (desktopTableScrollRef.current) desktopTableScrollRef.current.scrollLeft = 0;
+  }, [auditFilter]);
 
   const paginatedRows = useMemo(() => {
     if (showAll) return filteredRows;
@@ -416,29 +443,29 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], r
         </div>
       ) : (
         <>
-          <div className="hidden lg:block overflow-x-auto">
-            <table className="min-w-[1280px] w-full">
+          <div ref={desktopTableScrollRef} className="hidden lg:block overflow-x-auto">
+            <table className={`${isPaymentOnlyView ? 'min-w-[1080px]' : 'min-w-[1480px]'} w-full table-auto`}>
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
-                  <th className="px-6 py-4 text-left text-[11px] font-black text-slate-500 uppercase tracking-[0.18em]">Type</th>
+                  {!isPaymentOnlyView && <th className="px-6 py-4 text-left text-[11px] font-black text-slate-500 uppercase tracking-[0.18em]">Type</th>}
                   <th className="px-6 py-4 text-left text-[11px] font-black text-slate-500 uppercase tracking-[0.18em]">Date / Time</th>
                   <th className="px-6 py-4 text-left text-[11px] font-black text-slate-500 uppercase tracking-[0.18em]">Patient</th>
-                  <th className="px-6 py-4 text-left text-[11px] font-black text-slate-500 uppercase tracking-[0.18em]">Clinician</th>
-                  <th className="px-6 py-4 text-left text-[11px] font-black text-slate-500 uppercase tracking-[0.18em]">Clinical Activity</th>
+                  {!isPaymentOnlyView && <th className="px-6 py-4 text-left text-[11px] font-black text-slate-500 uppercase tracking-[0.18em]">Clinician</th>}
+                  {!isPaymentOnlyView && <th className="px-6 py-4 text-left text-[11px] font-black text-slate-500 uppercase tracking-[0.18em]">Clinical Activity</th>}
                   <th className="px-6 py-4 text-left text-[11px] font-black text-slate-500 uppercase tracking-[0.18em]">Patient Type</th>
                   <th className="px-6 py-4 text-right text-[11px] font-black text-slate-500 uppercase tracking-[0.18em]">Patient Balance</th>
                   <th className="px-6 py-4 text-right text-[11px] font-black text-slate-500 uppercase tracking-[0.18em]">Amount</th>
                   <th className="px-6 py-4 text-right text-[11px] font-black text-amber-700 uppercase tracking-[0.18em]">Discount</th>
                   <th className="px-6 py-4 text-right text-[11px] font-black text-slate-500 uppercase tracking-[0.18em]">Service Charges</th>
-                  <th className="px-6 py-4 text-right text-[11px] font-black text-slate-500 uppercase tracking-[0.18em]">MLS Costs</th>
+                  <th className="min-w-[108px] px-4 py-4 text-right text-[11px] font-black text-slate-500 uppercase tracking-[0.18em]">MLS Costs</th>
                   <th className="px-6 py-4 text-right text-[11px] font-black text-slate-500 uppercase tracking-[0.18em]">Doctor Earned</th>
-                  <th className="px-6 py-4 text-left text-[11px] font-black text-slate-500 uppercase tracking-[0.18em]">Action</th>
+                  <th className="w-[176px] min-w-[176px] px-4 py-4 text-left text-[11px] font-black text-slate-500 uppercase tracking-[0.18em]">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
                 {filteredRows.length === 0 ? (
                   <tr>
-                    <td colSpan={13} className="px-6 py-12 text-center">
+                    <td colSpan={isPaymentOnlyView ? 10 : 13} className="px-6 py-12 text-center">
                       <div className="mx-auto max-w-sm rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6">
                         <p className="text-sm font-semibold text-slate-600">{isDoctor ? 'No patient treatment records found' : 'No audit records found'}</p>
                         <p className="text-xs text-slate-400 mt-1">{isDoctor ? 'Completed treatments assigned to you will appear here.' : 'Try another date range or clear the search field.'}</p>
@@ -453,29 +480,29 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], r
                       const paymentDoctorEarned = getPaymentDoctorEarnings(payment);
                       return (
                          <tr key={`payment-${payment.id}`} className="border-l-4 border-violet-300 transition-colors hover:bg-violet-50/40">
-                          <td className="px-4 py-4 text-sm font-semibold text-violet-700 xl:px-6">
+                          {!isPaymentOnlyView && <td className="px-4 py-4 text-sm font-semibold text-violet-700 xl:px-6">
                             <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-100 bg-violet-50 px-2.5 py-1 text-xs font-bold">
                               <WalletCards size={14} /> Payment
                             </span>
-                          </td>
+                          </td>}
                           <td className="px-4 py-4 text-sm text-slate-500 whitespace-nowrap xl:px-6">{formatCreatedAt(payment.createdAt || payment.date)}</td>
                           <td className="px-4 py-4 font-bold text-slate-900 xl:px-6">{payment.patient_name || 'Unknown'}</td>
-                          <td className="px-4 py-4 text-sm text-slate-400 xl:px-6">-</td>
-                          <td className="px-4 py-4 text-sm text-slate-700 xl:px-6">Payment received</td>
-                          <td className="px-4 py-4 text-sm text-slate-400 xl:px-6">-</td>
+                          {!isPaymentOnlyView && <td className="px-4 py-4 text-sm text-slate-400 xl:px-6">-</td>}
+                          {!isPaymentOnlyView && <td className="px-4 py-4 text-sm text-slate-700 xl:px-6">Payment received</td>}
+                          <td className="px-4 py-4 text-sm font-semibold text-slate-600 xl:px-6">{payment.patient_type || '-'}</td>
                           <td className="px-4 py-4 text-right text-sm xl:px-6">{renderPatientBalance(payment.remainingBalance)}</td>
                           <td className="px-4 py-4 text-right text-sm font-black text-violet-700 xl:px-6">{formatCurrency(payment.amount, currency)}</td>
                           <td className="px-4 py-4 text-right text-sm font-black text-amber-700 xl:px-6">{paymentDiscount > 0 ? `-${formatCurrency(paymentDiscount, currency)}` : '-'}</td>
-                          <td className="px-4 py-4 text-right text-sm text-slate-400 xl:px-6">-</td>
-                          <td className="px-4 py-4 text-right text-sm text-slate-400 xl:px-6">-</td>
+                          <td className="px-4 py-4 text-right text-sm font-bold text-indigo-700 xl:px-6">{getPaymentServiceCharges(payment) > 0 ? formatCurrency(getPaymentServiceCharges(payment), currency) : '-'}</td>
+                          <td className="min-w-[108px] px-4 py-4 text-right text-xs font-bold">{renderPaymentMlsCosts(payment)}</td>
                           <td className="px-4 py-4 text-right text-sm font-bold text-emerald-700 xl:px-6">{paymentDoctorEarned > 0 ? formatCurrency(paymentDoctorEarned, currency) : '-'}</td>
-                          <td className="px-4 py-4 text-sm font-bold text-slate-800 xl:px-6">
-                            <div className="flex items-start justify-between gap-3">
-                              <span className="text-xs font-semibold text-slate-500">
+                          <td className="w-[176px] min-w-[176px] px-3 py-4 text-sm font-bold text-slate-800">
+                            <div className="flex flex-col items-start gap-2">
+                              <span className="max-w-full break-all text-[10px] font-semibold leading-4 text-slate-500">
                                 {payment.createdByUserName || 'Unknown'} · {payment.allocations?.length ? formatPaymentAllocations(payment.allocations) : formatPaymentMethod(payment.paymentMethod)}
                                 {payment.receiptNumber ? ` · ${payment.receiptNumber}` : ''}
                               </span>
-                              <div className="flex items-center gap-2">
+                              <div className="flex flex-wrap items-center gap-2">
                                 {canEditPayments ? (
                                   <button
                                     type="button"
@@ -643,6 +670,12 @@ const RecordsView: React.FC<RecordsViewProps> = ({ records, appointments = [], r
                         <div className="mt-3 flex items-center justify-between gap-3 rounded-xl bg-amber-50 p-3">
                           <span className="text-xs font-semibold text-amber-700">Overall Discount</span>
                           <span className="min-w-0 text-right text-sm font-black text-amber-800">-{formatCurrency(paymentDiscount, currency)}</span>
+                        </div>
+                      ) : null}
+                      {Number(payment.mlsTotal || 0) > 0 ? (
+                        <div className="mt-3 flex items-start justify-between gap-3 rounded-xl bg-slate-50 p-3">
+                          <span className="text-xs font-semibold text-slate-600">MLS Costs</span>
+                          <div className="min-w-0 text-right text-xs font-bold">{renderPaymentMlsCosts(payment)}</div>
                         </div>
                       ) : null}
                       <div className="mt-3 flex items-center justify-between gap-3 rounded-xl bg-emerald-50 p-3">

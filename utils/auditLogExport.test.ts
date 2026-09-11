@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Appointment, AppointmentRescheduleLog, ClinicalRecord, PaymentRecord } from '../types';
-import { buildAuditLogExportTableRows, buildAuditLogRows, filterAuditLogRowsForExport, formatAuditPatientBalance, getPaymentDoctorEarnings } from './auditLogExport';
+import { buildAuditLogExportTableRows, buildAuditLogRows, filterAuditLogRowsForExport, formatAuditPatientBalance, getPaymentDoctorEarnings, getPaymentMlsCosts } from './auditLogExport';
 
 describe('audit log export rows', () => {
   const records: ClinicalRecord[] = [
@@ -449,6 +449,23 @@ describe('audit log export rows', () => {
     expect(paymentRow?.kind).toBe('payment');
     if (paymentRow?.kind === 'payment') {
       expect(buildAuditLogExportTableRows([paymentRow], 'MMK')[0].doctorEarned).toBe(6_000);
+    }
+  });
+
+  it('exports payment-bound MLS costs on payment audit rows', () => {
+    const payment: PaymentRecord = {
+      ...payments[0],
+      materialTotal: 5_000,
+      labTotal: 20_000,
+      specialDoctorTotal: 10_000,
+      mlsTotal: 35_000
+    };
+    const paymentRow = buildAuditLogRows(records, [], true, [payment]).find((row) => row.kind === 'payment');
+
+    expect(getPaymentMlsCosts(payment)).toBe(35_000);
+    expect(paymentRow?.kind).toBe('payment');
+    if (paymentRow?.kind === 'payment') {
+      expect(buildAuditLogExportTableRows([paymentRow], 'MMK')[0].mlsCosts).toBe(35_000);
     }
   });
 

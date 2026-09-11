@@ -226,7 +226,8 @@ const DoctorHomeView: React.FC<DoctorHomeViewProps> = ({
           {([
             ['today', 'Today'],
             ['week', 'This Week'],
-            ['month', 'This Month']
+            ['month', 'This Month'],
+            ['year', 'This Year']
           ] as const).map(([preset, label]) => (
             <button
               key={preset}

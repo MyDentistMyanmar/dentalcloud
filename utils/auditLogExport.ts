@@ -32,6 +32,7 @@ export interface AuditLogExportTableRow {
   amount: number | null;
   discount: number | null;
   serviceCharges: number | null;
+  mlsCosts: number | null;
   doctorEarned: number | null;
   paymentMethod: string;
 }
@@ -71,6 +72,13 @@ export const getPaymentDoctorEarnings = (payment: PaymentRecord): number => {
   return Math.round((payment.doctorEarningEntries || [])
     .filter((entry) => entry.paymentId === payment.id)
     .reduce((sum, entry) => sum + getPositiveNumber(entry.earnings), 0) * 100) / 100;
+};
+
+export const getPaymentMlsCosts = (payment: PaymentRecord): number => {
+  const typedTotal = getPositiveNumber(payment.materialTotal)
+    + getPositiveNumber(payment.labTotal)
+    + getPositiveNumber(payment.specialDoctorTotal);
+  return Math.round((typedTotal > 0 ? typedTotal : getPositiveNumber(payment.mlsTotal)) * 100) / 100;
 };
 
 const getPaymentServiceFeeAmount = (payment: PaymentRecord): number => {
@@ -326,6 +334,7 @@ export const buildAuditLogExportTableRows = (rows: AuditExportRow[], currency: C
         amount: null,
         discount: null,
         serviceCharges: null,
+        mlsCosts: null,
         doctorEarned: null,
         paymentMethod: '-'
       };
@@ -345,6 +354,7 @@ export const buildAuditLogExportTableRows = (rows: AuditExportRow[], currency: C
         amount: null,
         discount: null,
         serviceCharges: null,
+        mlsCosts: null,
         doctorEarned: null,
         paymentMethod: '-'
       };
@@ -364,6 +374,7 @@ export const buildAuditLogExportTableRows = (rows: AuditExportRow[], currency: C
         amount: payment.amount,
         discount: getAuditPaymentDiscount(payment) || null,
         serviceCharges: null,
+        mlsCosts: getPaymentMlsCosts(payment) || null,
         doctorEarned: getPaymentDoctorEarnings(payment),
         paymentMethod: payment.allocations?.length ? formatPaymentAllocations(payment.allocations) : formatPaymentMethod(payment.paymentMethod)
       };
@@ -386,6 +397,7 @@ export const buildAuditLogExportTableRows = (rows: AuditExportRow[], currency: C
       amount: record.cost || 0,
       discount: getTreatmentDiscount(record) || null,
       serviceCharges: getPositiveNumber(record.serviceCharges) || null,
+      mlsCosts: null,
       doctorEarned: record.doctorEarnings || null,
       paymentMethod: '-'
     };

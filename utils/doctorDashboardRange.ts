@@ -5,7 +5,7 @@ export interface DoctorDashboardRange {
   end: string;
 }
 
-export type DoctorDashboardRangePreset = 'today' | 'week' | 'month';
+export type DoctorDashboardRangePreset = 'today' | 'week' | 'month' | 'year';
 
 const pad = (value: number) => String(value).padStart(2, '0');
 const finiteAmount = (value: unknown): number => {
@@ -34,8 +34,11 @@ export const createDoctorDashboardRange = (
     const mondayOffset = (start.getDay() + 6) % 7;
     start.setDate(start.getDate() - mondayOffset);
     start.setHours(0, 0, 0, 0);
-  } else {
+  } else if (preset === 'month') {
     start.setDate(1);
+    start.setHours(0, 0, 0, 0);
+  } else {
+    start.setMonth(0, 1);
     start.setHours(0, 0, 0, 0);
   }
 

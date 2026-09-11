@@ -56,9 +56,10 @@ export const buildMaterialCostPaymentRows = (
   return uniquePayments
     .map((payment): MaterialCostPaymentRow | null => {
       const paymentAllocations = allocationsByPayment.get(payment.id) || [];
-      if (paymentAllocations.length === 0) return null;
-
-      const treatmentIds = Array.from(new Set(paymentAllocations.map((allocation) => allocation.treatmentId)));
+      const treatmentIds = Array.from(new Set([
+        ...paymentAllocations.map((allocation) => allocation.treatmentId),
+        ...getPaymentTreatmentIds(payment)
+      ]));
       const treatments = treatmentIds
         .map((treatmentId) => treatmentById.get(treatmentId))
         .filter((record): record is ClinicalRecord => Boolean(record));

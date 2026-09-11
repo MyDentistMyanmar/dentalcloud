@@ -47,7 +47,7 @@ const commission = (overrides: Partial<DoctorEarningEntry> = {}): DoctorEarningE
 });
 
 describe('doctor dashboard date-time range', () => {
-  it('creates current-month, week, and today presets in local time', () => {
+  it('creates current-year, month, week, and today presets in local time', () => {
     const now = new Date(2026, 7, 8, 14, 35);
     expect(createDoctorDashboardRange('month', now)).toEqual({
       start: '2026-08-01T00:00',
@@ -55,6 +55,7 @@ describe('doctor dashboard date-time range', () => {
     });
     expect(createDoctorDashboardRange('week', now).start).toBe('2026-08-03T00:00');
     expect(createDoctorDashboardRange('today', now).start).toBe('2026-08-08T00:00');
+    expect(createDoctorDashboardRange('year', now).start).toBe('2026-01-01T00:00');
   });
 
   it('rejects malformed, impossible, and reversed ranges', () => {

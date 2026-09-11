@@ -5,20 +5,22 @@ import { describe, expect, it } from 'vitest';
 const setup = readFileSync(fileURLToPath(new URL('./complete_database_setup.sql', import.meta.url)), 'utf8');
 
 describe('complete database setup', () => {
-  it('includes every current non-manual Supabase migration for fresh clinics', () => {
+  it('includes the current consolidated production schema for fresh clinics', () => {
     [
-      '20260803000000_add_doctor_commission_type.sql',
-      '20260804033408_validate_reconciled_payment_allocations.sql',
-      '20260804044527_enforce_two_way_reconciled_treatment_links.sql',
-      '20260805000000_add_appointment_list_index.sql',
-      '20260806042759_optimize_audit_log_queries.sql',
-      '20260806213848_atomic_treatment_sales_patient_delete.sql',
-      '20260807044648_undo_treatment_atomic.sql',
-      '20260808000000_add_medicine_sale_discounts.sql',
-      '20260808100000_undo_medicine_sale_atomic.sql',
-      '20260809000000_visit_doctor_correction.sql'
-    ].forEach((migration) => {
-      expect(setup).toContain(`BEGIN CONSOLIDATED: supabase\\migrations\\${migration}`);
+      'CREATE TABLE doctor_commission_entries',
+      'CREATE TABLE audit_logs',
+      'CREATE TABLE patient_material_costs',
+      'commission_type_snapshot',
+      'treatment_ids UUID[]',
+      'BEGIN CONSOLIDATED: supabase\\migrations\\20260905000004_add_special_doctor_treatment_costs.sql',
+      'BEGIN CONSOLIDATED: supabase\\migrations\\20260911000000_payment_bound_mls.sql',
+      'BEGIN CONSOLIDATED: supabase\\migrations\\20260911010000_harden_payment_bound_mls.sql',
+      'CREATE OR REPLACE FUNCTION public.replace_payment_costs',
+      'CREATE TRIGGER mark_new_payment_as_payment_bound_mls',
+      'CREATE TRIGGER prevent_payment_below_mls_total',
+      'CREATE OR REPLACE FUNCTION public.get_pending_mls_commission_recalculations'
+    ].forEach((schemaFeature) => {
+      expect(setup).toContain(schemaFeature);
     });
   });
 

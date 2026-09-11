@@ -23,6 +23,9 @@ export interface CommissionPaymentInput {
   createdAt?: string | null;
   commissionableAmount: number;
   treatmentIds: string[];
+  // Undefined means a legacy payment whose deduction still comes from its
+  // treatment. New payment-bound MLS rows always supply a value, including 0.
+  mlsCost?: number;
 }
 
 export interface ExistingCommissionEntryInput {
@@ -40,6 +43,8 @@ export interface TreatmentPaymentAllocation {
   paymentDate: string;
   paymentCreatedAt?: string | null;
   amount: number;
+  paymentMlsCost?: number;
+  paymentMlsDeduction?: number;
 }
 
 export interface CalculatedCommissionEntry extends TreatmentPaymentAllocation {
@@ -181,6 +186,14 @@ export const allocateCommissionablePayments = (
     }
   });
 
+  const paymentById = new Map(payments.map((payment) => [payment.id, payment]));
+  allocations.forEach((allocation) => {
+    const payment = paymentById.get(allocation.paymentId);
+    if (payment?.mlsCost !== undefined) {
+      allocation.paymentMlsCost = toNonNegativeFiniteNumber(payment.mlsCost);
+    }
+  });
+
   return allocations;
 };
 
@@ -255,6 +268,30 @@ export const calculateCommissionLedgerEntries = (
       percentageCandidates.push({ ...allocation, treatment, rate, visitKey });
     });
 
+  // Fixed-visit earnings are intentionally fixed. Allocate the payment MLS only
+  // across percentage-based allocations, proportionally by collected amount.
+  const percentageByPayment = new Map<string, typeof percentageCandidates>();
+  percentageCandidates.forEach((candidate) => {
+    const rows = percentageByPayment.get(candidate.paymentId) || [];
+    rows.push(candidate);
+    percentageByPayment.set(candidate.paymentId, rows);
+  });
+  percentageByPayment.forEach((rows) => {
+    if (rows[0]?.paymentMlsCost === undefined) return;
+    const allocatedTotal = roundMoney(rows.reduce((sum, row) => sum + row.amount, 0));
+    const deductibleTotal = roundMoney(Math.min(
+      toNonNegativeFiniteNumber(rows[0].paymentMlsCost),
+      allocatedTotal
+    ));
+    let distributed = 0;
+    rows.forEach((row, index) => {
+      row.paymentMlsDeduction = index === rows.length - 1
+        ? roundMoney(deductibleTotal - distributed)
+        : roundMoney(deductibleTotal * (allocatedTotal > 0 ? row.amount / allocatedTotal : 0));
+      distributed = roundMoney(distributed + row.paymentMlsDeduction);
+    });
+  });
+
   const percentageCandidatesByVisit = new Map<string, typeof percentageCandidates>();
   percentageCandidates.forEach((candidate) => {
     const candidates = percentageCandidatesByVisit.get(candidate.visitKey) || [];
@@ -263,6 +300,33 @@ export const calculateCommissionLedgerEntries = (
   });
 
   percentageCandidatesByVisit.forEach((visitCandidates) => {
+    // New flow: the MLS amount belongs to the collection transaction. It is
+    // distributed across that payment's treatment allocations before applying
+    // each allocation's snapshotted percentage rate.
+    if (visitCandidates.some((candidate) => candidate.paymentMlsDeduction !== undefined)) {
+      visitCandidates.forEach((candidate) => {
+        const { treatment, rate, visitKey, ...allocation } = candidate;
+        const materialDeduction = roundMoney(Math.min(
+          toNonNegativeFiniteNumber(candidate.amount),
+          toNonNegativeFiniteNumber(candidate.paymentMlsDeduction)
+        ));
+        const commissionBase = roundMoney(Math.max(0, candidate.amount - materialDeduction));
+        percentageRows.push({
+          ...allocation,
+          doctorId: treatment.doctorId as string,
+          patientId: treatment.patientId,
+          treatmentDate: treatment.date,
+          visitKey,
+          calculationMode: 'percentage',
+          commissionRate: rate,
+          materialDeduction,
+          commissionBase,
+          earnings: roundMoney(commissionBase * (rate / 100))
+        });
+      });
+      return;
+    }
+
     const rates = new Set(visitCandidates.map((candidate) => candidate.rate));
 
     if (rates.size === 1) {

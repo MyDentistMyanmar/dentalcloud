@@ -2630,7 +2630,705 @@ END $$;
 SELECT 'auth.users guard complete - table is ready' AS status;
 
 -- ============================================================================
--- 10. VERIFICATION
+-- 10. CURRENT MLS MIGRATIONS FOR A FRESH CLINIC
+-- ============================================================================
+-- BEGIN CONSOLIDATED: supabase\migrations\20260905000004_add_special_doctor_treatment_costs.sql
+-- Add Special Doctor Cost as a third treatment-cost category.
+-- Existing table, RPC, permission, and route names remain unchanged for rolling deployments.
+BEGIN;
+
+-- Fail instead of waiting indefinitely behind production traffic. If either
+-- timeout is reached, PostgreSQL rolls back this entire transaction.
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '120s';
+
+DO $$
+BEGIN
+  IF to_regclass('public.patient_material_costs') IS NULL
+     OR to_regclass('public.material_lab_cost_presets') IS NULL
+     OR to_regclass('public.material_lab_cost_preset_settings') IS NULL
+     OR to_regclass('public.pending_commission_recalculations') IS NULL
+     OR to_regclass('public.expenses') IS NULL
+     OR to_regprocedure('public.replace_treatment_costs(uuid,jsonb,uuid,text,uuid)') IS NULL
+     OR to_regprocedure('public.replace_material_lab_cost_presets(jsonb,bigint,uuid,text)') IS NULL THEN
+    RAISE EXCEPTION 'MLS migration prerequisites are missing; transaction was not applied.';
+  END IF;
+END;
+$$;
+
+ALTER TABLE public.patient_material_costs
+  DROP CONSTRAINT IF EXISTS patient_material_costs_cost_type_check;
+ALTER TABLE public.patient_material_costs
+  ADD CONSTRAINT patient_material_costs_cost_type_check
+  CHECK (cost_type IN ('material', 'lab', 'special_doctor')) NOT VALID;
+ALTER TABLE public.patient_material_costs
+  VALIDATE CONSTRAINT patient_material_costs_cost_type_check;
+
+ALTER TABLE public.material_lab_cost_presets
+  DROP CONSTRAINT IF EXISTS material_lab_cost_presets_cost_type_check;
+ALTER TABLE public.material_lab_cost_presets
+  ADD CONSTRAINT material_lab_cost_presets_cost_type_check
+  CHECK (cost_type IN ('material', 'lab', 'special_doctor')) NOT VALID;
+ALTER TABLE public.material_lab_cost_presets
+  VALIDATE CONSTRAINT material_lab_cost_presets_cost_type_check;
+
+CREATE OR REPLACE FUNCTION public.delete_audit_log_material_expense()
+RETURNS TRIGGER AS $$
+BEGIN
+  DELETE FROM public.expenses
+  WHERE source_type IN ('material_cost', 'lab_cost', 'special_doctor_cost')
+    AND source_id = OLD.id;
+  RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION public.replace_treatment_costs(
+  p_audit_log_id UUID,
+  p_items JSONB,
+  p_admin_user_id UUID,
+  p_admin_password TEXT,
+  p_request_token UUID
+)
+RETURNS SETOF public.patient_material_costs
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_material_total NUMERIC(12,2);
+  v_lab_total NUMERIC(12,2);
+  v_special_doctor_total NUMERIC(12,2);
+  v_actor_username TEXT;
+  v_location_id UUID;
+  v_treatment_date DATE;
+  v_patient_id UUID;
+  v_patient_name TEXT;
+  v_treatment_label TEXT;
+  v_material_names TEXT;
+  v_lab_names TEXT;
+  v_special_doctor_names TEXT;
+BEGIN
+  SELECT t.location_id, t.date, t.patient_id, COALESCE(p.name, 'Unknown patient'), COALESCE(t.description, 'Treatment')
+  INTO v_location_id, v_treatment_date, v_patient_id, v_patient_name, v_treatment_label
+  FROM public.audit_logs a
+  JOIN public.treatments t ON t.id = a.source_id
+  LEFT JOIN public.patients p ON p.id = t.patient_id
+  WHERE a.id = p_audit_log_id AND a.source_type = 'treatment'
+  FOR UPDATE OF a, t;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Treatment audit row was not found.'; END IF;
+
+  SELECT u.username INTO v_actor_username
+  FROM public.users u
+  WHERE u.id = p_admin_user_id
+    AND (
+      (u.role = 'admin' AND (
+        u.password = p_admin_password OR btrim(u.password) = btrim(p_admin_password)
+        OR EXISTS (
+          SELECT 1 FROM public.staff_auth_sessions s
+          WHERE s.user_id = u.id AND s.session_token::TEXT = btrim(p_admin_password)
+            AND s.revoked_at IS NULL AND s.expires_at > NOW()
+        )
+      ))
+      OR (u.role = 'normal' AND u.doctor_id IS NULL
+        AND jsonb_typeof(u.allowed_tabs) = 'array'
+        AND u.allowed_tabs ? 'material-cost'
+        AND (u.location_id IS NULL OR u.location_id = v_location_id)
+        AND EXISTS (
+          SELECT 1 FROM public.staff_auth_sessions s
+          WHERE s.user_id = u.id AND s.session_token::TEXT = btrim(p_admin_password)
+            AND s.revoked_at IS NULL AND s.expires_at > NOW()
+        )
+      )
+    );
+  IF NOT FOUND THEN RAISE EXCEPTION 'A valid staff session with Treatment Costs permission is required.'; END IF;
+
+  IF p_items IS NULL OR jsonb_typeof(p_items) <> 'array' THEN RAISE EXCEPTION 'Cost items must be a JSON array.'; END IF;
+  IF EXISTS (
+    SELECT 1
+    FROM jsonb_to_recordset(p_items) item(material_name TEXT, cost_type TEXT, cost_amount NUMERIC, quantity NUMERIC)
+    WHERE btrim(COALESCE(item.material_name, '')) = ''
+      OR item.cost_type NOT IN ('material', 'lab', 'special_doctor')
+      OR item.cost_amount IS NULL OR item.cost_amount <= 0
+      OR item.quantity IS NULL OR item.quantity <= 0
+  ) THEN RAISE EXCEPTION 'Every cost item requires a valid name, type, positive cost, and positive quantity.'; END IF;
+
+  DELETE FROM public.patient_material_costs WHERE audit_log_id = p_audit_log_id;
+  INSERT INTO public.patient_material_costs
+    (audit_log_id, material_name, cost_type, cost_amount, quantity, created_by, created_by_name)
+  SELECT p_audit_log_id, btrim(item.material_name), item.cost_type, item.cost_amount, item.quantity,
+    p_admin_user_id, v_actor_username
+  FROM jsonb_to_recordset(p_items) item(material_name TEXT, cost_type TEXT, cost_amount NUMERIC, quantity NUMERIC);
+
+  SELECT
+    COALESCE(SUM(total_amount) FILTER (WHERE cost_type = 'material'), 0),
+    COALESCE(SUM(total_amount) FILTER (WHERE cost_type = 'lab'), 0),
+    COALESCE(SUM(total_amount) FILTER (WHERE cost_type = 'special_doctor'), 0),
+    COALESCE(string_agg(material_name, ', ' ORDER BY created_at) FILTER (WHERE cost_type = 'material'), ''),
+    COALESCE(string_agg(material_name, ', ' ORDER BY created_at) FILTER (WHERE cost_type = 'lab'), ''),
+    COALESCE(string_agg(material_name, ', ' ORDER BY created_at) FILTER (WHERE cost_type = 'special_doctor'), '')
+  INTO v_material_total, v_lab_total, v_special_doctor_total,
+    v_material_names, v_lab_names, v_special_doctor_names
+  FROM public.patient_material_costs WHERE audit_log_id = p_audit_log_id;
+
+  DELETE FROM public.expenses
+  WHERE source_id = p_audit_log_id
+    AND source_type IN ('material_cost', 'lab_cost', 'special_doctor_cost');
+  IF v_material_total > 0 THEN
+    INSERT INTO public.expenses (location_id, description, amount, category, date, source_type, source_id, is_system_generated)
+    VALUES (v_location_id, 'Material cost - ' || v_patient_name || ' - ' || v_treatment_label || CASE WHEN v_material_names <> '' THEN ' (' || v_material_names || ')' ELSE '' END, v_material_total, 'Material Cost', v_treatment_date, 'material_cost', p_audit_log_id, true);
+  END IF;
+  IF v_lab_total > 0 THEN
+    INSERT INTO public.expenses (location_id, description, amount, category, date, source_type, source_id, is_system_generated)
+    VALUES (v_location_id, 'Lab cost - ' || v_patient_name || ' - ' || v_treatment_label || CASE WHEN v_lab_names <> '' THEN ' (' || v_lab_names || ')' ELSE '' END, v_lab_total, 'Lab Cost', v_treatment_date, 'lab_cost', p_audit_log_id, true);
+  END IF;
+  IF v_special_doctor_total > 0 THEN
+    INSERT INTO public.expenses (location_id, description, amount, category, date, source_type, source_id, is_system_generated)
+    VALUES (v_location_id, 'Special doctor cost - ' || v_patient_name || ' - ' || v_treatment_label || CASE WHEN v_special_doctor_names <> '' THEN ' (' || v_special_doctor_names || ')' ELSE '' END, v_special_doctor_total, 'Special Doctor Cost', v_treatment_date, 'special_doctor_cost', p_audit_log_id, true);
+  END IF;
+
+  INSERT INTO public.pending_commission_recalculations (patient_id, request_token, requested_at)
+  VALUES (v_patient_id, p_request_token, NOW())
+  ON CONFLICT (patient_id) DO UPDATE
+  SET request_token = EXCLUDED.request_token, requested_at = EXCLUDED.requested_at;
+
+  RETURN QUERY SELECT costs.* FROM public.patient_material_costs costs
+  WHERE costs.audit_log_id = p_audit_log_id ORDER BY costs.created_at, costs.id;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.replace_material_lab_cost_presets(
+  p_items JSONB, p_expected_revision BIGINT, p_user_id UUID, p_session_token TEXT
+)
+RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $$
+DECLARE v_current_revision BIGINT; v_next_revision BIGINT; v_presets JSONB; v_created_at_by_id JSONB;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.users u JOIN public.staff_auth_sessions s ON s.user_id = u.id
+    WHERE u.id = p_user_id AND s.session_token::TEXT = btrim(COALESCE(p_session_token, ''))
+      AND s.revoked_at IS NULL AND s.expires_at > NOW()
+      AND (u.role = 'admin' OR (u.role = 'normal' AND u.doctor_id IS NULL
+        AND jsonb_typeof(u.allowed_tabs) = 'array' AND u.allowed_tabs ? 'material-cost'))
+  ) THEN RAISE EXCEPTION 'A valid staff session with Treatment Costs permission is required.'; END IF;
+  IF p_items IS NULL OR jsonb_typeof(p_items) <> 'array' THEN RAISE EXCEPTION 'Presets must be a JSON array.'; END IF;
+  IF jsonb_array_length(p_items) > 100 THEN RAISE EXCEPTION 'A maximum of 100 presets is allowed.'; END IF;
+  IF EXISTS (SELECT 1 FROM jsonb_array_elements(p_items) raw(item) WHERE jsonb_typeof(raw.item) <> 'object')
+  THEN RAISE EXCEPTION 'Every preset must be an object.'; END IF;
+  IF EXISTS (
+    SELECT 1 FROM jsonb_to_recordset(p_items) item(id UUID, cost_type TEXT, label TEXT, amount NUMERIC, sort_order INTEGER)
+    WHERE item.id IS NULL OR item.cost_type NOT IN ('material', 'lab', 'special_doctor')
+      OR btrim(COALESCE(item.label, '')) = '' OR char_length(btrim(item.label)) > 255
+      OR item.amount IS NULL OR item.amount <= 0 OR item.amount > 9999999999.99
+      OR item.sort_order IS NULL OR item.sort_order < 0 OR item.sort_order >= 100
+  ) THEN RAISE EXCEPTION 'Each preset needs a unique id, category, label, positive amount, and valid order.'; END IF;
+  IF EXISTS (SELECT item.id FROM jsonb_to_recordset(p_items) item(id UUID) GROUP BY item.id HAVING COUNT(*) > 1)
+    OR EXISTS (SELECT item.sort_order FROM jsonb_to_recordset(p_items) item(sort_order INTEGER) GROUP BY item.sort_order HAVING COUNT(*) > 1)
+  THEN RAISE EXCEPTION 'Preset identifiers and order values must be unique.'; END IF;
+
+  SELECT settings.revision INTO v_current_revision
+  FROM public.material_lab_cost_preset_settings settings WHERE settings.id = 1 FOR UPDATE;
+  IF v_current_revision IS NULL THEN RAISE EXCEPTION 'Preset settings are not initialized.'; END IF;
+  IF p_expected_revision IS NULL OR p_expected_revision <> v_current_revision THEN RAISE EXCEPTION 'Preset list changed on another device.'; END IF;
+  SELECT COALESCE(jsonb_object_agg(presets.id::TEXT, to_jsonb(presets.created_at)), '{}'::JSONB)
+  INTO v_created_at_by_id FROM public.material_lab_cost_presets presets;
+  DELETE FROM public.material_lab_cost_presets WHERE id IS NOT NULL;
+  INSERT INTO public.material_lab_cost_presets(id, cost_type, label, amount, sort_order, created_at, updated_at)
+  SELECT item.id, item.cost_type, btrim(item.label), item.amount, item.sort_order,
+    COALESCE((v_created_at_by_id ->> item.id::TEXT)::TIMESTAMPTZ, NOW()), NOW()
+  FROM jsonb_to_recordset(p_items) item(id UUID, cost_type TEXT, label TEXT, amount NUMERIC, sort_order INTEGER);
+  v_next_revision := v_current_revision + 1;
+  UPDATE public.material_lab_cost_preset_settings SET revision = v_next_revision, updated_by = p_user_id, updated_at = NOW() WHERE id = 1;
+  SELECT COALESCE(jsonb_agg(jsonb_build_object(
+    'id', presets.id, 'cost_type', presets.cost_type, 'label', presets.label, 'amount', presets.amount,
+    'sort_order', presets.sort_order, 'created_at', presets.created_at, 'updated_at', presets.updated_at
+  ) ORDER BY presets.sort_order, presets.label), '[]'::JSONB)
+  INTO v_presets FROM public.material_lab_cost_presets presets;
+  RETURN jsonb_build_object('revision', v_next_revision, 'presets', v_presets);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.replace_treatment_costs(UUID, JSONB, UUID, TEXT, UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.replace_treatment_costs(UUID, JSONB, UUID, TEXT, UUID) TO anon, authenticated;
+REVOKE ALL ON FUNCTION public.replace_material_lab_cost_presets(JSONB, BIGINT, UUID, TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.replace_material_lab_cost_presets(JSONB, BIGINT, UUID, TEXT) TO anon, authenticated;
+NOTIFY pgrst, 'reload schema';
+COMMIT;
+-- END CONSOLIDATED: supabase\migrations\20260905000004_add_special_doctor_treatment_costs.sql
+
+-- BEGIN CONSOLIDATED: supabase\migrations\20260911000000_payment_bound_mls.sql
+-- Move new MLS writes from treatments to individual payment transactions.
+-- Legacy treatment audit rows remain readable and are intentionally not guessed
+-- onto historical partial payments.
+BEGIN;
+
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '120s';
+
+DO $$
+BEGIN
+  IF to_regclass('public.payments') IS NULL
+     OR to_regclass('public.audit_logs') IS NULL
+     OR to_regclass('public.patient_material_costs') IS NULL
+     OR to_regclass('public.expenses') IS NULL
+     OR to_regclass('public.pending_commission_recalculations') IS NULL THEN
+    RAISE EXCEPTION 'Payment-bound MLS prerequisites are missing; transaction was not applied.';
+  END IF;
+END;
+$$;
+
+ALTER TABLE public.patient_material_costs
+  ADD COLUMN IF NOT EXISTS payment_id UUID;
+
+ALTER TABLE public.patient_material_costs
+  DROP CONSTRAINT IF EXISTS patient_material_costs_payment_id_fkey;
+ALTER TABLE public.patient_material_costs
+  ADD CONSTRAINT patient_material_costs_payment_id_fkey
+  FOREIGN KEY (payment_id) REFERENCES public.payments(id) ON DELETE CASCADE
+  NOT VALID;
+ALTER TABLE public.patient_material_costs
+  VALIDATE CONSTRAINT patient_material_costs_payment_id_fkey;
+
+CREATE INDEX IF NOT EXISTS idx_patient_material_costs_payment_type
+  ON public.patient_material_costs (payment_id, cost_type)
+  WHERE payment_id IS NOT NULL;
+
+CREATE OR REPLACE FUNCTION public.enforce_patient_material_cost_parent()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+DECLARE
+  v_source_type TEXT;
+  v_source_id UUID;
+BEGIN
+  SELECT source_type, source_id
+  INTO v_source_type, v_source_id
+  FROM public.audit_logs
+  WHERE id = NEW.audit_log_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'MLS audit parent was not found.';
+  END IF;
+
+  IF v_source_type = 'payment' THEN
+    IF NEW.payment_id IS NULL OR NEW.payment_id <> v_source_id THEN
+      RAISE EXCEPTION 'Payment MLS cost must reference its payment audit parent.';
+    END IF;
+  ELSIF NEW.payment_id IS NOT NULL THEN
+    RAISE EXCEPTION 'Only payment MLS audit rows may contain payment_id.';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS enforce_patient_material_cost_parent
+  ON public.patient_material_costs;
+CREATE TRIGGER enforce_patient_material_cost_parent
+BEFORE INSERT OR UPDATE OF audit_log_id, payment_id
+ON public.patient_material_costs
+FOR EACH ROW
+EXECUTE FUNCTION public.enforce_patient_material_cost_parent();
+
+CREATE OR REPLACE FUNCTION public.replace_payment_costs(
+  p_payment_id UUID,
+  p_items JSONB,
+  p_user_id UUID,
+  p_session_token TEXT,
+  p_request_token UUID
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_payment public.payments%ROWTYPE;
+  v_audit_log_id UUID;
+  v_actor_username TEXT;
+  v_total NUMERIC(12,2);
+  v_material_total NUMERIC(12,2);
+  v_lab_total NUMERIC(12,2);
+  v_special_doctor_total NUMERIC(12,2);
+  v_material_names TEXT;
+  v_lab_names TEXT;
+  v_special_doctor_names TEXT;
+  v_patient_name TEXT;
+  v_treatment_label TEXT;
+  v_items JSONB;
+BEGIN
+  SELECT * INTO v_payment
+  FROM public.payments
+  WHERE id = p_payment_id
+  FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Payment was not found.'; END IF;
+
+  SELECT u.username INTO v_actor_username
+  FROM public.users u
+  JOIN public.staff_auth_sessions s ON s.user_id = u.id
+  WHERE u.id = p_user_id
+    AND s.session_token::TEXT = btrim(COALESCE(p_session_token, ''))
+    AND s.revoked_at IS NULL
+    AND s.expires_at > NOW()
+    AND (
+      u.role = 'admin'
+      OR (
+        u.role = 'normal'
+        AND u.doctor_id IS NULL
+        AND jsonb_typeof(u.allowed_tabs) = 'array'
+        AND u.allowed_tabs ? 'material-cost'
+        AND (u.location_id IS NULL OR u.location_id = v_payment.location_id)
+      )
+    );
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'A valid staff session with Treatment Costs permission is required.';
+  END IF;
+
+  IF p_items IS NULL OR jsonb_typeof(p_items) <> 'array' THEN
+    RAISE EXCEPTION 'Cost items must be a JSON array.';
+  END IF;
+  IF jsonb_array_length(p_items) > 100 THEN
+    RAISE EXCEPTION 'A maximum of 100 MLS cost items is allowed.';
+  END IF;
+  IF EXISTS (
+    SELECT 1
+    FROM jsonb_array_elements(p_items) raw(item)
+    WHERE jsonb_typeof(raw.item) <> 'object'
+  ) OR EXISTS (
+    SELECT 1
+    FROM jsonb_to_recordset(p_items)
+      item(material_name TEXT, cost_type TEXT, cost_amount NUMERIC, quantity NUMERIC)
+    WHERE btrim(COALESCE(item.material_name, '')) = ''
+      OR char_length(btrim(item.material_name)) > 255
+      OR item.cost_type NOT IN ('material', 'lab', 'special_doctor')
+      OR item.cost_amount IS NULL OR item.cost_amount <= 0
+      OR item.quantity IS NULL OR item.quantity <= 0
+  ) THEN
+    RAISE EXCEPTION 'Every MLS item requires a valid name, type, positive cost, and positive quantity.';
+  END IF;
+
+  SELECT COALESCE(round(SUM(item.cost_amount * item.quantity), 2), 0)
+  INTO v_total
+  FROM jsonb_to_recordset(p_items)
+    item(material_name TEXT, cost_type TEXT, cost_amount NUMERIC, quantity NUMERIC);
+
+  IF v_total > COALESCE(v_payment.cleared_amount, v_payment.amount) THEN
+    RAISE EXCEPTION 'Payment MLS costs cannot exceed the amount collected in this payment.';
+  END IF;
+
+  INSERT INTO public.audit_logs (
+    source_type, source_id, location_id, patient_id, payment_id
+  ) VALUES (
+    'payment', v_payment.id, v_payment.location_id, v_payment.patient_id, v_payment.id
+  )
+  ON CONFLICT (source_type, source_id) DO UPDATE
+  SET location_id = EXCLUDED.location_id,
+      patient_id = EXCLUDED.patient_id,
+      payment_id = EXCLUDED.payment_id,
+      doctor_id = NULL,
+      treatment_id = NULL,
+      updated_at = NOW()
+  RETURNING id INTO v_audit_log_id;
+
+  DELETE FROM public.patient_material_costs
+  WHERE audit_log_id = v_audit_log_id;
+
+  INSERT INTO public.patient_material_costs (
+    audit_log_id, payment_id, material_name, cost_type, cost_amount,
+    quantity, created_by, created_by_name
+  )
+  SELECT v_audit_log_id, v_payment.id, btrim(item.material_name),
+    item.cost_type, round(item.cost_amount, 2), item.quantity,
+    p_user_id, v_actor_username
+  FROM jsonb_to_recordset(p_items)
+    item(material_name TEXT, cost_type TEXT, cost_amount NUMERIC, quantity NUMERIC);
+
+  SELECT
+    COALESCE(SUM(total_amount) FILTER (WHERE cost_type = 'material'), 0),
+    COALESCE(SUM(total_amount) FILTER (WHERE cost_type = 'lab'), 0),
+    COALESCE(SUM(total_amount) FILTER (WHERE cost_type = 'special_doctor'), 0),
+    COALESCE(string_agg(material_name, ', ' ORDER BY created_at) FILTER (WHERE cost_type = 'material'), ''),
+    COALESCE(string_agg(material_name, ', ' ORDER BY created_at) FILTER (WHERE cost_type = 'lab'), ''),
+    COALESCE(string_agg(material_name, ', ' ORDER BY created_at) FILTER (WHERE cost_type = 'special_doctor'), '')
+  INTO v_material_total, v_lab_total, v_special_doctor_total,
+    v_material_names, v_lab_names, v_special_doctor_names
+  FROM public.patient_material_costs
+  WHERE audit_log_id = v_audit_log_id;
+
+  SELECT COALESCE(name, 'Unknown patient') INTO v_patient_name
+  FROM public.patients WHERE id = v_payment.patient_id;
+
+  SELECT COALESCE(string_agg(description, ' + ' ORDER BY date, id), 'Payment')
+  INTO v_treatment_label
+  FROM public.treatments
+  WHERE id = ANY(COALESCE(v_payment.treatment_ids, '{}'::UUID[]));
+
+  DELETE FROM public.expenses
+  WHERE source_id = v_audit_log_id
+    AND source_type IN ('material_cost', 'lab_cost', 'special_doctor_cost');
+
+  IF v_material_total > 0 THEN
+    INSERT INTO public.expenses (location_id, description, amount, category, date, source_type, source_id, is_system_generated)
+    VALUES (v_payment.location_id, 'Material cost - ' || v_patient_name || ' - ' || v_treatment_label || CASE WHEN v_material_names <> '' THEN ' (' || v_material_names || ')' ELSE '' END, v_material_total, 'Material Cost', v_payment.payment_date, 'material_cost', v_audit_log_id, true);
+  END IF;
+  IF v_lab_total > 0 THEN
+    INSERT INTO public.expenses (location_id, description, amount, category, date, source_type, source_id, is_system_generated)
+    VALUES (v_payment.location_id, 'Lab cost - ' || v_patient_name || ' - ' || v_treatment_label || CASE WHEN v_lab_names <> '' THEN ' (' || v_lab_names || ')' ELSE '' END, v_lab_total, 'Lab Cost', v_payment.payment_date, 'lab_cost', v_audit_log_id, true);
+  END IF;
+  IF v_special_doctor_total > 0 THEN
+    INSERT INTO public.expenses (location_id, description, amount, category, date, source_type, source_id, is_system_generated)
+    VALUES (v_payment.location_id, 'Special doctor cost - ' || v_patient_name || ' - ' || v_treatment_label || CASE WHEN v_special_doctor_names <> '' THEN ' (' || v_special_doctor_names || ')' ELSE '' END, v_special_doctor_total, 'Special Doctor Cost', v_payment.payment_date, 'special_doctor_cost', v_audit_log_id, true);
+  END IF;
+
+  INSERT INTO public.pending_commission_recalculations (patient_id, request_token, requested_at)
+  VALUES (v_payment.patient_id, p_request_token, NOW())
+  ON CONFLICT (patient_id) DO UPDATE
+  SET request_token = EXCLUDED.request_token, requested_at = EXCLUDED.requested_at;
+
+  SELECT COALESCE(jsonb_agg(to_jsonb(costs) ORDER BY costs.created_at, costs.id), '[]'::JSONB)
+  INTO v_items
+  FROM public.patient_material_costs costs
+  WHERE costs.audit_log_id = v_audit_log_id;
+
+  RETURN jsonb_build_object(
+    'audit_log_id', v_audit_log_id,
+    'payment_id', v_payment.id,
+    'material_total', v_material_total,
+    'lab_total', v_lab_total,
+    'special_doctor_total', v_special_doctor_total,
+    'total_amount', v_material_total + v_lab_total + v_special_doctor_total,
+    'items', v_items
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.replace_payment_costs(UUID, JSONB, UUID, TEXT, UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.replace_payment_costs(UUID, JSONB, UUID, TEXT, UUID) TO anon, authenticated;
+
+CREATE OR REPLACE FUNCTION public.process_patient_payment_with_mls(
+  p_patient_id UUID,
+  p_amount NUMERIC,
+  p_payment_method TEXT,
+  p_treatment_ids UUID[],
+  p_payment_date DATE,
+  p_receipt_snapshot JSONB,
+  p_submission_key TEXT,
+  p_created_by_user_id UUID,
+  p_created_by_user_name TEXT,
+  p_mls_items JSONB,
+  p_session_token TEXT,
+  p_request_token UUID
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_result JSONB;
+BEGIN
+  SELECT to_jsonb(result) INTO v_result
+  FROM public.process_patient_payment(
+    p_patient_id, p_amount, p_payment_method, p_treatment_ids,
+    p_payment_date, p_receipt_snapshot, p_submission_key,
+    p_created_by_user_id, p_created_by_user_name
+  ) result
+  LIMIT 1;
+
+  IF v_result IS NULL THEN RAISE EXCEPTION 'Payment was not recorded.'; END IF;
+  PERFORM public.replace_payment_costs(
+    (v_result->>'id')::UUID, p_mls_items, p_created_by_user_id,
+    p_session_token, p_request_token
+  );
+  RETURN v_result;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.process_patient_payment_with_mls(UUID, NUMERIC, TEXT, UUID[], DATE, JSONB, TEXT, UUID, TEXT, JSONB, TEXT, UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.process_patient_payment_with_mls(UUID, NUMERIC, TEXT, UUID[], DATE, JSONB, TEXT, UUID, TEXT, JSONB, TEXT, UUID) TO anon, authenticated;
+
+CREATE OR REPLACE FUNCTION public.process_patient_split_payment_with_mls(
+  p_patient_id UUID,
+  p_amount NUMERIC,
+  p_allocations JSONB,
+  p_treatment_ids UUID[],
+  p_payment_date DATE,
+  p_receipt_snapshot JSONB,
+  p_submission_key TEXT,
+  p_created_by_user_id UUID,
+  p_created_by_user_name TEXT,
+  p_mls_items JSONB,
+  p_session_token TEXT,
+  p_request_token UUID
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_result JSONB;
+BEGIN
+  SELECT to_jsonb(result) INTO v_result
+  FROM public.process_patient_split_payment(
+    p_patient_id, p_amount, p_allocations, p_treatment_ids,
+    p_payment_date, p_receipt_snapshot, p_submission_key,
+    p_created_by_user_id, p_created_by_user_name
+  ) result
+  LIMIT 1;
+
+  IF v_result IS NULL THEN RAISE EXCEPTION 'Payment was not recorded.'; END IF;
+  PERFORM public.replace_payment_costs(
+    (v_result->>'id')::UUID, p_mls_items, p_created_by_user_id,
+    p_session_token, p_request_token
+  );
+  RETURN v_result;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.process_patient_split_payment_with_mls(UUID, NUMERIC, JSONB, UUID[], DATE, JSONB, TEXT, UUID, TEXT, JSONB, TEXT, UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.process_patient_split_payment_with_mls(UUID, NUMERIC, JSONB, UUID[], DATE, JSONB, TEXT, UUID, TEXT, JSONB, TEXT, UUID) TO anon, authenticated;
+
+NOTIFY pgrst, 'reload schema';
+COMMIT;
+-- END CONSOLIDATED: supabase\migrations\20260911000000_payment_bound_mls.sql
+
+-- BEGIN CONSOLIDATED: supabase\migrations\20260911010000_harden_payment_bound_mls.sql
+-- Harden the payment-bound MLS rollout without reclassifying historical payments.
+-- Payments inserted after this migration receive an explicit zero-MLS audit marker.
+BEGIN;
+
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '120s';
+
+DO $$
+BEGIN
+  IF to_regclass('public.payments') IS NULL
+     OR to_regclass('public.audit_logs') IS NULL
+     OR to_regclass('public.patient_material_costs') IS NULL
+     OR to_regclass('public.pending_commission_recalculations') IS NULL
+     OR to_regprocedure('public.replace_payment_costs(uuid,jsonb,uuid,text,uuid)') IS NULL THEN
+    RAISE EXCEPTION 'Payment-bound MLS migration must be installed before its hardening migration.';
+  END IF;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.mark_new_payment_as_payment_bound_mls()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  INSERT INTO public.audit_logs (
+    source_type, source_id, location_id, patient_id, payment_id
+  ) VALUES (
+    'payment', NEW.id, NEW.location_id, NEW.patient_id, NEW.id
+  )
+  ON CONFLICT (source_type, source_id) DO UPDATE
+  SET location_id = EXCLUDED.location_id,
+      patient_id = EXCLUDED.patient_id,
+      payment_id = EXCLUDED.payment_id,
+      doctor_id = NULL,
+      treatment_id = NULL,
+      updated_at = NOW();
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS mark_new_payment_as_payment_bound_mls ON public.payments;
+CREATE TRIGGER mark_new_payment_as_payment_bound_mls
+AFTER INSERT ON public.payments
+FOR EACH ROW
+EXECUTE FUNCTION public.mark_new_payment_as_payment_bound_mls();
+
+CREATE OR REPLACE FUNCTION public.prevent_payment_below_mls_total()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_mls_total NUMERIC(12,2);
+  v_collected_amount NUMERIC(12,2);
+BEGIN
+  v_collected_amount := round(COALESCE(NEW.cleared_amount, NEW.amount, 0)::NUMERIC, 2);
+  SELECT COALESCE(round(SUM(cost.total_amount), 2), 0)
+  INTO v_mls_total
+  FROM public.audit_logs audit
+  JOIN public.patient_material_costs cost ON cost.audit_log_id = audit.id
+  WHERE audit.source_type = 'payment'
+    AND audit.source_id = NEW.id;
+
+  IF v_mls_total > v_collected_amount THEN
+    RAISE EXCEPTION 'Corrected payment amount (%) cannot be less than its MLS costs (%)',
+      v_collected_amount, v_mls_total;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS prevent_payment_below_mls_total ON public.payments;
+CREATE TRIGGER prevent_payment_below_mls_total
+BEFORE UPDATE OF amount, cleared_amount ON public.payments
+FOR EACH ROW
+EXECUTE FUNCTION public.prevent_payment_below_mls_total();
+
+CREATE OR REPLACE FUNCTION public.get_pending_mls_commission_recalculations(
+  p_user_id UUID,
+  p_session_token TEXT
+)
+RETURNS TABLE(patient_id UUID, request_token UUID)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.users u
+    JOIN public.staff_auth_sessions session ON session.user_id = u.id
+    WHERE u.id = p_user_id
+      AND session.session_token::TEXT = btrim(COALESCE(p_session_token, ''))
+      AND session.revoked_at IS NULL
+      AND session.expires_at > NOW()
+      AND (
+        u.role = 'admin'
+        OR (
+          u.role = 'normal'
+          AND u.doctor_id IS NULL
+          AND jsonb_typeof(u.allowed_tabs) = 'array'
+          AND u.allowed_tabs ? 'material-cost'
+        )
+      )
+  ) THEN
+    RAISE EXCEPTION 'A valid staff session with Treatment Costs permission is required.';
+  END IF;
+
+  RETURN QUERY
+  SELECT pending.patient_id, pending.request_token
+  FROM public.pending_commission_recalculations pending
+  JOIN public.patients patient ON patient.id = pending.patient_id
+  JOIN public.users actor ON actor.id = p_user_id
+  WHERE actor.role = 'admin'
+     OR actor.location_id IS NULL
+     OR actor.location_id = patient.location_id
+  ORDER BY pending.requested_at
+  LIMIT 100;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.mark_new_payment_as_payment_bound_mls() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.prevent_payment_below_mls_total() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.get_pending_mls_commission_recalculations(UUID, TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_pending_mls_commission_recalculations(UUID, TEXT) TO anon, authenticated;
+
+NOTIFY pgrst, 'reload schema';
+COMMIT;
+-- END CONSOLIDATED: supabase\migrations\20260911010000_harden_payment_bound_mls.sql
+
+
+-- ============================================================================
+-- 11. VERIFICATION
 -- ============================================================================
 SELECT '=== DATABASE SETUP COMPLETE ===' as status;
 

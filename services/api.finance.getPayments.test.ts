@@ -19,6 +19,15 @@ const supabaseMock = vi.hoisted(() => ({
       return query;
     }
 
+    if (table === 'audit_logs') {
+      const query: any = {
+        select: vi.fn(() => query),
+        eq: vi.fn(() => query),
+        in: vi.fn(async () => ({ data: [], error: null }))
+      };
+      return query;
+    }
+
     const query: any = {
       select: vi.fn(() => query),
       in: vi.fn(async () => ({
@@ -26,7 +35,7 @@ const supabaseMock = vi.hoisted(() => ({
           id: 'entry-1', payment_id: 'payment-1', treatment_id: 'treatment-1',
           doctor_id: 'doctor-1', payment_date: '2026-07-01', treatment_date: '2026-06-30',
           calculation_mode: 'percentage', allocated_payment: 100_000,
-          commission_rate: 10, earnings: 9_000
+          material_deduction: 10_000, commission_rate: 10, earnings: 9_000
         }],
         error: null
       }))
@@ -48,7 +57,7 @@ describe('finance.getPayments', () => {
     const [payment] = await api.finance.getPayments();
 
     expect(payment.doctorEarningEntries).toEqual([
-      expect.objectContaining({ paymentId: 'payment-1', paymentDate: '2026-07-01', earnings: 9_000 })
+      expect.objectContaining({ paymentId: 'payment-1', paymentDate: '2026-07-01', mlsDeduction: 10_000, earnings: 9_000 })
     ]);
     expect(supabaseMock.from).toHaveBeenCalledWith('doctor_commission_entries');
   });

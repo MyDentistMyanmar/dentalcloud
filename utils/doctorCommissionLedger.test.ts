@@ -512,6 +512,38 @@ describe('doctor commission ledger', () => {
     });
   });
 
+  it('deducts new MLS from the individual payment before percentage commission', () => {
+    const treatments = [treatment({ commissionPercentage: 40, materialCost: 99_000 })];
+    const allocations = allocateCommissionablePayments(treatments, [{
+      id: 'payment-1', patientId: 'patient-1', date: '2026-09-11',
+      commissionableAmount: 150_000, treatmentIds: ['treatment-1'], mlsCost: 70_000
+    }]);
+    const entries = calculateCommissionLedgerEntries(treatments, allocations);
+
+    expect(entries[0]).toMatchObject({
+      paymentDate: '2026-09-11',
+      amount: 150_000,
+      materialDeduction: 70_000,
+      commissionBase: 80_000,
+      commissionRate: 40,
+      earnings: 32_000
+    });
+  });
+
+  it('keeps payment MLS deductions on their respective partial-payment dates', () => {
+    const treatments = [treatment({ cost: 200_000, commissionPercentage: 25 })];
+    const allocations = allocateCommissionablePayments(treatments, [
+      { id: 'payment-1', patientId: 'patient-1', date: '2026-09-10', commissionableAmount: 100_000, treatmentIds: ['treatment-1'], mlsCost: 20_000 },
+      { id: 'payment-2', patientId: 'patient-1', date: '2026-09-11', commissionableAmount: 100_000, treatmentIds: ['treatment-1'], mlsCost: 10_000 }
+    ]);
+    const entries = calculateCommissionLedgerEntries(treatments, allocations);
+
+    expect(entries.map((entry) => ({ date: entry.paymentDate, base: entry.commissionBase, earned: entry.earnings }))).toEqual([
+      { date: '2026-09-10', base: 80_000, earned: 20_000 },
+      { date: '2026-09-11', base: 90_000, earned: 22_500 }
+    ]);
+  });
+
   it('rejects conflicting historical modes for one visit', () => {
     expect(() => calculateCommissionLedgerEntries([treatment()], [], [
       { paymentId: 'p1', treatmentId: 't1', calculationMode: 'percentage', commissionRate: 10, visitKey: 'visit-1' },
